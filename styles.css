@@ -1967,6 +1967,10 @@ button:focus-visible {
   display: block;
 }
 
+.scene-art-mode .extra-barista.is-active {
+  display: none;
+}
+
 .barista-extra-one {
   right: 43%;
   bottom: 18%;
