@@ -239,7 +239,10 @@
             <article class="menu-board panel">
               <div class="menu-board-topline">
                 <span>选一杯你想亲手冲的咖啡</span>
-                <span id="manualOrderCount">已服务 0 杯手作订单</span>
+                <span class="menu-board-stats">
+                  <span id="manualOrderCount">已服务 0 杯手作订单</span>
+                  <span class="order-streak-badge" id="orderStreakBadge">✦ 连单待启动</span>
+                </span>
               </div>
 
               <div class="menu-layout">
@@ -301,6 +304,10 @@
                     <span>点单</span>
                     <strong id="orderDrink">美式</strong>
                     <span id="orderPrice">¥ 8</span>
+                  </div>
+                  <div class="order-bonus-line">
+                    <span>满意加成</span>
+                    <strong id="orderBonus">首单，从一杯好咖啡开始</strong>
                   </div>
                   <div class="brew-progress">
                     <div class="brew-progress-label"><span id="brewProgressLabel">等待你的咖啡</span><span id="brewProgressValue">0%</span></div>

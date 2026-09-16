@@ -80,6 +80,8 @@
       tipJar: 8,
       selectedDrink: "americano",
       manualOrdersServed: 0,
+      orderStreak: 0,
+      bestOrderStreak: 0,
       staff: 1,
       isOpen: true,
       boostUntil: 0,
@@ -124,6 +126,8 @@
   state.todayServed = Number(state.todayServed) || 0;
   state.tipJar = Number(state.tipJar) || 0;
   state.manualOrdersServed = Math.max(0, Number(state.manualOrdersServed) || 0);
+  state.orderStreak = Math.max(0, Number(state.orderStreak) || 0);
+  state.bestOrderStreak = Math.max(state.orderStreak, Number(state.bestOrderStreak) || 0);
   state.selectedDrink = drinkConfig[state.selectedDrink] ? state.selectedDrink : "americano";
   state.staff = Math.max(1, Number(state.staff) || 1);
   state.lastSeen = Number(state.lastSeen) || Date.now();
@@ -320,6 +324,19 @@
     }, 3200);
   }
 
+  function showFloatingReward(amount) {
+    var card = document.getElementById("orderTicketCard");
+    var reward = document.createElement("span");
+    reward.className = "reward-pop";
+    reward.textContent = "+ ¥ " + formatMoney(amount);
+    card.appendChild(reward);
+    window.setTimeout(function () {
+      if (reward.parentNode) {
+        reward.parentNode.removeChild(reward);
+      }
+    }, 950);
+  }
+
   function checkMilestones() {
     var loggedTen = Math.floor(state.totalServed / 10);
 
@@ -405,13 +422,13 @@
   }
 
   function renderMenu() {
-    var recipeLevel = Number(state.upgrades.recipe) || 0;
     var unlockedCount = 0;
     var orderDrink = drinkConfig[orderState.drink];
-    var selectedDrink = drinkConfig[state.selectedDrink];
     var matchingDrink = state.selectedDrink === orderState.drink;
     var brewSeconds = getDrinkBrewSeconds(orderState.drink);
     var remainingSeconds = Math.max(0, brewSeconds * (1 - orderState.progress));
+    var streakBonus = Math.min(8, state.orderStreak * 0.8);
+    var orderReward = getDrinkPrice(orderState.drink) + orderDrink.tip + streakBonus;
 
     document.querySelectorAll("[data-drink]").forEach(function (card) {
       var key = card.getAttribute("data-drink");
@@ -439,12 +456,20 @@
 
     document.getElementById("manualOrderCount").textContent =
       "已服务 " + formatMoney(state.manualOrdersServed) + " 杯手作订单";
+    var streakBadge = document.getElementById("orderStreakBadge");
+    streakBadge.textContent = state.orderStreak > 0
+      ? "✦ 连单 ×" + state.orderStreak
+      : "✦ 连单待启动";
+    streakBadge.classList.toggle("is-hot", state.orderStreak >= 3);
     document.getElementById("orderAvatar").textContent = orderState.avatar;
     document.getElementById("orderCustomer").textContent = orderState.customer;
     document.getElementById("orderMood").textContent = orderState.mood;
     document.getElementById("orderDrink").textContent = orderDrink.name;
     document.getElementById("orderPrice").textContent =
-      "¥ " + formatMoney(getDrinkPrice(orderState.drink) + orderDrink.tip);
+      "¥ " + formatMoney(orderReward);
+    document.getElementById("orderBonus").textContent = state.orderStreak > 0
+      ? "连单加成 +¥ " + formatRate(streakBonus)
+      : "首单，从一杯好咖啡开始";
     document.getElementById("orderTimerLabel").textContent = orderState.isBrewing
       ? "剩余 " + remainingSeconds.toFixed(1) + " 秒"
       : "约 " + brewSeconds.toFixed(1) + " 秒";
@@ -467,7 +492,7 @@
     } else if (!matchingDrink) {
       serveLabel.textContent = "先选择 " + orderDrink.shortName;
     } else {
-      serveLabel.textContent = "开始冲泡 · ¥ " + formatMoney(getDrinkPrice(orderState.drink) + orderDrink.tip);
+      serveLabel.textContent = "开始冲泡 · ¥ " + formatMoney(orderReward);
     }
 
     document.getElementById("orderStatus").textContent = orderState.isBrewing
@@ -578,7 +603,8 @@
 
   function completeManualOrder() {
     var drink = drinkConfig[orderState.drink];
-    var reward = getDrinkPrice(orderState.drink) + drink.tip;
+    var streakBonus = Math.min(8, state.orderStreak * 0.8);
+    var reward = getDrinkPrice(orderState.drink) + drink.tip + streakBonus;
     var customer = orderState.customer;
 
     state.coins += reward;
@@ -588,10 +614,22 @@
     state.todayServed += 1;
     state.tipJar += drink.tip;
     state.manualOrdersServed += 1;
+    state.orderStreak += 1;
+    state.bestOrderStreak = Math.max(state.bestOrderStreak, state.orderStreak);
     orderState.isBrewing = false;
     orderState.progress = 1;
-    addActivity(customer + "满意地带走了你的 " + drink.name + "。", "☕", "icon-bean");
-    showToast("订单完成，收入 ¥ " + formatMoney(reward) + "（含小费）", "☕");
+    addActivity(
+      customer + "满意地带走了你的 " + drink.name + "。" +
+        (streakBonus > 0 ? " 连单加成 ¥ " + formatRate(streakBonus) + "。" : ""),
+      "☕",
+      "icon-bean"
+    );
+    showFloatingReward(reward);
+    showToast(
+      "订单完成，收入 ¥ " + formatMoney(reward) +
+        (streakBonus > 0 ? "（含小费与连单加成）" : "（含小费）"),
+      "☕"
+    );
     checkMilestones();
     createOrder();
     saveState();
