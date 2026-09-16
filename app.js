@@ -58,6 +58,54 @@
       tip: 3.5,
       brewSeconds: 4.2,
       unlockAt: 2
+    },
+    coldbrew: {
+      name: "橙香冷萃",
+      shortName: "冷萃",
+      mood: "下午想喝一杯带果香的冷萃",
+      basePrice: 26,
+      tip: 5.2,
+      brewSeconds: 5.1,
+      unlockAt: 3
+    },
+    macchiato: {
+      name: "焦糖玛奇朵",
+      shortName: "玛奇朵",
+      mood: "请给我一杯甜甜的焦糖玛奇朵",
+      basePrice: 36,
+      tip: 7.2,
+      brewSeconds: 5.8,
+      unlockAt: 4
+    }
+  };
+
+  var locationConfig = {
+    street: {
+      name: "榛果街 17 号",
+      shortName: "榛果街",
+      mood: "今天的空气很适合咖啡",
+      detail: "安静的第一家店",
+      requiredLevel: 1,
+      unlockCost: 0,
+      incomeMultiplier: 1
+    },
+    station: {
+      name: "中央车站 B1",
+      shortName: "中央车站",
+      mood: "列车进站，人流正好涌来",
+      detail: "早高峰客流更旺",
+      requiredLevel: 3,
+      unlockCost: 1800,
+      incomeMultiplier: 1.34
+    },
+    seaside: {
+      name: "海边码头 06 号",
+      shortName: "海边码头",
+      mood: "海风把咖啡香送到了更远的地方",
+      detail: "周末限定的慢时光",
+      requiredLevel: 5,
+      unlockCost: 6200,
+      incomeMultiplier: 1.72
     }
   };
 
@@ -80,14 +128,18 @@
       tipJar: 8,
       selectedDrink: "americano",
       manualOrdersServed: 0,
+      manualOrdersMissed: 0,
       orderStreak: 0,
       bestOrderStreak: 0,
       staff: 1,
+      activeLocation: "street",
+      unlockedLocations: ["street"],
       isOpen: true,
       boostUntil: 0,
       lastSeen: Date.now(),
       goalClaimed: false,
       goalReachedNotified: false,
+      dayKey: getDayKey(Date.now()),
       lastLoggedTen: 1,
       upgrades: {
         machine: 0,
@@ -126,11 +178,41 @@
   state.todayServed = Number(state.todayServed) || 0;
   state.tipJar = Number(state.tipJar) || 0;
   state.manualOrdersServed = Math.max(0, Number(state.manualOrdersServed) || 0);
+  state.manualOrdersMissed = Math.max(0, Number(state.manualOrdersMissed) || 0);
   state.orderStreak = Math.max(0, Number(state.orderStreak) || 0);
   state.bestOrderStreak = Math.max(state.orderStreak, Number(state.bestOrderStreak) || 0);
   state.selectedDrink = drinkConfig[state.selectedDrink] ? state.selectedDrink : "americano";
   state.staff = Math.max(1, Number(state.staff) || 1);
+  state.activeLocation = locationConfig[state.activeLocation] ? state.activeLocation : "street";
+  state.unlockedLocations = Array.isArray(state.unlockedLocations)
+    ? state.unlockedLocations.filter(function (key) {
+      return Boolean(locationConfig[key]);
+    })
+    : ["street"];
+  if (state.unlockedLocations.indexOf("street") === -1) {
+    state.unlockedLocations.unshift("street");
+  }
+  if (state.unlockedLocations.indexOf(state.activeLocation) === -1) {
+    state.activeLocation = "street";
+  }
   state.lastSeen = Number(state.lastSeen) || Date.now();
+
+  function getDayKey(timestamp) {
+    var date = new Date(timestamp);
+    return date.getFullYear() + "-" + (date.getMonth() + 1) + "-" + date.getDate();
+  }
+
+  var currentDayKey = getDayKey(Date.now());
+  if (!state.dayKey) {
+    state.dayKey = currentDayKey;
+  } else if (state.dayKey !== currentDayKey) {
+    state.todayEarned = 0;
+    state.todayServed = 0;
+    state.goalClaimed = false;
+    state.goalReachedNotified = false;
+    state.dayKey = currentDayKey;
+    state.activities = seedActivities();
+  }
 
   var orderPeople = [
     { name: "苏女士", avatar: "苏" },
@@ -146,7 +228,9 @@
     mood: drinkConfig.americano.mood,
     isBrewing: false,
     progress: 0,
-    startedAt: 0
+    startedAt: 0,
+    arrivedAt: Date.now(),
+    patienceSeconds: 18
   };
 
   function isDrinkUnlocked(key) {
@@ -169,6 +253,15 @@
     return Math.max(1.2, drinkConfig[key].brewSeconds - machineLevel * 0.16);
   }
 
+  function getActiveLocation() {
+    return locationConfig[state.activeLocation] || locationConfig.street;
+  }
+
+  function getOrderPatienceSeconds() {
+    var seatsLevel = Number(state.upgrades.seats) || 0;
+    return 18 + Math.min(6, seatsLevel * 1.2);
+  }
+
   function createOrder() {
     var available = getAvailableDrinkKeys();
     var drinkKey = available[orderCursor % available.length] || "americano";
@@ -181,7 +274,9 @@
       mood: drinkConfig[drinkKey].mood,
       isBrewing: false,
       progress: 0,
-      startedAt: 0
+      startedAt: 0,
+      arrivedAt: Date.now(),
+      patienceSeconds: getOrderPatienceSeconds()
     };
   }
 
@@ -193,7 +288,8 @@
     var seatsLevel = Number(state.upgrades.seats) || 0;
     var marketingLevel = Number(state.upgrades.marketing) || 0;
     var staffBonus = Math.max(0, state.staff - 1) * 4.1;
-    var cupsPerMinute = (6 + machineLevel * 2.1 + seatsLevel * 0.8 + staffBonus) * (1 + marketingLevel * 0.14);
+    var location = getActiveLocation();
+    var cupsPerMinute = (6 + machineLevel * 2.1 + seatsLevel * 0.8 + staffBonus) * (1 + marketingLevel * 0.14) * location.incomeMultiplier;
     var pricePerCup = 7 + recipeLevel * 1.8;
     var multiplier = typeof multiplierOverride === "number"
       ? multiplierOverride
@@ -208,6 +304,7 @@
       incomePerSecond: cupsPerMinute * pricePerCup * multiplier / 60,
       servedPerSecond: cupsPerMinute / 60,
       capacity: 3 + seatsLevel * 2 + state.staff,
+      locationMultiplier: location.incomeMultiplier,
       multiplier: multiplier,
       boostActive: multiplier > 1
     };
@@ -427,6 +524,12 @@
     var matchingDrink = state.selectedDrink === orderState.drink;
     var brewSeconds = getDrinkBrewSeconds(orderState.drink);
     var remainingSeconds = Math.max(0, brewSeconds * (1 - orderState.progress));
+    var patienceSeconds = orderState.patienceSeconds || getOrderPatienceSeconds();
+    var patienceRemaining = Math.max(
+      0,
+      patienceSeconds - (Date.now() - orderState.arrivedAt) / 1000
+    );
+    var patienceProgress = Math.max(0, Math.min(1, patienceRemaining / patienceSeconds));
     var streakBonus = Math.min(8, state.orderStreak * 0.8);
     var orderReward = getDrinkPrice(orderState.drink) + orderDrink.tip + streakBonus;
 
@@ -472,7 +575,12 @@
       : "首单，从一杯好咖啡开始";
     document.getElementById("orderTimerLabel").textContent = orderState.isBrewing
       ? "剩余 " + remainingSeconds.toFixed(1) + " 秒"
-      : "约 " + brewSeconds.toFixed(1) + " 秒";
+      : "耐心 " + Math.ceil(patienceRemaining) + " 秒";
+    document.getElementById("orderPatienceValue").textContent = orderState.isBrewing
+      ? "已接单"
+      : Math.ceil(patienceRemaining) + " 秒";
+    document.getElementById("orderPatienceProgress").style.width = (patienceProgress * 100) + "%";
+    document.getElementById("orderPatienceRow").classList.toggle("is-danger", patienceRemaining <= 5 && !orderState.isBrewing);
     document.getElementById("brewProgress").style.width = (orderState.progress * 100) + "%";
     document.getElementById("brewProgressValue").textContent = Math.round(orderState.progress * 100) + "%";
     document.getElementById("brewProgressLabel").textContent = orderState.isBrewing
@@ -483,6 +591,7 @@
     var serveButton = document.getElementById("serveOrderButton");
     var serveLabel = document.getElementById("serveOrderLabel");
     ticket.classList.toggle("is-brewing", orderState.isBrewing);
+    ticket.classList.toggle("is-warning", patienceRemaining <= 5 && !orderState.isBrewing);
     serveButton.disabled = !state.isOpen || orderState.isBrewing;
 
     if (!state.isOpen) {
@@ -505,13 +614,68 @@
       : matchingDrink
         ? "匹配顾客点单，手作出杯会额外获得小费。"
         : "这位客人点的是 " + orderDrink.name + "，换一杯菜单再开始冲泡。";
-    document.getElementById("recipeUnlockHint").textContent = unlockedCount === 3
-      ? "三种风味都已解锁，今天想喝哪一杯？"
-      : "升级招牌配方，解锁更多风味（" + unlockedCount + " / 3）";
+    document.getElementById("recipeUnlockHint").textContent = unlockedCount === 5
+      ? "五种风味都已解锁，今天想喝哪一杯？"
+      : "升级招牌配方，解锁更多风味（" + unlockedCount + " / 5）";
+  }
+
+  function renderLocations() {
+    var location = getActiveLocation();
+    var shopLevel = getShopLevel();
+    var unlockedCount = state.unlockedLocations.length;
+
+    document.getElementById("locationCount").textContent = unlockedCount + " / 3";
+    document.getElementById("shopAddress").textContent = location.name;
+    document.getElementById("shopScene").classList.toggle("is-location-station", state.activeLocation === "station");
+    document.getElementById("shopScene").classList.toggle("is-location-seaside", state.activeLocation === "seaside");
+
+    document.querySelectorAll("[data-location]").forEach(function (card) {
+      var key = card.getAttribute("data-location");
+      var config = locationConfig[key];
+      var unlocked = state.unlockedLocations.indexOf(key) !== -1;
+      var active = state.activeLocation === key;
+      var status = card.querySelector(".location-status");
+      var action = card.querySelector(".location-action");
+
+      card.classList.toggle("is-active", active);
+      card.classList.toggle("is-locked", !unlocked);
+      card.disabled = active;
+      card.setAttribute(
+        "aria-label",
+        active
+          ? config.name + "，当前营业中"
+          : unlocked
+            ? "前往 " + config.name
+            : config.name + "，需要店铺 Lv. " + config.requiredLevel + " 和 ¥ " + formatMoney(config.unlockCost) + " 解锁"
+      );
+
+      if (active) {
+        status.textContent = "当前营业";
+        action.textContent = "✓";
+      } else if (unlocked) {
+        status.textContent = "可前往 · 收入 ×" + config.incomeMultiplier.toFixed(2);
+        action.textContent = "→";
+      } else {
+        status.textContent = "店铺 Lv. " + config.requiredLevel + " · ¥ " + formatMoney(config.unlockCost);
+        action.textContent = "↗";
+      }
+    });
+
+    var nextLocation = Object.keys(locationConfig).find(function (key) {
+      return state.unlockedLocations.indexOf(key) === -1;
+    });
+    if (!nextLocation) {
+      document.getElementById("locationHint").textContent = "三家分店都已开张，整座城市都闻得到咖啡香。";
+    } else {
+      var next = locationConfig[nextLocation];
+      document.getElementById("locationHint").textContent =
+        "下一站：" + next.shortName + "，店铺 Lv. " + next.requiredLevel + " 解锁，收入 ×" + next.incomeMultiplier.toFixed(2) + "。";
+    }
   }
 
   function render(now) {
     var economy = getEconomy();
+    var location = getActiveLocation();
     var level = getShopLevel();
     var progress = Math.min(1, Math.max(0, (state.todayServed % 50) / 50));
     var goalCount = Math.min(50, Math.floor(state.todayServed));
@@ -573,15 +737,19 @@
       mood.textContent = "街角的人流越来越多";
       floorTip.textContent = "好口碑正在沿着街区扩散。";
     } else {
-      mood.textContent = "今天的空气很适合咖啡";
-      floorTip.textContent = "升级设备，让香气走得更远。";
+      mood.textContent = location.mood;
+      floorTip.textContent = location.incomeMultiplier > 1
+        ? "新的街区正在把客人送到你的柜台。"
+        : "升级设备，让香气走得更远。";
     }
 
     document.getElementById("shopScene").classList.toggle("is-boosting", economy.boostActive);
+    document.getElementById("shopScene").classList.toggle("is-serving", orderState.isBrewing);
     renderQueue(economy);
     renderActivities();
     renderScene(now);
     renderMenu();
+    renderLocations();
 
     Object.keys(upgradeConfig).forEach(function (key) {
       var cost = getUpgradeCost(key);
@@ -636,6 +804,36 @@
     render(Date.now());
   }
 
+  function expireManualOrder(now) {
+    if (!state.isOpen || orderState.isBrewing) {
+      return false;
+    }
+
+    var patienceSeconds = orderState.patienceSeconds || getOrderPatienceSeconds();
+    if (now - orderState.arrivedAt < patienceSeconds * 1000) {
+      return false;
+    }
+
+    var customer = orderState.customer;
+    var drink = drinkConfig[orderState.drink];
+    var hadStreak = state.orderStreak > 0;
+    state.manualOrdersMissed += 1;
+    state.orderStreak = 0;
+    addActivity(
+      customer + "等不到 " + drink.shortName + "，先离开了店里。" + (hadStreak ? " 连单中断。" : ""),
+      "☾",
+      "icon-sun"
+    );
+    showToast(
+      hadStreak ? "客人等太久了，连单中断" : "客人先离开了，下一位订单已到店",
+      "☾"
+    );
+    createOrder();
+    saveState();
+    render(now);
+    return true;
+  }
+
   function updateOrderBrew(now) {
     if (!orderState.isBrewing || !state.isOpen) {
       return;
@@ -662,6 +860,40 @@
       }
       state.selectedDrink = key;
       addActivity("你把今日手作咖啡换成了 " + drinkConfig[key].name + "。", "✦", "icon-bean");
+      saveState();
+      render(Date.now());
+    });
+  });
+
+  document.querySelectorAll("[data-location]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var key = button.getAttribute("data-location");
+      var config = locationConfig[key];
+      var unlocked = state.unlockedLocations.indexOf(key) !== -1;
+
+      if (state.activeLocation === key) {
+        return;
+      }
+      if (!unlocked) {
+        if (getShopLevel() < config.requiredLevel) {
+          showToast("店铺达到 Lv. " + config.requiredLevel + " 才能前往 " + config.shortName, "⌂");
+          return;
+        }
+        if (state.coins < config.unlockCost) {
+          showToast("还差 ¥ " + formatMoney(config.unlockCost - state.coins) + " 才能开设 " + config.shortName, "⌂");
+          return;
+        }
+        state.coins -= config.unlockCost;
+        state.unlockedLocations.push(key);
+        addActivity(config.shortName + "分店开张，城市里多了一处咖啡香。", "✦", "icon-bean");
+        showToast(config.shortName + "已解锁！收入提高 ×" + config.incomeMultiplier.toFixed(2), "✦");
+      } else {
+        addActivity("你把营业地点切换到了 " + config.shortName + "。", "☼", "icon-sun");
+        showToast("已前往 " + config.shortName, "☼");
+      }
+
+      state.activeLocation = key;
+      orderState.arrivedAt = Date.now();
       saveState();
       render(Date.now());
     });
@@ -756,6 +988,9 @@
   document.getElementById("businessStatus").addEventListener("click", function () {
     state.isOpen = !state.isOpen;
     if (state.isOpen) {
+      if (!orderState.isBrewing) {
+        orderState.arrivedAt = Date.now();
+      }
       addActivity("店门重新打开，第一位客人已经在门口微笑。", "☼", "icon-sun");
       showToast("重新开门营业", "☼");
     } else {
@@ -772,6 +1007,8 @@
       return;
     }
     state = createDefaultState();
+    orderCursor = 0;
+    createOrder();
     offlineEarnings = 0;
     try {
       window.localStorage.removeItem(STORAGE_KEY);
@@ -802,6 +1039,7 @@
     var seconds = Math.max(0, Math.min(3, (now - lastTickAt) / 1000));
     var economy = getEconomy();
 
+    expireManualOrder(now);
     updateOrderBrew(now);
     if (state.isOpen && seconds > 0) {
       applyProduction(seconds, economy.multiplier);

@@ -745,6 +745,18 @@ button:focus-visible {
   font-size: 14px;
 }
 
+.menu-icon-coldbrew {
+  color: #3f8d88;
+  background: #d9f0e8;
+  font-size: 19px;
+}
+
+.menu-icon-macchiato {
+  color: #fff3d5;
+  background: #d38a63;
+  font-size: 19px;
+}
+
 .menu-item-copy {
   display: grid;
   min-width: 0;
@@ -803,6 +815,7 @@ button:focus-visible {
 }
 
 .order-ticket-card {
+  position: relative;
   display: flex;
   min-height: 252px;
   flex-direction: column;
@@ -922,6 +935,55 @@ button:focus-visible {
   font-size: 9px;
   font-weight: 800;
   text-align: right;
+}
+
+.order-patience {
+  margin-top: 11px;
+}
+
+.order-patience-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.order-patience-label strong {
+  color: var(--mint-dark);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.patience-track {
+  height: 4px;
+  margin-top: 6px;
+  overflow: hidden;
+  background: rgba(196, 163, 135, 0.22);
+  border-radius: 999px;
+}
+
+.patience-track span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--yellow);
+  border-radius: inherit;
+  transition: width 220ms linear, background 160ms ease;
+}
+
+.order-patience.is-danger .order-patience-label strong {
+  color: var(--coral-dark);
+}
+
+.order-patience.is-danger .patience-track span {
+  background: var(--coral);
+}
+
+.order-ticket-card.is-warning {
+  border-color: rgba(233, 121, 90, 0.65);
+  box-shadow: inset 0 0 0 1px rgba(233, 121, 90, 0.16);
 }
 
 .brew-progress {
@@ -1044,6 +1106,54 @@ button:focus-visible {
   isolation: isolate;
   background: #ecbd91;
   border-radius: 18px;
+}
+
+.shop-scene.is-location-station {
+  background: #99b9c5;
+}
+
+.shop-scene.is-location-station .scene-sky {
+  background: linear-gradient(180deg, #8bb9c9 0%, #c9d9d4 58%, #e5bd9c 100%);
+}
+
+.shop-scene.is-location-station .scene-wall {
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.11) 50%, transparent 50%),
+    #d7d2c3;
+  background-size: 7px 100%, auto;
+}
+
+.shop-scene.is-location-station .scene-counter,
+.shop-scene.is-location-station .counter-back {
+  filter: hue-rotate(14deg) saturate(0.92);
+}
+
+.shop-scene.is-location-seaside {
+  background: #d7ae91;
+}
+
+.shop-scene.is-location-seaside .scene-sky {
+  background: linear-gradient(180deg, #8fc9ce 0%, #d9eee2 54%, #f3c78f 100%);
+}
+
+.shop-scene.is-location-seaside .window-view {
+  background:
+    linear-gradient(180deg, #9ed7d5 0 52%, #78b6af 53% 70%, #6b9e92 71% 100%);
+}
+
+.shop-scene.is-location-seaside .scene-wall {
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.13) 50%, transparent 50%),
+    #f0d6ad;
+  background-size: 7px 100%, auto;
+}
+
+.shop-scene.is-serving .barista {
+  animation: baristaServe 620ms ease-in-out infinite alternate;
+}
+
+.shop-scene.is-serving .machine-cup {
+  animation: cupPulse 620ms ease-in-out infinite alternate;
 }
 
 .scene-sky,
@@ -2504,6 +2614,135 @@ button:focus-visible {
   font-size: 18px;
 }
 
+.location-panel {
+  padding: 23px 22px 20px;
+}
+
+.location-count {
+  padding-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.location-list {
+  display: grid;
+  gap: 9px;
+  margin-top: 20px;
+}
+
+.location-card {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 62px;
+  padding: 9px;
+  color: var(--ink);
+  background: #fffaf3;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  text-align: left;
+  transition: 160ms ease;
+}
+
+.location-card:hover:not(:disabled) {
+  background: #fff;
+  border-color: #e6d8cb;
+  box-shadow: var(--shadow-small);
+  transform: translateX(3px);
+}
+
+.location-card.is-active {
+  background: #eef8f0;
+  border-color: rgba(92, 170, 147, 0.42);
+  box-shadow: inset 3px 0 0 var(--mint-dark);
+}
+
+.location-card.is-locked {
+  opacity: 0.62;
+  filter: saturate(0.68);
+}
+
+.location-card:disabled {
+  cursor: default;
+}
+
+.location-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  font-family: Georgia, serif;
+  font-size: 17px;
+}
+
+.location-icon-street {
+  color: var(--coral-dark);
+  background: var(--coral-soft);
+}
+
+.location-icon-station {
+  color: #4a7b89;
+  background: #e4f1f4;
+}
+
+.location-icon-seaside {
+  color: #8a6b34;
+  background: var(--yellow-soft);
+}
+
+.location-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.location-copy strong {
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.location-copy small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.location-status {
+  color: var(--coral-dark);
+  font-size: 8px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.location-card.is-active .location-status {
+  color: var(--mint-dark);
+}
+
+.location-action {
+  color: var(--coral);
+  font-size: 16px;
+  font-weight: 400;
+}
+
+.location-card.is-active .location-action {
+  color: var(--mint-dark);
+}
+
+.location-hint {
+  margin: 15px 1px 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
 .side-footer {
   justify-content: center;
   gap: 10px;
@@ -2595,6 +2834,24 @@ button:focus-visible {
   }
   50% {
     transform: translateX(-6px);
+  }
+}
+
+@keyframes baristaServe {
+  from {
+    transform: translateX(-7px) rotate(-1deg);
+  }
+  to {
+    transform: translateX(1px) rotate(1deg);
+  }
+}
+
+@keyframes cupPulse {
+  from {
+    transform: translateY(0) scale(1);
+  }
+  to {
+    transform: translateY(-3px) scale(1.05);
   }
 }
 
@@ -2874,7 +3131,8 @@ button:focus-visible {
   .goal-card,
   .activity-card,
   .upgrade-panel,
-  .staff-panel {
+  .staff-panel,
+  .location-panel {
     padding-right: 18px;
     padding-left: 18px;
   }
