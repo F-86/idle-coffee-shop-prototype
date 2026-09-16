@@ -970,7 +970,7 @@
     var from = route[segmentIndex];
     var to = route[segmentIndex + 1];
     var positions = {
-      vault: 5,
+      vault: 10,
       counter1: 29,
       counter2: 56,
       counter3: 83
@@ -1186,6 +1186,7 @@
     }).length;
 
     document.getElementById("coins").textContent = "¥ " + formatMoney(state.coins);
+    document.getElementById("topbarCoins").textContent = "¥ " + formatMoney(state.coins);
     document.getElementById("incomeRate").textContent = "¥ " + formatRate(economy.incomePerMinute) + " / 分钟";
     document.getElementById("todayRevenue").textContent = "¥ " + formatMoney(state.todayEarned);
     document.getElementById("todayServed").innerHTML = formatMoney(state.todayServed) + " <small>位</small>";
@@ -1481,6 +1482,82 @@
     render(Date.now());
   }
 
+  var activeModal = null;
+  var modalReturnFocus = null;
+
+  function mountModalContent() {
+    var ordersContent = document.getElementById("ordersModalContent");
+    var manageContent = document.getElementById("manageModalContent");
+    var menuBlock = document.querySelector(".main-column > .menu-block");
+    var sideColumn = document.querySelector(".dashboard > .side-column");
+    var welcomePanel = document.querySelector(".main-column > .welcome-panel");
+    var insightGrid = document.querySelector(".main-column > .insight-grid");
+
+    if (menuBlock) {
+      ordersContent.appendChild(menuBlock);
+    }
+    if (sideColumn) {
+      manageContent.appendChild(sideColumn);
+    }
+    if (welcomePanel) {
+      manageContent.appendChild(welcomePanel);
+    }
+    if (insightGrid) {
+      manageContent.appendChild(insightGrid);
+    }
+  }
+
+  function openModal(modalId, trigger) {
+    var modal = document.getElementById(modalId);
+    if (!modal) {
+      return;
+    }
+    if (activeModal && activeModal !== modal) {
+      activeModal.hidden = true;
+    }
+    activeModal = modal;
+    modalReturnFocus = trigger || document.activeElement;
+    modal.hidden = false;
+    document.body.classList.add("modal-is-open");
+    var firstFocusable = modal.querySelector("button:not(:disabled), select, input, [href]");
+    if (firstFocusable) {
+      window.setTimeout(function () {
+        firstFocusable.focus({ preventScroll: true });
+      }, 0);
+    }
+  }
+
+  function closeModal() {
+    if (!activeModal) {
+      return;
+    }
+    activeModal.hidden = true;
+    activeModal = null;
+    document.body.classList.remove("modal-is-open");
+    if (modalReturnFocus && typeof modalReturnFocus.focus === "function") {
+      modalReturnFocus.focus({ preventScroll: true });
+    }
+    modalReturnFocus = null;
+  }
+
+  mountModalContent();
+
+  document.querySelectorAll("[data-modal-open]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      openModal(button.getAttribute("data-modal-open"), button);
+    });
+  });
+
+  document.querySelectorAll("[data-modal-close]").forEach(function (button) {
+    button.addEventListener("click", closeModal);
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      closeModal();
+    }
+  });
+
   document.querySelectorAll("[data-drink]").forEach(function (button) {
     button.addEventListener("click", function () {
       var key = button.getAttribute("data-drink");
@@ -1570,13 +1647,13 @@
     button.addEventListener("click", function () {
       var action = button.getAttribute("data-scene-action");
       if (action === "orders") {
-        document.querySelector(".menu-block").scrollIntoView({ behavior: "smooth", block: "center" });
+        openModal("ordersModal", button);
         showToast("订单台已准备好，别让客人等太久。", "☻");
       } else if (action === "boost") {
         activateBoost();
-      } else if (action === "upgrade") {
-        document.querySelector(".scene-recipe-wall").scrollIntoView({ behavior: "smooth", block: "center" });
-        showToast("咖啡墙和柜台升级都在店内实况里。", "↗");
+      } else if (action === "manage" || action === "upgrade") {
+        openModal("manageModal", button);
+        showToast("经营数据、员工和分店都在这里。", "⌘");
       }
     });
   });

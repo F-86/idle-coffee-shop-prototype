@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f6f1e9" />
     <title>Mellow Bean · 放置咖啡店原型</title>
-    <link rel="stylesheet" href="styles.css?v=20260916-people" />
+    <link rel="stylesheet" href="styles.css?v=20260916-core" />
   </head>
   <body>
     <div class="app-shell">
@@ -19,6 +19,16 @@
         </div>
 
         <div class="topbar-meta">
+          <span class="topbar-balance" aria-label="金库余额">
+            <span class="tiny-coin"></span>
+            <strong id="topbarCoins">¥ 120</strong>
+          </span>
+          <button class="topbar-action" type="button" data-modal-open="ordersModal">
+            <span>☻</span>订单
+          </button>
+          <button class="topbar-action" type="button" data-modal-open="manageModal">
+            <span>⌘</span>经营
+          </button>
           <button class="business-status" id="businessStatus" type="button" title="点击切换营业状态">
             <span class="status-dot"></span>
             <span id="statusLabel">营业中</span>
@@ -226,9 +236,9 @@
                   <span class="floor-line floor-line-three"></span>
                 </div>
                 <div class="scene-quick-actions" aria-label="店内快捷操作">
-                  <button type="button" data-scene-action="orders"><span>☻</span><small>订单</small></button>
+                  <button type="button" data-scene-action="orders"><span>☻</span><small>点单</small></button>
                   <button type="button" data-scene-action="boost"><span>✦</span><small>加速</small></button>
-                  <button type="button" data-scene-action="upgrade"><span>↗</span><small>升级</small></button>
+                  <button type="button" data-scene-action="manage"><span>⌘</span><small>经营</small></button>
                 </div>
                 <div class="scene-hud">
                   <span class="scene-hud-chip"><span class="scene-hud-icon">☕</span><strong id="sceneLocationLabel">榛果街</strong></span>
@@ -365,8 +375,12 @@
                     <span class="station-cash" data-counter-cash="counter3">柜台待收 ¥ 0</span>
                   </article>
                 </div>
-                <div class="scene-manager-route" aria-hidden="true">
-                  <span class="scene-vault-marker">金库</span>
+                <div class="scene-manager-route" aria-label="经理收钱路线">
+                  <button class="scene-vault-marker" type="button" data-upgrade="machine">
+                    <span class="vault-icon">▣</span>
+                    <span class="vault-copy"><strong>金库</strong><small>推车 <span data-level-for="machine">Lv. 1</span></small></span>
+                    <span class="scene-vault-cost" data-cost-for="machine">¥ 70</span>
+                  </button>
                   <span class="manager-route-line"></span>
                   <div class="scene-manager" id="sceneManager">
                     <span class="manager-person">
@@ -594,15 +608,6 @@
               <span class="upgrade-count" id="upgradeCount">0 / 4</span>
             </div>
             <div class="upgrade-list" id="upgradeList">
-              <button class="upgrade-card" type="button" data-upgrade="machine">
-                <span class="upgrade-icon icon-machine">☕</span>
-                <span class="upgrade-info">
-                  <strong>经理推车</strong>
-                  <small>提高收钱速度</small>
-                  <span class="upgrade-level" data-level-for="machine">Lv. 1</span>
-                </span>
-                <span class="upgrade-buy"><span class="upgrade-cost" data-cost-for="machine">¥ 70</span><span class="buy-arrow">↗</span></span>
-              </button>
               <button class="upgrade-card" type="button" data-upgrade="recipe">
                 <span class="upgrade-icon icon-recipe">✧</span>
                 <span class="upgrade-info">
@@ -631,7 +636,7 @@
                 <span class="upgrade-buy"><span class="upgrade-cost" data-cost-for="marketing">¥ 145</span><span class="buy-arrow">↗</span></span>
               </button>
             </div>
-            <p class="upgrade-hint"><span>⌘</span> 小建议：先升级经理推车，收钱更快回到金库。</p>
+            <p class="upgrade-hint"><span>▣</span> 经理推车已经放在场景左侧金库，点击金库就能升级。</p>
           </section>
 
           <section class="staff-panel panel">
@@ -709,7 +714,32 @@
       </main>
     </div>
 
+    <div class="modal-layer" id="modalLayer">
+      <button class="modal-backdrop" type="button" data-modal-close aria-label="关闭弹窗"></button>
+      <section class="modal-window" id="ordersModal" role="dialog" aria-modal="true" aria-labelledby="ordersModalTitle" hidden>
+        <div class="modal-header">
+          <div>
+            <div class="section-kicker">HANDCRAFTED ORDERS</div>
+            <h2 id="ordersModalTitle">订单台</h2>
+          </div>
+          <button class="modal-close" type="button" data-modal-close aria-label="关闭订单弹窗">×</button>
+        </div>
+        <div class="modal-content" id="ordersModalContent"></div>
+      </section>
+
+      <section class="modal-window modal-window-wide" id="manageModal" role="dialog" aria-modal="true" aria-labelledby="manageModalTitle" hidden>
+        <div class="modal-header">
+          <div>
+            <div class="section-kicker">MELLOW BEAN CONTROL ROOM</div>
+            <h2 id="manageModalTitle">经营管理</h2>
+          </div>
+          <button class="modal-close" type="button" data-modal-close aria-label="关闭经营弹窗">×</button>
+        </div>
+        <div class="modal-content" id="manageModalContent"></div>
+      </section>
+    </div>
+
     <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="true"></div>
-    <script src="app.js?v=20260916-people"></script>
+    <script src="app.js?v=20260916-core"></script>
   </body>
 </html>
