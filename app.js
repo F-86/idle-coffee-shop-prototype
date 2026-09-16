@@ -495,6 +495,15 @@
 
   function getEconomy(multiplierOverride) {
     syncCounterBaristas();
+
+    document.querySelectorAll("[data-barista-counter]").forEach(function (barista) {
+      var counterKey = barista.getAttribute("data-barista-counter");
+      var counter = state.counters[counterKey];
+      barista.classList.toggle(
+        "is-active",
+        Boolean(counter && counter.unlocked && counter.baristas > 0 && state.isOpen)
+      );
+    });
     var seatsLevel = Number(state.upgrades.seats) || 0;
     var marketingLevel = Number(state.upgrades.marketing) || 0;
     var location = getActiveLocation();
@@ -974,6 +983,8 @@
 
     manager.style.left = position + "%";
     manager.classList.toggle("is-returning", to === "vault");
+    manager.classList.toggle("is-moving-right", toPosition > fromPosition);
+    manager.classList.toggle("is-moving-left", toPosition < fromPosition);
     if (!state.isOpen) {
       status = "店门关闭 · 经理在金库待命";
     } else if (to === "vault") {

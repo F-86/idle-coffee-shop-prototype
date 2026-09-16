@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f6f1e9" />
     <title>Mellow Bean · 放置咖啡店原型</title>
-    <link rel="stylesheet" href="styles.css?v=20260916-routing" />
+    <link rel="stylesheet" href="styles.css?v=20260916-people" />
   </head>
   <body>
     <div class="app-shell">
@@ -274,6 +274,32 @@
                     </button>
                   </div>
                 </div>
+                <div class="scene-barista-line" aria-label="柜台后正在制作咖啡的咖啡师">
+                  <div class="scene-barista scene-barista-one" data-barista-counter="counter1">
+                    <span class="barista-steam">♨</span>
+                    <span class="barista-person-shadow"></span>
+                    <span class="barista-person-body"></span>
+                    <span class="barista-person-head"></span>
+                    <span class="barista-person-hair"></span>
+                    <span class="barista-person-arm"></span>
+                  </div>
+                  <div class="scene-barista scene-barista-two" data-barista-counter="counter2">
+                    <span class="barista-steam">♨</span>
+                    <span class="barista-person-shadow"></span>
+                    <span class="barista-person-body"></span>
+                    <span class="barista-person-head"></span>
+                    <span class="barista-person-hair"></span>
+                    <span class="barista-person-arm"></span>
+                  </div>
+                  <div class="scene-barista scene-barista-three" data-barista-counter="counter3">
+                    <span class="barista-steam">♨</span>
+                    <span class="barista-person-shadow"></span>
+                    <span class="barista-person-body"></span>
+                    <span class="barista-person-head"></span>
+                    <span class="barista-person-hair"></span>
+                    <span class="barista-person-arm"></span>
+                  </div>
+                </div>
                 <div class="scene-station-belt" aria-label="店内设施">
                   <article class="scene-station station-counter" data-counter-card="counter1">
                     <div class="scene-station-main">
@@ -343,8 +369,14 @@
                   <span class="scene-vault-marker">金库</span>
                   <span class="manager-route-line"></span>
                   <div class="scene-manager" id="sceneManager">
-                    <span class="manager-avatar">🧑‍💼</span>
-                    <span class="manager-cart">▰</span>
+                    <span class="manager-person">
+                      <span class="manager-person-shadow"></span>
+                      <span class="manager-person-body"></span>
+                      <span class="manager-person-head"></span>
+                      <span class="manager-person-hair"></span>
+                      <span class="manager-person-arm"></span>
+                    </span>
+                    <span class="manager-cart"><span class="manager-cart-load">¥</span></span>
                   </div>
                   <span class="manager-route-caption">经理推车</span>
                 </div>
@@ -678,6 +710,6 @@
     </div>
 
     <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="true"></div>
-    <script src="app.js?v=20260916-routing"></script>
+    <script src="app.js?v=20260916-people"></script>
   </body>
 </html>
