@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f6f1e9" />
     <title>Mellow Bean · 放置咖啡店原型</title>
-    <link rel="stylesheet" href="styles.css?v=20260916-scene" />
+    <link rel="stylesheet" href="styles.css?v=20260916-routing" />
   </head>
   <body>
     <div class="app-shell">
@@ -44,7 +44,7 @@
                   </span>
                 </button>
                 <button class="secondary-button" id="collectButton" type="button">
-                  <span>收取零钱</span>
+                  <span>收取小费</span>
                   <span class="arrow">↗</span>
                 </button>
               </div>
@@ -83,7 +83,7 @@
 
             <div class="offline-notice" id="offlineNotice" hidden>
               <span class="offline-spark">✦</span>
-              <span><strong id="offlineAmount">¥ 0</strong> 在你离开时悄悄赚到了</span>
+              <span><strong id="offlineAmount">¥ 0</strong> 在你离开时产出，等待经理回收</span>
               <button id="offlineDismiss" type="button" aria-label="关闭离线收益提示">×</button>
             </div>
           </section>
@@ -241,31 +241,118 @@
                   <span class="satisfaction-heart">♥</span>
                   <div class="satisfaction-track"><span id="sceneSatisfactionProgress"></span></div>
                 </div>
+                <div class="scene-recipe-wall" aria-label="柜台后方咖啡墙">
+                  <div class="scene-recipe-wall-heading">
+                    <strong>咖啡墙</strong>
+                    <small>解锁 / 升级 · 售价 ↑ 制作时间 ↓</small>
+                  </div>
+                  <div class="scene-recipe-grid">
+                    <button class="scene-recipe" type="button" data-recipe-upgrade="americano">
+                      <span class="scene-recipe-icon menu-icon-americano">◌</span>
+                      <span class="scene-recipe-copy"><strong>美式</strong><small data-recipe-level="americano">Lv. 1</small></span>
+                      <span class="scene-recipe-cost" data-recipe-cost="americano">¥ 70</span>
+                    </button>
+                    <button class="scene-recipe" type="button" data-recipe-upgrade="latte">
+                      <span class="scene-recipe-icon menu-icon-latte">◐</span>
+                      <span class="scene-recipe-copy"><strong>拿铁</strong><small data-recipe-level="latte">未解锁</small></span>
+                      <span class="scene-recipe-cost" data-recipe-cost="latte">¥ 180</span>
+                    </button>
+                    <button class="scene-recipe" type="button" data-recipe-upgrade="mocha">
+                      <span class="scene-recipe-icon menu-icon-mocha">●</span>
+                      <span class="scene-recipe-copy"><strong>摩卡</strong><small data-recipe-level="mocha">未解锁</small></span>
+                      <span class="scene-recipe-cost" data-recipe-cost="mocha">¥ 260</span>
+                    </button>
+                    <button class="scene-recipe" type="button" data-recipe-upgrade="coldbrew">
+                      <span class="scene-recipe-icon menu-icon-coldbrew">◒</span>
+                      <span class="scene-recipe-copy"><strong>冷萃</strong><small data-recipe-level="coldbrew">未解锁</small></span>
+                      <span class="scene-recipe-cost" data-recipe-cost="coldbrew">¥ 420</span>
+                    </button>
+                    <button class="scene-recipe" type="button" data-recipe-upgrade="macchiato">
+                      <span class="scene-recipe-icon menu-icon-macchiato">✺</span>
+                      <span class="scene-recipe-copy"><strong>玛奇朵</strong><small data-recipe-level="macchiato">未解锁</small></span>
+                      <span class="scene-recipe-cost" data-recipe-cost="macchiato">¥ 680</span>
+                    </button>
+                  </div>
+                </div>
                 <div class="scene-station-belt" aria-label="店内设施">
-                  <button class="scene-station station-machine" type="button" data-scene-upgrade="machine">
-                    <span class="station-icon">☕</span>
-                    <span class="station-copy"><strong>冲煮台</strong><small data-scene-metric-for="machine">6 杯 / 分钟</small></span>
-                    <span class="station-level" data-scene-level-for="machine">Lv. 1</span>
-                    <span class="station-cost" data-scene-cost-for="machine">¥ 70</span>
-                  </button>
-                  <button class="scene-station station-recipe" type="button" data-scene-upgrade="recipe">
-                    <span class="station-icon">✧</span>
-                    <span class="station-copy"><strong>配方台</strong><small data-scene-metric-for="recipe">单杯 ¥ 7</small></span>
-                    <span class="station-level" data-scene-level-for="recipe">Lv. 1</span>
-                    <span class="station-cost" data-scene-cost-for="recipe">¥ 95</span>
-                  </button>
-                  <button class="scene-station station-seats" type="button" data-scene-upgrade="seats">
-                    <span class="station-icon">⌂</span>
-                    <span class="station-copy"><strong>座位区</strong><small data-scene-metric-for="seats">接待 4 人</small></span>
-                    <span class="station-level" data-scene-level-for="seats">Lv. 1</span>
-                    <span class="station-cost" data-scene-cost-for="seats">¥ 120</span>
-                  </button>
+                  <article class="scene-station station-counter" data-counter-card="counter1">
+                    <div class="scene-station-main">
+                      <span class="station-icon">☕</span>
+                      <span class="station-copy"><strong data-counter-name="counter1">一号柜台</strong><small data-counter-metric="counter1">美式 · ¥ 8 · 咖啡师 1</small></span>
+                      <span class="station-level" data-counter-level="counter1">Lv. 1</span>
+                      <span class="station-cost" data-counter-cost="counter1">升级 ¥ 220</span>
+                    </div>
+                    <div class="scene-station-actions">
+                      <label class="station-drink-label">咖啡
+                        <select class="station-drink-select" data-counter-drink="counter1" aria-label="选择一号柜台咖啡">
+                          <option value="americano">美式</option>
+                          <option value="latte">拿铁</option>
+                          <option value="mocha">摩卡</option>
+                          <option value="coldbrew">冷萃</option>
+                          <option value="macchiato">玛奇朵</option>
+                        </select>
+                      </label>
+                      <button class="station-upgrade-button" type="button" data-counter-upgrade="counter1">升级</button>
+                    </div>
+                    <span class="station-cash" data-counter-cash="counter1">柜台待收 ¥ 0</span>
+                  </article>
+                  <article class="scene-station station-counter" data-counter-card="counter2">
+                    <div class="scene-station-main">
+                      <span class="station-icon station-icon-mint">☕</span>
+                      <span class="station-copy"><strong data-counter-name="counter2">二号柜台</strong><small data-counter-metric="counter2">尚未开摊</small></span>
+                      <span class="station-level" data-counter-level="counter2">未解锁</span>
+                      <span class="station-cost" data-counter-cost="counter2">解锁 ¥ 650</span>
+                    </div>
+                    <div class="scene-station-actions">
+                      <label class="station-drink-label">咖啡
+                        <select class="station-drink-select" data-counter-drink="counter2" aria-label="选择二号柜台咖啡">
+                          <option value="americano">美式</option>
+                          <option value="latte">拿铁</option>
+                          <option value="mocha">摩卡</option>
+                          <option value="coldbrew">冷萃</option>
+                          <option value="macchiato">玛奇朵</option>
+                        </select>
+                      </label>
+                      <button class="station-upgrade-button" type="button" data-counter-upgrade="counter2">解锁</button>
+                    </div>
+                    <span class="station-cash" data-counter-cash="counter2">柜台待收 ¥ 0</span>
+                  </article>
+                  <article class="scene-station station-counter" data-counter-card="counter3">
+                    <div class="scene-station-main">
+                      <span class="station-icon station-icon-coral">☕</span>
+                      <span class="station-copy"><strong data-counter-name="counter3">三号柜台</strong><small data-counter-metric="counter3">尚未开摊</small></span>
+                      <span class="station-level" data-counter-level="counter3">未解锁</span>
+                      <span class="station-cost" data-counter-cost="counter3">解锁 ¥ 2,400</span>
+                    </div>
+                    <div class="scene-station-actions">
+                      <label class="station-drink-label">咖啡
+                        <select class="station-drink-select" data-counter-drink="counter3" aria-label="选择三号柜台咖啡">
+                          <option value="americano">美式</option>
+                          <option value="latte">拿铁</option>
+                          <option value="mocha">摩卡</option>
+                          <option value="coldbrew">冷萃</option>
+                          <option value="macchiato">玛奇朵</option>
+                        </select>
+                      </label>
+                      <button class="station-upgrade-button" type="button" data-counter-upgrade="counter3">解锁</button>
+                    </div>
+                    <span class="station-cash" data-counter-cash="counter3">柜台待收 ¥ 0</span>
+                  </article>
+                </div>
+                <div class="scene-manager-route" aria-hidden="true">
+                  <span class="scene-vault-marker">金库</span>
+                  <span class="manager-route-line"></span>
+                  <div class="scene-manager" id="sceneManager">
+                    <span class="manager-avatar">🧑‍💼</span>
+                    <span class="manager-cart">▰</span>
+                  </div>
+                  <span class="manager-route-caption">经理推车</span>
                 </div>
                 <div class="scene-collect-bar">
-                  <span class="scene-collect-icon">¥</span>
-                  <span class="scene-collect-copy"><small>自动收益</small><strong id="sceneIncomeRate">¥ 42 / 分钟</strong></span>
-                  <span class="scene-collect-meter"><span id="sceneTipProgress"></span></span>
-                  <button id="sceneCollectButton" type="button">收取零钱 · ¥ 8</button>
+                  <span class="scene-collect-icon">↔</span>
+                  <span class="scene-collect-copy"><small>经理收钱 · 回金库</small><strong id="sceneManagerStatus">经理从金库出发</strong></span>
+                  <span class="scene-collect-meter"><span id="sceneManagerProgress"></span></span>
+                  <strong class="scene-collect-amount" id="scenePendingCash">柜台待收 ¥ 0</strong>
                 </div>
                 <div class="scene-caption"><span class="tiny-live-dot"></span>店里一切顺利</div>
               </div>
@@ -453,15 +540,15 @@
         <aside class="side-column">
           <section class="wallet-card panel">
             <div class="wallet-heading">
-              <span>店铺账户</span>
+              <span>金库账户</span>
               <span class="wallet-badge">● LIVE</span>
             </div>
             <div class="wallet-balance">
-              <small>可用余额</small>
+              <small>经理入库后的余额</small>
               <strong id="coins">¥ 120</strong>
             </div>
             <div class="wallet-foot">
-              <span><span class="tiny-coin"></span>每分钟自动入账</span>
+              <span><span class="tiny-coin"></span>柜台正在产钱</span>
               <strong id="incomeRate">¥ 0 / 分钟</strong>
             </div>
           </section>
@@ -478,8 +565,8 @@
               <button class="upgrade-card" type="button" data-upgrade="machine">
                 <span class="upgrade-icon icon-machine">☕</span>
                 <span class="upgrade-info">
-                  <strong>磨豆机</strong>
-                  <small>提升制作速度</small>
+                  <strong>经理推车</strong>
+                  <small>提高收钱速度</small>
                   <span class="upgrade-level" data-level-for="machine">Lv. 1</span>
                 </span>
                 <span class="upgrade-buy"><span class="upgrade-cost" data-cost-for="machine">¥ 70</span><span class="buy-arrow">↗</span></span>
@@ -487,8 +574,8 @@
               <button class="upgrade-card" type="button" data-upgrade="recipe">
                 <span class="upgrade-icon icon-recipe">✧</span>
                 <span class="upgrade-info">
-                  <strong>招牌配方</strong>
-                  <small>提高单杯售价</small>
+                  <strong>待客培训</strong>
+                  <small>提高顾客耐心</small>
                   <span class="upgrade-level" data-level-for="recipe">Lv. 1</span>
                 </span>
                 <span class="upgrade-buy"><span class="upgrade-cost" data-cost-for="recipe">¥ 95</span><span class="buy-arrow">↗</span></span>
@@ -496,8 +583,8 @@
               <button class="upgrade-card" type="button" data-upgrade="seats">
                 <span class="upgrade-icon icon-seats">⌂</span>
                 <span class="upgrade-info">
-                  <strong>窗边座位</strong>
-                  <small>增加同时接待人数</small>
+                  <strong>候客座位</strong>
+                  <small>增加排队容量</small>
                   <span class="upgrade-level" data-level-for="seats">Lv. 1</span>
                 </span>
                 <span class="upgrade-buy"><span class="upgrade-cost" data-cost-for="seats">¥ 120</span><span class="buy-arrow">↗</span></span>
@@ -512,7 +599,7 @@
                 <span class="upgrade-buy"><span class="upgrade-cost" data-cost-for="marketing">¥ 145</span><span class="buy-arrow">↗</span></span>
               </button>
             </div>
-            <p class="upgrade-hint"><span>⌘</span> 小建议：优先升级磨豆机，回本更快。</p>
+            <p class="upgrade-hint"><span>⌘</span> 小建议：先升级经理推车，收钱更快回到金库。</p>
           </section>
 
           <section class="staff-panel panel">
@@ -591,6 +678,6 @@
     </div>
 
     <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="true"></div>
-    <script src="app.js?v=20260916-scene"></script>
+    <script src="app.js?v=20260916-routing"></script>
   </body>
 </html>

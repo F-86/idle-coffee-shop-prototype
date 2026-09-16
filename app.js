@@ -6,20 +6,20 @@
 
   var upgradeConfig = {
     machine: {
-      name: "磨豆机",
-      effect: "制作速度",
+      name: "经理推车",
+      effect: "收钱速度",
       baseCost: 70,
       costScale: 1.46
     },
     recipe: {
-      name: "招牌配方",
-      effect: "单杯售价",
+      name: "待客培训",
+      effect: "顾客耐心",
       baseCost: 95,
       costScale: 1.52
     },
     seats: {
-      name: "窗边座位",
-      effect: "接待人数",
+      name: "候客座位",
+      effect: "排队容量",
       baseCost: 120,
       costScale: 1.58
     },
@@ -39,7 +39,8 @@
       basePrice: 8,
       tip: 1.2,
       brewSeconds: 2.5,
-      unlockAt: 0
+      unlockAt: 0,
+      recipeBaseCost: 70
     },
     latte: {
       name: "蜂蜜拿铁",
@@ -48,7 +49,8 @@
       basePrice: 12,
       tip: 2.1,
       brewSeconds: 3.4,
-      unlockAt: 1
+      unlockAt: 1,
+      recipeBaseCost: 180
     },
     mocha: {
       name: "燕麦摩卡",
@@ -57,7 +59,8 @@
       basePrice: 18,
       tip: 3.5,
       brewSeconds: 4.2,
-      unlockAt: 2
+      unlockAt: 2,
+      recipeBaseCost: 260
     },
     coldbrew: {
       name: "橙香冷萃",
@@ -66,7 +69,8 @@
       basePrice: 26,
       tip: 5.2,
       brewSeconds: 5.1,
-      unlockAt: 3
+      unlockAt: 3,
+      recipeBaseCost: 420
     },
     macchiato: {
       name: "焦糖玛奇朵",
@@ -75,7 +79,8 @@
       basePrice: 36,
       tip: 7.2,
       brewSeconds: 5.8,
-      unlockAt: 4
+      unlockAt: 4,
+      recipeBaseCost: 680
     }
   };
 
@@ -109,6 +114,34 @@
     }
   };
 
+  var counterOrder = ["counter1", "counter2", "counter3"];
+  var counterConfig = {
+    counter1: {
+      name: "一号柜台",
+      shortName: "一号柜台",
+      unlockCost: 0,
+      requiredLevel: 1,
+      baseUpgradeCost: 220,
+      costScale: 1.5
+    },
+    counter2: {
+      name: "二号柜台",
+      shortName: "二号柜台",
+      unlockCost: 650,
+      requiredLevel: 2,
+      baseUpgradeCost: 360,
+      costScale: 1.54
+    },
+    counter3: {
+      name: "三号柜台",
+      shortName: "三号柜台",
+      unlockCost: 2400,
+      requiredLevel: 4,
+      baseUpgradeCost: 680,
+      costScale: 1.58
+    }
+  };
+
   function seedActivities() {
     var now = Date.now();
     return [
@@ -116,6 +149,42 @@
       { icon: "♡", iconClass: "icon-heart", message: "苏女士说，今天的拿铁很顺滑。", time: now - 120000 },
       { icon: "☼", iconClass: "icon-sun", message: "阳光照进了靠窗的座位。", time: now - 300000 }
     ];
+  }
+
+  function createDefaultRecipeLevels() {
+    return {
+      americano: 1,
+      latte: 0,
+      mocha: 0,
+      coldbrew: 0,
+      macchiato: 0
+    };
+  }
+
+  function createDefaultCounters() {
+    return {
+      counter1: {
+        unlocked: true,
+        level: 1,
+        drink: "americano",
+        pendingCash: 0,
+        baristas: 1
+      },
+      counter2: {
+        unlocked: false,
+        level: 0,
+        drink: "latte",
+        pendingCash: 0,
+        baristas: 0
+      },
+      counter3: {
+        unlocked: false,
+        level: 0,
+        drink: "mocha",
+        pendingCash: 0,
+        baristas: 0
+      }
+    };
   }
 
   function createDefaultState() {
@@ -126,6 +195,8 @@
       totalServed: 18,
       todayServed: 18,
       tipJar: 8,
+      totalCollected: 120,
+      todayCollected: 0,
       satisfaction: 72,
       selectedDrink: "americano",
       manualOrdersServed: 0,
@@ -133,6 +204,8 @@
       orderStreak: 0,
       bestOrderStreak: 0,
       staff: 1,
+      recipeLevels: createDefaultRecipeLevels(),
+      counters: createDefaultCounters(),
       activeLocation: "street",
       unlockedLocations: ["street"],
       isOpen: true,
@@ -179,7 +252,12 @@
   state.totalServed = Number(state.totalServed) || 0;
   state.todayServed = Number(state.todayServed) || 0;
   state.tipJar = Number(state.tipJar) || 0;
-  state.satisfaction = Math.max(0, Math.min(100, Number(state.satisfaction) || 72));
+  state.totalCollected = Number(state.totalCollected) || state.coins;
+  state.todayCollected = Number(state.todayCollected) || 0;
+  var normalizedSatisfaction = Number(state.satisfaction);
+  state.satisfaction = Number.isFinite(normalizedSatisfaction)
+    ? Math.max(0, Math.min(100, normalizedSatisfaction))
+    : 72;
   state.lastShopLevel = Math.max(1, Number(state.lastShopLevel) || 1);
   state.manualOrdersServed = Math.max(0, Number(state.manualOrdersServed) || 0);
   state.manualOrdersMissed = Math.max(0, Number(state.manualOrdersMissed) || 0);
@@ -187,6 +265,56 @@
   state.bestOrderStreak = Math.max(state.orderStreak, Number(state.bestOrderStreak) || 0);
   state.selectedDrink = drinkConfig[state.selectedDrink] ? state.selectedDrink : "americano";
   state.staff = Math.max(1, Number(state.staff) || 1);
+
+  var hasSavedRecipeLevels = Boolean(
+    savedState && savedState.recipeLevels && typeof savedState.recipeLevels === "object"
+  );
+  state.recipeLevels = Object.assign(
+    createDefaultRecipeLevels(),
+    hasSavedRecipeLevels ? savedState.recipeLevels : {}
+  );
+  if (!hasSavedRecipeLevels) {
+    var legacyRecipeLevel = Number(state.upgrades.recipe) || 0;
+    Object.keys(drinkConfig).forEach(function (key) {
+      if (legacyRecipeLevel >= drinkConfig[key].unlockAt) {
+        state.recipeLevels[key] = Math.max(
+          1,
+          Math.min(6, legacyRecipeLevel - drinkConfig[key].unlockAt + 1)
+        );
+      }
+    });
+  }
+  if (!isDrinkUnlocked(state.selectedDrink)) {
+    state.selectedDrink = "americano";
+  }
+
+  var defaultCounters = createDefaultCounters();
+  var hasSavedCounters = Boolean(
+    savedState && savedState.counters && typeof savedState.counters === "object"
+  );
+  state.counters = Object.assign(defaultCounters, hasSavedCounters ? savedState.counters : {});
+  counterOrder.forEach(function (key) {
+    state.counters[key] = Object.assign(
+      createDefaultCounters()[key],
+      state.counters[key] || {}
+    );
+    state.counters[key].unlocked = Boolean(state.counters[key].unlocked);
+    state.counters[key].level = Math.max(0, Number(state.counters[key].level) || 0);
+    state.counters[key].pendingCash = Math.max(0, Number(state.counters[key].pendingCash) || 0);
+    state.counters[key].drink = drinkConfig[state.counters[key].drink]
+      ? state.counters[key].drink
+      : "americano";
+    state.counters[key].baristas = Math.max(0, Number(state.counters[key].baristas) || 0);
+    if (state.counters[key].unlocked) {
+      state.counters[key].level = Math.max(1, state.counters[key].level);
+    } else {
+      state.counters[key].level = 0;
+      state.counters[key].baristas = 0;
+    }
+  });
+  if (!hasSavedCounters) {
+    state.counters.counter1.baristas = state.staff;
+  }
   state.activeLocation = locationConfig[state.activeLocation] ? state.activeLocation : "street";
   state.unlockedLocations = Array.isArray(state.unlockedLocations)
     ? state.unlockedLocations.filter(function (key) {
@@ -215,6 +343,7 @@
   } else if (state.dayKey !== currentDayKey) {
     state.todayEarned = 0;
     state.todayServed = 0;
+    state.todayCollected = 0;
     state.goalClaimed = false;
     state.goalReachedNotified = false;
     state.dayKey = currentDayKey;
@@ -240,8 +369,15 @@
     patienceSeconds: 18
   };
 
+  var managerRuntime = {
+    elapsed: 0,
+    completedSegments: 0,
+    routeKey: "",
+    carrying: 0
+  };
+
   function isDrinkUnlocked(key) {
-    return (Number(state.upgrades.recipe) || 0) >= drinkConfig[key].unlockAt;
+    return Math.max(0, Number(state.recipeLevels[key]) || 0) >= 1;
   }
 
   function getAvailableDrinkKeys() {
@@ -250,14 +386,76 @@
     });
   }
 
+  function getRecipeLevel(key) {
+    return Math.max(0, Number(state.recipeLevels[key]) || 0);
+  }
+
   function getDrinkPrice(key) {
-    var recipeLevel = Number(state.upgrades.recipe) || 0;
-    return drinkConfig[key].basePrice + recipeLevel * 0.75;
+    var recipeLevel = Math.max(0, Number(state.recipeLevels[key]) || 0);
+    return drinkConfig[key].basePrice + Math.max(0, recipeLevel - 1) * 2.4;
   }
 
   function getDrinkBrewSeconds(key) {
-    var machineLevel = Number(state.upgrades.machine) || 0;
-    return Math.max(1.2, drinkConfig[key].brewSeconds - machineLevel * 0.16);
+    var recipeLevel = Math.max(0, Number(state.recipeLevels[key]) || 0);
+    return Math.max(1.4, drinkConfig[key].brewSeconds - Math.max(0, recipeLevel - 1) * 0.32);
+  }
+
+  function getRecipeUpgradeCost(key) {
+    var recipeLevel = Math.max(0, Number(state.recipeLevels[key]) || 0);
+    return Math.round(drinkConfig[key].recipeBaseCost * Math.pow(1.56, recipeLevel));
+  }
+
+  function getCounterPrice(key) {
+    var counter = state.counters[key];
+    if (!counter || !counter.unlocked) {
+      return 0;
+    }
+    return getDrinkPrice(counter.drink) + Math.max(0, counter.level - 1) * 2.2;
+  }
+
+  function getCounterUpgradeCost(key) {
+    var counter = state.counters[key];
+    var config = counterConfig[key];
+    if (!counter || !config) {
+      return 0;
+    }
+    if (!counter.unlocked) {
+      return config.unlockCost;
+    }
+    return Math.round(config.baseUpgradeCost * Math.pow(config.costScale, Math.max(0, counter.level - 1)));
+  }
+
+  function syncCounterBaristas() {
+    var unlockedCounters = counterOrder.filter(function (key) {
+      return state.counters[key].unlocked;
+    });
+    var remaining = Math.max(1, state.staff);
+
+    counterOrder.forEach(function (key) {
+      state.counters[key].baristas = 0;
+    });
+
+    unlockedCounters.forEach(function (key) {
+      if (remaining > 0) {
+        state.counters[key].baristas = 1;
+        remaining -= 1;
+      }
+    });
+
+    var cursor = 0;
+    while (remaining > 0 && unlockedCounters.length) {
+      state.counters[unlockedCounters[cursor % unlockedCounters.length]].baristas += 1;
+      remaining -= 1;
+      cursor += 1;
+    }
+  }
+
+  function getCounterProductionPerMinute(key) {
+    var counter = state.counters[key];
+    if (!counter || !counter.unlocked || counter.baristas < 1 || !isDrinkUnlocked(counter.drink)) {
+      return 0;
+    }
+    return counter.baristas * (60 / getDrinkBrewSeconds(counter.drink)) * 0.24;
   }
 
   function getActiveLocation() {
@@ -266,11 +464,13 @@
 
   function getOrderPatienceSeconds() {
     var seatsLevel = Number(state.upgrades.seats) || 0;
-    return 30 + Math.min(8, seatsLevel * 1.5);
+    var trainingLevel = Number(state.upgrades.recipe) || 0;
+    return 30 + Math.min(8, seatsLevel * 1.5) + Math.min(10, trainingLevel * 1.2);
   }
 
   function getTipMultiplier() {
-    return 0.82 + state.satisfaction / 100 * 0.38;
+    var trainingLevel = Number(state.upgrades.recipe) || 0;
+    return 0.82 + state.satisfaction / 100 * 0.38 + Math.min(0.1, trainingLevel * 0.015);
   }
 
   function createOrder() {
@@ -294,31 +494,102 @@
   createOrder();
 
   function getEconomy(multiplierOverride) {
-    var machineLevel = Number(state.upgrades.machine) || 0;
-    var recipeLevel = Number(state.upgrades.recipe) || 0;
+    syncCounterBaristas();
     var seatsLevel = Number(state.upgrades.seats) || 0;
     var marketingLevel = Number(state.upgrades.marketing) || 0;
-    var staffBonus = Math.max(0, state.staff - 1) * 4.1;
     var location = getActiveLocation();
-    var cupsPerMinute = (6 + machineLevel * 2.1 + seatsLevel * 0.8 + staffBonus) * (1 + marketingLevel * 0.14) * location.incomeMultiplier;
-    var pricePerCup = 7 + recipeLevel * 1.8;
+    var baseCupsPerMinute = 0;
+    var baseIncomePerMinute = 0;
+    var counterStats = [];
+
+    counterOrder.forEach(function (key) {
+      var counter = state.counters[key];
+      var cupsPerMinute = getCounterProductionPerMinute(key) * (1 + marketingLevel * 0.12) * location.incomeMultiplier;
+      var price = getCounterPrice(key);
+      baseCupsPerMinute += cupsPerMinute;
+      baseIncomePerMinute += cupsPerMinute * price;
+      counterStats.push({
+        key: key,
+        drink: counter.drink,
+        baristas: counter.baristas,
+        price: price,
+        cupsPerMinute: cupsPerMinute,
+        incomePerMinute: cupsPerMinute * price,
+        incomePerSecond: cupsPerMinute * price / 60
+      });
+    });
+
     var multiplier = typeof multiplierOverride === "number"
       ? multiplierOverride
       : state.boostUntil > Date.now()
         ? 2
         : 1;
+    var unlockedCounterCount = counterOrder.filter(function (key) {
+      return state.counters[key].unlocked;
+    }).length;
+    var pricePerCup = baseCupsPerMinute > 0 ? baseIncomePerMinute / baseCupsPerMinute : 0;
 
     return {
-      cupsPerMinute: cupsPerMinute,
+      cupsPerMinute: baseCupsPerMinute * multiplier,
       pricePerCup: pricePerCup,
-      incomePerMinute: cupsPerMinute * pricePerCup * multiplier,
-      incomePerSecond: cupsPerMinute * pricePerCup * multiplier / 60,
-      servedPerSecond: cupsPerMinute / 60,
-      capacity: 3 + seatsLevel * 2 + state.staff,
+      incomePerMinute: baseIncomePerMinute * multiplier,
+      incomePerSecond: baseIncomePerMinute * multiplier / 60,
+      servedPerSecond: baseCupsPerMinute * multiplier / 60,
+      capacity: 3 + seatsLevel * 2 + state.staff + Math.max(0, unlockedCounterCount - 1) * 2,
       locationMultiplier: location.incomeMultiplier,
       multiplier: multiplier,
-      boostActive: multiplier > 1
+      boostActive: multiplier > 1,
+      counterStats: counterStats.map(function (stat) {
+        return Object.assign({}, stat, {
+          cupsPerMinute: stat.cupsPerMinute * multiplier,
+          incomePerMinute: stat.incomePerMinute * multiplier,
+          incomePerSecond: stat.incomePerSecond * multiplier
+        });
+      })
     };
+  }
+
+  function getPendingCash() {
+    return counterOrder.reduce(function (total, key) {
+      return total + Math.max(0, Number(state.counters[key].pendingCash) || 0);
+    }, 0);
+  }
+
+  function getUnlockedCounterKeys() {
+    return counterOrder.filter(function (key) {
+      return state.counters[key].unlocked;
+    });
+  }
+
+  function getManagerRoute() {
+    var unlockedCounters = getUnlockedCounterKeys();
+    var route = ["vault"].concat(unlockedCounters);
+    for (var index = unlockedCounters.length - 2; index >= 0; index -= 1) {
+      route.push(unlockedCounters[index]);
+    }
+    route.push("vault");
+    return route;
+  }
+
+  function getManagerSegmentSeconds() {
+    var cartLevel = Number(state.upgrades.machine) || 0;
+    return Math.max(0.55, 1.35 - cartLevel * 0.08);
+  }
+
+  function ensureManagerRoute() {
+    var routeKey = getUnlockedCounterKeys().join("|");
+    if (managerRuntime.routeKey !== routeKey) {
+      if (managerRuntime.carrying > 0) {
+        state.coins += managerRuntime.carrying;
+        state.totalCollected += managerRuntime.carrying;
+        state.todayCollected += managerRuntime.carrying;
+      }
+      managerRuntime.routeKey = routeKey;
+      managerRuntime.elapsed = 0;
+      managerRuntime.completedSegments = 0;
+      managerRuntime.carrying = 0;
+    }
+    return getManagerRoute();
   }
 
   function applyProduction(seconds, multiplier) {
@@ -327,10 +598,14 @@
     }
 
     var economy = getEconomy(multiplier);
-    var earnings = economy.incomePerSecond * seconds;
+    var earnings = 0;
     var served = economy.servedPerSecond * seconds;
 
-    state.coins += earnings;
+    economy.counterStats.forEach(function (stat) {
+      var cash = stat.incomePerSecond * seconds;
+      state.counters[stat.key].pendingCash += cash;
+      earnings += cash;
+    });
     state.totalEarned += earnings;
     state.todayEarned += earnings;
     state.totalServed += served;
@@ -368,6 +643,46 @@
 
   function getStaffCost() {
     return Math.round(260 * Math.pow(1.72, Math.max(0, state.staff - 1)));
+  }
+
+  function processManagerStop(stop) {
+    if (stop === "vault") {
+      var deposit = managerRuntime.carrying;
+      if (deposit > 0) {
+        state.coins += deposit;
+        state.totalCollected += deposit;
+        state.todayCollected += deposit;
+        showSceneCoin(deposit, true, "vault");
+      }
+      managerRuntime.carrying = 0;
+      return;
+    }
+
+    var counter = state.counters[stop];
+    if (!counter || !counter.unlocked || counter.pendingCash <= 0) {
+      return;
+    }
+    var collected = counter.pendingCash;
+    counter.pendingCash = 0;
+    managerRuntime.carrying += collected;
+    showSceneCoin(collected, true, stop);
+  }
+
+  function updateManager(seconds) {
+    if (!state.isOpen || seconds <= 0) {
+      return;
+    }
+
+    var route = ensureManagerRoute();
+    var segmentSeconds = getManagerSegmentSeconds();
+    managerRuntime.elapsed += seconds;
+    var completedSegments = Math.floor(managerRuntime.elapsed / segmentSeconds);
+
+    while (managerRuntime.completedSegments < completedSegments) {
+      var segmentIndex = managerRuntime.completedSegments % (route.length - 1);
+      processManagerStop(route[segmentIndex + 1]);
+      managerRuntime.completedSegments += 1;
+    }
   }
 
   function formatMoney(value) {
@@ -447,9 +762,15 @@
 
   var sceneCoinCursor = 0;
 
-  function showSceneCoin(amount, isManual) {
+  function showSceneCoin(amount, isManual, target) {
     var scene = document.getElementById("shopScene");
     var coin = document.createElement("span");
+    var targetPositions = {
+      vault: { left: 7, top: 36 },
+      counter1: { left: 18, top: 39 },
+      counter2: { left: 50, top: 34 },
+      counter3: { left: 78, top: 39 }
+    };
     var positions = [
       { left: 18, top: 28 },
       { left: 38, top: 18 },
@@ -457,7 +778,7 @@
       { left: 73, top: 20 },
       { left: 29, top: 37 }
     ];
-    var position = positions[sceneCoinCursor % positions.length];
+    var position = targetPositions[target] || positions[sceneCoinCursor % positions.length];
     sceneCoinCursor += 1;
     coin.className = "scene-coin-pop" + (isManual ? " is-manual" : "");
     coin.textContent = "+ ¥ " + formatMoney(amount);
@@ -549,38 +870,126 @@
   }
 
   function renderSceneStations(economy) {
-    var machineLevel = Number(state.upgrades.machine) || 0;
-    var recipeLevel = Number(state.upgrades.recipe) || 0;
-    var seatsLevel = Number(state.upgrades.seats) || 0;
-    var metrics = {
-      machine: formatRate(economy.cupsPerMinute) + " 杯 / 分钟",
-      recipe: "单杯 ¥ " + formatMoney(economy.pricePerCup),
-      seats: "接待 " + economy.capacity + " 人"
-    };
-    var levels = {
-      machine: machineLevel,
-      recipe: recipeLevel,
-      seats: seatsLevel
-    };
-
     document.getElementById("sceneLocationLabel").textContent = getActiveLocation().shortName;
     document.getElementById("sceneCoins").textContent = "¥ " + formatMoney(state.coins);
     document.getElementById("sceneLevel").textContent = getShopLevel();
     document.getElementById("sceneSatisfaction").textContent = Math.round(state.satisfaction);
     document.getElementById("sceneSatisfactionProgress").style.width = state.satisfaction + "%";
     document.querySelector(".scene-satisfaction").classList.toggle("is-low", state.satisfaction < 45);
-    document.querySelector(".barista-extra-one").classList.toggle("is-active", state.staff >= 2);
-    document.querySelector(".barista-extra-two").classList.toggle("is-active", state.staff >= 3);
+    syncCounterBaristas();
 
-    document.querySelectorAll("[data-scene-upgrade]").forEach(function (station) {
-      var key = station.getAttribute("data-scene-upgrade");
-      var cost = getUpgradeCost(key);
-      station.querySelector("[data-scene-level-for]").textContent = "Lv. " + (levels[key] + 1);
-      station.querySelector("[data-scene-cost-for]").textContent = "¥ " + formatMoney(cost);
-      station.querySelector("[data-scene-metric-for]").textContent = metrics[key];
-      station.classList.toggle("is-affordable", state.coins >= cost);
-      station.setAttribute("aria-label", upgradeConfig[key].name + "，当前 Lv. " + (levels[key] + 1) + "，升级需要 ¥ " + formatMoney(cost));
+    document.querySelectorAll("[data-counter-card]").forEach(function (station) {
+      var key = station.getAttribute("data-counter-card");
+      var counter = state.counters[key];
+      var config = counterConfig[key];
+      var drink = drinkConfig[counter.drink];
+      var cost = getCounterUpgradeCost(key);
+      var locked = !counter.unlocked;
+      var levelLocked = getShopLevel() < config.requiredLevel;
+      var upgradeButton = station.querySelector("[data-counter-upgrade]");
+      var drinkSelect = station.querySelector("[data-counter-drink]");
+
+      station.classList.toggle("is-locked", locked);
+      station.classList.toggle("is-producing", !locked && state.isOpen && counter.baristas > 0);
+      station.classList.toggle("is-affordable", state.coins >= cost && (!locked || !levelLocked));
+      station.querySelector("[data-counter-level]").textContent = locked
+        ? "未解锁"
+        : "Lv. " + counter.level;
+      station.querySelector("[data-counter-cost]").textContent = locked
+        ? "解锁 ¥ " + formatMoney(cost)
+        : "升级 ¥ " + formatMoney(cost);
+      station.querySelector("[data-counter-metric]").textContent = locked
+        ? levelLocked
+          ? "店铺 Lv. " + config.requiredLevel + " 开放"
+          : "空柜台 · 开摊后自动安排咖啡师"
+        : drink.name + " · ¥ " + formatMoney(getCounterPrice(key)) + " · 咖啡师 " + counter.baristas;
+      station.querySelector("[data-counter-cash]").textContent = "柜台待收 ¥ " + formatMoney(counter.pendingCash);
+
+      drinkSelect.value = counter.drink;
+      drinkSelect.disabled = locked;
+      Array.from(drinkSelect.options).forEach(function (option) {
+        option.disabled = !isDrinkUnlocked(option.value);
+      });
+      if (!isDrinkUnlocked(counter.drink)) {
+        counter.drink = getAvailableDrinkKeys()[0] || "americano";
+        drinkSelect.value = counter.drink;
+      }
+
+      upgradeButton.textContent = locked
+        ? levelLocked
+          ? "需 Lv. " + config.requiredLevel
+          : "解锁 ¥ " + formatMoney(cost)
+        : "升级 ¥ " + formatMoney(cost);
+      upgradeButton.disabled = levelLocked || state.coins < cost;
+      upgradeButton.setAttribute(
+        "aria-label",
+        locked
+          ? config.name + "，需要店铺 Lv. " + config.requiredLevel + " 和 ¥ " + formatMoney(cost) + " 解锁"
+          : config.name + "，当前 Lv. " + counter.level + "，升级需要 ¥ " + formatMoney(cost)
+      );
     });
+  }
+
+  function renderRecipeWall() {
+    document.querySelectorAll("[data-recipe-upgrade]").forEach(function (button) {
+      var key = button.getAttribute("data-recipe-upgrade");
+      var level = getRecipeLevel(key);
+      var cost = getRecipeUpgradeCost(key);
+      var unlocked = level >= 1;
+
+      button.classList.toggle("is-locked", !unlocked);
+      button.classList.toggle("is-affordable", state.coins >= cost);
+      button.querySelector("[data-recipe-level]").textContent = unlocked
+        ? "Lv. " + level
+        : "未解锁";
+      button.querySelector("[data-recipe-cost]").textContent = (unlocked ? "升级 ¥ " : "解锁 ¥ ") + formatMoney(cost);
+      button.disabled = state.coins < cost;
+      button.setAttribute(
+        "aria-label",
+        (unlocked ? "升级" : "解锁") + drinkConfig[key].name + "，需要 ¥ " + formatMoney(cost)
+      );
+    });
+  }
+
+  function renderManager() {
+    var route = ensureManagerRoute();
+    var manager = document.getElementById("sceneManager");
+    var segmentSeconds = getManagerSegmentSeconds();
+    var segmentCount = Math.max(1, route.length - 1);
+    var segmentIndex = Math.floor(managerRuntime.elapsed / segmentSeconds) % segmentCount;
+    var segmentProgress = (managerRuntime.elapsed % segmentSeconds) / segmentSeconds;
+    var from = route[segmentIndex];
+    var to = route[segmentIndex + 1];
+    var positions = {
+      vault: 5,
+      counter1: 29,
+      counter2: 56,
+      counter3: 83
+    };
+    var fromPosition = positions[from] || positions.vault;
+    var toPosition = positions[to] || positions.vault;
+    var position = fromPosition + (toPosition - fromPosition) * segmentProgress;
+    var routeProgress = (managerRuntime.elapsed % (segmentSeconds * segmentCount)) / (segmentSeconds * segmentCount);
+    var status;
+
+    manager.style.left = position + "%";
+    manager.classList.toggle("is-returning", to === "vault");
+    if (!state.isOpen) {
+      status = "店门关闭 · 经理在金库待命";
+    } else if (to === "vault") {
+      status = "经理返回金库 · 入账 ¥ " + formatMoney(managerRuntime.carrying);
+    } else if (from === "vault") {
+      status = "经理向 " + counterConfig[to].shortName + " 出发";
+    } else {
+      status = "经理向 " + counterConfig[to].shortName + " 收钱";
+    }
+    if (managerRuntime.carrying > 0 && to !== "vault") {
+      status += " · 推车 ¥ " + formatMoney(managerRuntime.carrying);
+    }
+
+    document.getElementById("sceneManagerStatus").textContent = status;
+    document.getElementById("sceneManagerProgress").style.width = (state.isOpen ? routeProgress * 100 : 0) + "%";
+    document.getElementById("scenePendingCash").textContent = "柜台待收 ¥ " + formatMoney(getPendingCash());
   }
 
   function renderScene(now) {
@@ -610,7 +1019,8 @@
     );
     var patienceProgress = Math.max(0, Math.min(1, patienceRemaining / patienceSeconds));
     var streakBonus = Math.min(8, state.orderStreak * 0.8);
-    var orderReward = getDrinkPrice(orderState.drink) + orderDrink.tip + streakBonus;
+    var orderTip = orderDrink.tip * getTipMultiplier();
+    var orderReward = getDrinkPrice(orderState.drink) + orderTip + streakBonus;
 
     document.querySelectorAll("[data-drink]").forEach(function (card) {
       var key = card.getAttribute("data-drink");
@@ -628,7 +1038,7 @@
         "aria-label",
         unlocked
           ? drinkConfig[key].name + "，售价 ¥ " + formatMoney(getDrinkPrice(key))
-          : drinkConfig[key].name + "，需要招牌配方 Lv. " + (drinkConfig[key].unlockAt + 1) + " 解锁"
+          : drinkConfig[key].name + "，需要先在咖啡墙解锁"
       );
       priceNode.textContent = "¥ " + formatMoney(getDrinkPrice(key));
       priceNode.hidden = !unlocked;
@@ -695,7 +1105,7 @@
         : "这位客人点的是 " + orderDrink.name + "，换一杯菜单再开始冲泡。";
     document.getElementById("recipeUnlockHint").textContent = unlockedCount === 5
       ? "五种风味都已解锁，今天想喝哪一杯？"
-      : "升级招牌配方，解锁更多风味（" + unlockedCount + " / 5）";
+      : "去场景里的咖啡墙解锁更多风味（" + unlockedCount + " / 5）";
   }
 
   function renderLocations() {
@@ -775,12 +1185,8 @@
     document.getElementById("staffCount").textContent = state.staff + " 位";
     document.getElementById("hireCost").textContent = "¥ " + formatMoney(staffCost);
     document.getElementById("hireStaffButton").disabled = state.coins < staffCost;
-    document.getElementById("collectButton").textContent = "收取零钱 · ¥ " + formatMoney(state.tipJar);
+    document.getElementById("collectButton").textContent = "收取小费 · ¥ " + formatMoney(state.tipJar);
     document.getElementById("collectButton").disabled = state.tipJar < 1;
-    document.getElementById("sceneIncomeRate").textContent = "¥ " + formatRate(economy.incomePerMinute) + " / 分钟";
-    document.getElementById("sceneTipProgress").style.width = Math.min(100, (state.tipJar / 20) * 100) + "%";
-    document.getElementById("sceneCollectButton").textContent = "收取零钱 · ¥ " + formatMoney(state.tipJar);
-    document.getElementById("sceneCollectButton").disabled = state.tipJar < 1;
 
     var status = document.getElementById("businessStatus");
     var statusLabel = document.getElementById("statusLabel");
@@ -834,6 +1240,8 @@
     renderMenu();
     renderLocations();
     renderSceneStations(economy);
+    renderRecipeWall();
+    renderManager();
 
     Object.keys(upgradeConfig).forEach(function (key) {
       var cost = getUpgradeCost(key);
@@ -861,7 +1269,7 @@
     var reward = getDrinkPrice(orderState.drink) + tip + streakBonus;
     var customer = orderState.customer;
 
-    state.coins += reward;
+    state.counters.counter1.pendingCash += reward;
     state.totalEarned += reward;
     state.todayEarned += reward;
     state.totalServed += 1;
@@ -880,9 +1288,9 @@
       "icon-bean"
     );
     showFloatingReward(reward);
-    showSceneCoin(reward, true);
+    showSceneCoin(reward, true, "counter1");
     showToast(
-      "订单完成，收入 ¥ " + formatMoney(reward) +
+      "订单完成，¥ " + formatMoney(reward) + " 已放到一号柜台，等经理收回金库" +
         (streakBonus > 0 ? "（含小费与连单加成）" : "（含小费）"),
       "☕"
     );
@@ -970,22 +1378,103 @@
       return false;
     }
     state.coins += amount;
+    state.totalCollected += amount;
+    state.todayCollected += amount;
     state.tipJar -= amount;
-    addActivity("你收取了客人留下的 ¥ " + formatMoney(amount) + " 小费。", "♡", "icon-heart");
-    showToast("零钱已入账：¥ " + formatMoney(amount), "♡");
+    addActivity("你把客人留下的 ¥ " + formatMoney(amount) + " 小费放进了金库。", "♡", "icon-heart");
+    showToast("小费已入库：¥ " + formatMoney(amount), "♡");
     saveState();
     render(Date.now());
     return true;
+  }
+
+  function purchaseRecipe(key) {
+    var drink = drinkConfig[key];
+    var currentLevel = getRecipeLevel(key);
+    var cost = getRecipeUpgradeCost(key);
+
+    if (state.coins < cost) {
+      showToast("金库还差 ¥ " + formatMoney(cost - state.coins) + "，等经理回来再升级。", "✧");
+      return false;
+    }
+
+    state.coins -= cost;
+    state.recipeLevels[key] = currentLevel + 1;
+    addActivity(
+      (currentLevel > 0 ? "咖啡墙上的 " + drink.name + " 升到 Lv. " : "解锁了咖啡墙上的 ") +
+        (currentLevel > 0 ? state.recipeLevels[key] : drink.name) + "，售价提高、制作更快。",
+      "✧",
+      "icon-bean"
+    );
+    showToast(
+      currentLevel > 0
+        ? drink.name + "已升级到 Lv. " + state.recipeLevels[key]
+        : drink.name + "已解锁，可以挂到柜台上了",
+      "✧"
+    );
+    saveState();
+    render(Date.now());
+    return true;
+  }
+
+  function purchaseCounter(key) {
+    var counter = state.counters[key];
+    var config = counterConfig[key];
+    var cost = getCounterUpgradeCost(key);
+
+    if (!counter || !config) {
+      return false;
+    }
+    if (!counter.unlocked && getShopLevel() < config.requiredLevel) {
+      showToast("店铺达到 Lv. " + config.requiredLevel + " 才能开放 " + config.shortName, "▣");
+      return false;
+    }
+    if (state.coins < cost) {
+      showToast("金库还差 ¥ " + formatMoney(cost - state.coins) + "，经理正在收钱。", "▣");
+      return false;
+    }
+
+    state.coins -= cost;
+    if (!counter.unlocked) {
+      counter.unlocked = true;
+      counter.level = 1;
+      addActivity(config.name + "已解锁，新的咖啡师会被安排到这里。", "▣", "icon-bean");
+      showToast(config.name + "已开摊，经理会把这里赚的钱收回金库", "▣");
+    } else {
+      counter.level += 1;
+      addActivity(config.name + "升级完成，当前咖啡售价提高了。", "✦", "icon-bean");
+      showToast(config.name + "已升级到 Lv. " + counter.level + "，当前咖啡售价提高", "✦");
+    }
+    saveState();
+    render(Date.now());
+    return true;
+  }
+
+  function changeCounterDrink(key, drinkKey) {
+    var counter = state.counters[key];
+    if (!counter || !counter.unlocked || !drinkConfig[drinkKey]) {
+      return;
+    }
+    if (!isDrinkUnlocked(drinkKey)) {
+      showToast("先在咖啡墙解锁 " + drinkConfig[drinkKey].name + "。", "✧");
+      render(Date.now());
+      return;
+    }
+    if (counter.drink === drinkKey) {
+      return;
+    }
+    counter.drink = drinkKey;
+    addActivity(counterConfig[key].name + "换上了 " + drinkConfig[drinkKey].name + "。", "☕", "icon-bean");
+    showToast(counterConfig[key].name + "现在制作 " + drinkConfig[drinkKey].name, "☕");
+    saveState();
+    render(Date.now());
   }
 
   document.querySelectorAll("[data-drink]").forEach(function (button) {
     button.addEventListener("click", function () {
       var key = button.getAttribute("data-drink");
       if (!isDrinkUnlocked(key)) {
-        showToast(
-          "升级招牌配方到 Lv. " + (drinkConfig[key].unlockAt + 1) + " 才能解锁 " + drinkConfig[key].name,
-          "✧"
-        );
+        showToast("先在场景咖啡墙解锁 " + drinkConfig[key].name + "。", "✧");
         return;
       }
       if (state.selectedDrink === key) {
@@ -1048,9 +1537,21 @@
     render(Date.now());
   });
 
-  document.querySelectorAll("[data-scene-upgrade]").forEach(function (button) {
+  document.querySelectorAll("[data-counter-upgrade]").forEach(function (button) {
     button.addEventListener("click", function () {
-      purchaseUpgrade(button.getAttribute("data-scene-upgrade"));
+      purchaseCounter(button.getAttribute("data-counter-upgrade"));
+    });
+  });
+
+  document.querySelectorAll("[data-recipe-upgrade]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      purchaseRecipe(button.getAttribute("data-recipe-upgrade"));
+    });
+  });
+
+  document.querySelectorAll("[data-counter-drink]").forEach(function (select) {
+    select.addEventListener("change", function () {
+      changeCounterDrink(select.getAttribute("data-counter-drink"), select.value);
     });
   });
 
@@ -1063,8 +1564,8 @@
       } else if (action === "boost") {
         activateBoost();
       } else if (action === "upgrade") {
-        document.querySelector(".upgrade-panel").scrollIntoView({ behavior: "smooth", block: "center" });
-        showToast("选一台设施，让店里跑得更快。", "↗");
+        document.querySelector(".scene-recipe-wall").scrollIntoView({ behavior: "smooth", block: "center" });
+        showToast("咖啡墙和柜台升级都在店内实况里。", "↗");
       }
     });
   });
@@ -1078,7 +1579,6 @@
   document.getElementById("boostButton").addEventListener("click", activateBoost);
 
   document.getElementById("collectButton").addEventListener("click", collectTips);
-  document.getElementById("sceneCollectButton").addEventListener("click", collectTips);
 
   document.getElementById("hireStaffButton").addEventListener("click", function () {
     var cost = getStaffCost();
@@ -1152,7 +1652,7 @@
     }
     document.getElementById("offlineAmount").textContent = "¥ " + formatMoney(offlineEarnings);
     document.getElementById("offlineNotice").hidden = false;
-    showToast("欢迎回来，离线收益已入账。", "☼");
+    showToast("欢迎回来，离线产出已暂存在柜台，经理会沿路线回收。", "☼");
   }
 
   function gameLoop() {
@@ -1164,9 +1664,17 @@
     updateOrderBrew(now);
     if (state.isOpen && seconds > 0) {
       applyProduction(seconds, economy.multiplier);
+      updateManager(seconds);
     }
     if (state.isOpen && now - lastCoinPopAt > 3200) {
-      showSceneCoin(economy.incomePerSecond * 3, false);
+      var producingStat = economy.counterStats.find(function (stat) {
+        return stat.incomePerSecond > 0;
+      });
+      showSceneCoin(
+        producingStat ? producingStat.incomePerSecond * 3 : economy.incomePerSecond * 3,
+        false,
+        producingStat ? producingStat.key : undefined
+      );
       lastCoinPopAt = now;
     }
     lastTickAt = now;
@@ -1194,7 +1702,7 @@
     if (gap > 15 && state.isOpen) {
       var resumedEarnings = applyProduction(gap * 0.86, 1);
       if (resumedEarnings > 1) {
-        showToast("你离开期间，店里赚了 ¥ " + formatMoney(resumedEarnings), "☼");
+        showToast("你离开期间，柜台产出了 ¥ " + formatMoney(resumedEarnings) + "，等待经理回收。", "☼");
       }
     }
     lastTickAt = now;
