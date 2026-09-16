@@ -31,6 +31,36 @@
     }
   };
 
+  var drinkConfig = {
+    americano: {
+      name: "美式",
+      shortName: "美式",
+      mood: "今天想喝一杯清爽的美式",
+      basePrice: 8,
+      tip: 1.2,
+      brewSeconds: 2.5,
+      unlockAt: 0
+    },
+    latte: {
+      name: "蜂蜜拿铁",
+      shortName: "拿铁",
+      mood: "请给我一杯绵密的蜂蜜拿铁",
+      basePrice: 12,
+      tip: 2.1,
+      brewSeconds: 3.4,
+      unlockAt: 1
+    },
+    mocha: {
+      name: "燕麦摩卡",
+      shortName: "摩卡",
+      mood: "今天想奖励自己一杯燕麦摩卡",
+      basePrice: 18,
+      tip: 3.5,
+      brewSeconds: 4.2,
+      unlockAt: 2
+    }
+  };
+
   function seedActivities() {
     var now = Date.now();
     return [
@@ -48,6 +78,8 @@
       totalServed: 18,
       todayServed: 18,
       tipJar: 8,
+      selectedDrink: "americano",
+      manualOrdersServed: 0,
       staff: 1,
       isOpen: true,
       boostUntil: 0,
@@ -91,8 +123,65 @@
   state.totalServed = Number(state.totalServed) || 0;
   state.todayServed = Number(state.todayServed) || 0;
   state.tipJar = Number(state.tipJar) || 0;
+  state.manualOrdersServed = Math.max(0, Number(state.manualOrdersServed) || 0);
+  state.selectedDrink = drinkConfig[state.selectedDrink] ? state.selectedDrink : "americano";
   state.staff = Math.max(1, Number(state.staff) || 1);
   state.lastSeen = Number(state.lastSeen) || Date.now();
+
+  var orderPeople = [
+    { name: "苏女士", avatar: "苏" },
+    { name: "林先生", avatar: "林" },
+    { name: "陈同学", avatar: "陈" },
+    { name: "乔小姐", avatar: "乔" }
+  ];
+  var orderCursor = 0;
+  var orderState = {
+    customer: "苏女士",
+    avatar: "苏",
+    drink: "americano",
+    mood: drinkConfig.americano.mood,
+    isBrewing: false,
+    progress: 0,
+    startedAt: 0
+  };
+
+  function isDrinkUnlocked(key) {
+    return (Number(state.upgrades.recipe) || 0) >= drinkConfig[key].unlockAt;
+  }
+
+  function getAvailableDrinkKeys() {
+    return Object.keys(drinkConfig).filter(function (key) {
+      return isDrinkUnlocked(key);
+    });
+  }
+
+  function getDrinkPrice(key) {
+    var recipeLevel = Number(state.upgrades.recipe) || 0;
+    return drinkConfig[key].basePrice + recipeLevel * 0.75;
+  }
+
+  function getDrinkBrewSeconds(key) {
+    var machineLevel = Number(state.upgrades.machine) || 0;
+    return Math.max(1.2, drinkConfig[key].brewSeconds - machineLevel * 0.16);
+  }
+
+  function createOrder() {
+    var available = getAvailableDrinkKeys();
+    var drinkKey = available[orderCursor % available.length] || "americano";
+    var person = orderPeople[orderCursor % orderPeople.length];
+    orderCursor += 1;
+    orderState = {
+      customer: person.name,
+      avatar: person.avatar,
+      drink: drinkKey,
+      mood: drinkConfig[drinkKey].mood,
+      isBrewing: false,
+      progress: 0,
+      startedAt: 0
+    };
+  }
+
+  createOrder();
 
   function getEconomy(multiplierOverride) {
     var machineLevel = Number(state.upgrades.machine) || 0;
@@ -315,6 +404,87 @@
     });
   }
 
+  function renderMenu() {
+    var recipeLevel = Number(state.upgrades.recipe) || 0;
+    var unlockedCount = 0;
+    var orderDrink = drinkConfig[orderState.drink];
+    var selectedDrink = drinkConfig[state.selectedDrink];
+    var matchingDrink = state.selectedDrink === orderState.drink;
+    var brewSeconds = getDrinkBrewSeconds(orderState.drink);
+    var remainingSeconds = Math.max(0, brewSeconds * (1 - orderState.progress));
+
+    document.querySelectorAll("[data-drink]").forEach(function (card) {
+      var key = card.getAttribute("data-drink");
+      var unlocked = isDrinkUnlocked(key);
+      var priceNode = card.querySelector("[data-price-for]");
+      var unitNode = card.querySelector(".menu-price small");
+      var lockNode = card.querySelector(".menu-locked-label");
+
+      if (unlocked) {
+        unlockedCount += 1;
+      }
+      card.classList.toggle("is-selected", unlocked && state.selectedDrink === key);
+      card.classList.toggle("is-locked", !unlocked);
+      card.setAttribute(
+        "aria-label",
+        unlocked
+          ? drinkConfig[key].name + "，售价 ¥ " + formatMoney(getDrinkPrice(key))
+          : drinkConfig[key].name + "，需要招牌配方 Lv. " + (drinkConfig[key].unlockAt + 1) + " 解锁"
+      );
+      priceNode.textContent = "¥ " + formatMoney(getDrinkPrice(key));
+      priceNode.hidden = !unlocked;
+      unitNode.hidden = !unlocked;
+      lockNode.hidden = unlocked;
+    });
+
+    document.getElementById("manualOrderCount").textContent =
+      "已服务 " + formatMoney(state.manualOrdersServed) + " 杯手作订单";
+    document.getElementById("orderAvatar").textContent = orderState.avatar;
+    document.getElementById("orderCustomer").textContent = orderState.customer;
+    document.getElementById("orderMood").textContent = orderState.mood;
+    document.getElementById("orderDrink").textContent = orderDrink.name;
+    document.getElementById("orderPrice").textContent =
+      "¥ " + formatMoney(getDrinkPrice(orderState.drink) + orderDrink.tip);
+    document.getElementById("orderTimerLabel").textContent = orderState.isBrewing
+      ? "剩余 " + remainingSeconds.toFixed(1) + " 秒"
+      : "约 " + brewSeconds.toFixed(1) + " 秒";
+    document.getElementById("brewProgress").style.width = (orderState.progress * 100) + "%";
+    document.getElementById("brewProgressValue").textContent = Math.round(orderState.progress * 100) + "%";
+    document.getElementById("brewProgressLabel").textContent = orderState.isBrewing
+      ? "正在冲泡 " + orderDrink.name
+      : "等待你的咖啡";
+
+    var ticket = document.getElementById("orderTicketCard");
+    var serveButton = document.getElementById("serveOrderButton");
+    var serveLabel = document.getElementById("serveOrderLabel");
+    ticket.classList.toggle("is-brewing", orderState.isBrewing);
+    serveButton.disabled = !state.isOpen || orderState.isBrewing;
+
+    if (!state.isOpen) {
+      serveLabel.textContent = "重新开门后继续";
+    } else if (orderState.isBrewing) {
+      serveLabel.textContent = "咖啡正在变香";
+    } else if (!matchingDrink) {
+      serveLabel.textContent = "先选择 " + orderDrink.shortName;
+    } else {
+      serveLabel.textContent = "开始冲泡 · ¥ " + formatMoney(getDrinkPrice(orderState.drink) + orderDrink.tip);
+    }
+
+    document.getElementById("orderStatus").textContent = orderState.isBrewing
+      ? "正在为 " + orderState.customer + " 冲泡"
+      : matchingDrink
+        ? orderState.customer + " 正在等你的 " + orderDrink.shortName
+        : "选中 " + orderDrink.shortName + " 才能接单";
+    document.getElementById("menuHint").textContent = !state.isOpen
+      ? "店门暂时关闭，重新营业后可以继续手作订单。"
+      : matchingDrink
+        ? "匹配顾客点单，手作出杯会额外获得小费。"
+        : "这位客人点的是 " + orderDrink.name + "，换一杯菜单再开始冲泡。";
+    document.getElementById("recipeUnlockHint").textContent = unlockedCount === 3
+      ? "三种风味都已解锁，今天想喝哪一杯？"
+      : "升级招牌配方，解锁更多风味（" + unlockedCount + " / 3）";
+  }
+
   function render(now) {
     var economy = getEconomy();
     var level = getShopLevel();
@@ -386,6 +556,7 @@
     renderQueue(economy);
     renderActivities();
     renderScene(now);
+    renderMenu();
 
     Object.keys(upgradeConfig).forEach(function (key) {
       var cost = getUpgradeCost(key);
@@ -404,6 +575,75 @@
   var lastUiAt = 0;
   var lastSaveAt = Date.now();
   var lastSceneCycle = -1;
+
+  function completeManualOrder() {
+    var drink = drinkConfig[orderState.drink];
+    var reward = getDrinkPrice(orderState.drink) + drink.tip;
+    var customer = orderState.customer;
+
+    state.coins += reward;
+    state.totalEarned += reward;
+    state.todayEarned += reward;
+    state.totalServed += 1;
+    state.todayServed += 1;
+    state.tipJar += drink.tip;
+    state.manualOrdersServed += 1;
+    orderState.isBrewing = false;
+    orderState.progress = 1;
+    addActivity(customer + "满意地带走了你的 " + drink.name + "。", "☕", "icon-bean");
+    showToast("订单完成，收入 ¥ " + formatMoney(reward) + "（含小费）", "☕");
+    checkMilestones();
+    createOrder();
+    saveState();
+    render(Date.now());
+  }
+
+  function updateOrderBrew(now) {
+    if (!orderState.isBrewing || !state.isOpen) {
+      return;
+    }
+    var duration = getDrinkBrewSeconds(orderState.drink) * 1000;
+    orderState.progress = Math.min(1, (now - orderState.startedAt) / duration);
+    if (orderState.progress >= 1) {
+      completeManualOrder();
+    }
+  }
+
+  document.querySelectorAll("[data-drink]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var key = button.getAttribute("data-drink");
+      if (!isDrinkUnlocked(key)) {
+        showToast(
+          "升级招牌配方到 Lv. " + (drinkConfig[key].unlockAt + 1) + " 才能解锁 " + drinkConfig[key].name,
+          "✧"
+        );
+        return;
+      }
+      if (state.selectedDrink === key) {
+        return;
+      }
+      state.selectedDrink = key;
+      addActivity("你把今日手作咖啡换成了 " + drinkConfig[key].name + "。", "✦", "icon-bean");
+      saveState();
+      render(Date.now());
+    });
+  });
+
+  document.getElementById("serveOrderButton").addEventListener("click", function () {
+    if (!state.isOpen || orderState.isBrewing) {
+      return;
+    }
+    if (state.selectedDrink !== orderState.drink) {
+      showToast("先选择客人点的 " + drinkConfig[orderState.drink].name + "。", "☕");
+      return;
+    }
+    orderState.isBrewing = true;
+    orderState.progress = 0;
+    orderState.startedAt = Date.now();
+    addActivity("开始为 " + orderState.customer + " 冲泡 " + drinkConfig[orderState.drink].name + "。", "☕", "icon-bean");
+    showToast("冲泡开始，记得听一听咖啡机的声音。", "☕");
+    render(Date.now());
+  });
 
   document.querySelectorAll("[data-upgrade]").forEach(function (button) {
     button.addEventListener("click", function () {
@@ -524,6 +764,7 @@
     var seconds = Math.max(0, Math.min(3, (now - lastTickAt) / 1000));
     var economy = getEconomy();
 
+    updateOrderBrew(now);
     if (state.isOpen && seconds > 0) {
       applyProduction(seconds, economy.multiplier);
     }

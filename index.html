@@ -227,6 +227,99 @@
             </article>
           </section>
 
+          <section class="menu-block">
+            <div class="section-header">
+              <div>
+                <div class="section-kicker">HANDCRAFTED ORDERS</div>
+                <h2>今日菜单</h2>
+              </div>
+              <div class="order-note"><span class="order-note-dot"></span><span id="orderStatus">有一位客人在等你</span></div>
+            </div>
+
+            <article class="menu-board panel">
+              <div class="menu-board-topline">
+                <span>选一杯你想亲手冲的咖啡</span>
+                <span id="manualOrderCount">已服务 0 杯手作订单</span>
+              </div>
+
+              <div class="menu-layout">
+                <div class="menu-grid" id="menuGrid">
+                  <button class="menu-item is-selected" type="button" data-drink="americano" data-unlock="0">
+                    <span class="menu-icon menu-icon-americano">◌</span>
+                    <span class="menu-item-copy">
+                      <strong>美式</strong>
+                      <small>焦糖 · 清爽</small>
+                      <span class="menu-tag">常客最爱</span>
+                    </span>
+                    <span class="menu-price">
+                      <strong data-price-for="americano">¥ 8</strong>
+                      <small>/ 杯</small>
+                      <span class="menu-locked-label" hidden>已锁定</span>
+                    </span>
+                  </button>
+                  <button class="menu-item is-locked" type="button" data-drink="latte" data-unlock="1">
+                    <span class="menu-icon menu-icon-latte">◐</span>
+                    <span class="menu-item-copy">
+                      <strong>蜂蜜拿铁</strong>
+                      <small>绵密 · 微甜</small>
+                      <span class="menu-tag">回头客喜欢</span>
+                    </span>
+                    <span class="menu-price">
+                      <strong data-price-for="latte" hidden>¥ 12</strong>
+                      <small hidden>/ 杯</small>
+                      <span class="menu-locked-label">配方 Lv. 2 解锁</span>
+                    </span>
+                  </button>
+                  <button class="menu-item is-locked" type="button" data-drink="mocha" data-unlock="2">
+                    <span class="menu-icon menu-icon-mocha">●</span>
+                    <span class="menu-item-copy">
+                      <strong>燕麦摩卡</strong>
+                      <small>可可 · 浓郁</small>
+                      <span class="menu-tag">今日限定</span>
+                    </span>
+                    <span class="menu-price">
+                      <strong data-price-for="mocha" hidden>¥ 18</strong>
+                      <small hidden>/ 杯</small>
+                      <span class="menu-locked-label">配方 Lv. 3 解锁</span>
+                    </span>
+                  </button>
+                </div>
+
+                <div class="order-ticket-card" id="orderTicketCard">
+                  <div class="ticket-header">
+                    <span>下一张订单</span>
+                    <span id="orderTimerLabel">约 2.5 秒</span>
+                  </div>
+                  <div class="order-customer">
+                    <div class="order-avatar" id="orderAvatar">苏</div>
+                    <div>
+                      <strong id="orderCustomer">苏女士</strong>
+                      <span id="orderMood">今天想喝一杯清爽的美式</span>
+                    </div>
+                  </div>
+                  <div class="order-request">
+                    <span>点单</span>
+                    <strong id="orderDrink">美式</strong>
+                    <span id="orderPrice">¥ 8</span>
+                  </div>
+                  <div class="brew-progress">
+                    <div class="brew-progress-label"><span id="brewProgressLabel">等待你的咖啡</span><span id="brewProgressValue">0%</span></div>
+                    <div class="progress-track"><span class="progress-fill" id="brewProgress"></span></div>
+                  </div>
+                  <button class="serve-button" id="serveOrderButton" type="button">
+                    <span id="serveOrderLabel">开始冲泡</span>
+                    <span class="serve-arrow">→</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="menu-board-footer">
+                <span id="menuHint">匹配顾客点单，手作出杯会额外获得小费。</span>
+                <span class="recipe-unlock-hint" id="recipeUnlockHint">升级招牌配方，解锁更多风味。</span>
+              </div>
+            </article>
+          </section>
+
           <section class="insight-grid">
             <article class="goal-card panel">
               <div class="card-heading">
