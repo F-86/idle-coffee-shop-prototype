@@ -3011,7 +3011,6 @@ button:focus-visible {
   width: 42px;
   height: 46px;
   transform: translateX(-50%);
-  transition: left 120ms linear;
 }
 
 .manager-person {
@@ -4840,6 +4839,21 @@ body.modal-is-open .modal-window:not([hidden]) {
   pointer-events: none;
 }
 
+.scene-barista::after,
+.scene-manager::after {
+  position: absolute;
+  right: 10%;
+  bottom: -1px;
+  left: 10%;
+  height: 10px;
+  content: "";
+  background: rgba(44, 43, 42, 0.28);
+  border-radius: 50%;
+  filter: blur(3px);
+  transform: scaleX(1.08);
+  pointer-events: none;
+}
+
 .scene-barista > .scene-character-sprite {
   inset: 0;
 }
@@ -4861,6 +4875,8 @@ body.modal-is-open .modal-window:not([hidden]) {
   height: 92px;
   bottom: -2px;
   filter: drop-shadow(0 4px 0 rgba(54, 42, 43, 0.16));
+  transition: none;
+  will-change: left;
 }
 
 .scene-manager > .manager-character-sprite {

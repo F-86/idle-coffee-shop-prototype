@@ -960,9 +960,8 @@
     });
   }
 
-  function renderManager() {
+  function getManagerMotion() {
     var route = ensureManagerRoute();
-    var manager = document.getElementById("sceneManager");
     var segmentSeconds = getManagerSegmentSeconds();
     var segmentCount = Math.max(1, route.length - 1);
     var segmentIndex = Math.floor(managerRuntime.elapsed / segmentSeconds) % segmentCount;
@@ -979,12 +978,37 @@
     var toPosition = positions[to] || positions.vault;
     var position = fromPosition + (toPosition - fromPosition) * segmentProgress;
     var routeProgress = (managerRuntime.elapsed % (segmentSeconds * segmentCount)) / (segmentSeconds * segmentCount);
+
+    return {
+      route: route,
+      from: from,
+      to: to,
+      position: position,
+      routeProgress: routeProgress,
+      toPosition: toPosition,
+      fromPosition: fromPosition
+    };
+  }
+
+  function applyManagerMotion(motion) {
+    var manager = document.getElementById("sceneManager");
+    manager.style.left = motion.position + "%";
+    manager.classList.toggle("is-returning", motion.to === "vault");
+    manager.classList.toggle("is-moving-right", motion.toPosition > motion.fromPosition);
+    manager.classList.toggle("is-moving-left", motion.toPosition < motion.fromPosition);
+  }
+
+  function renderManagerMotion() {
+    applyManagerMotion(getManagerMotion());
+  }
+
+  function renderManager() {
+    var motion = getManagerMotion();
+    var from = motion.from;
+    var to = motion.to;
     var status;
 
-    manager.style.left = position + "%";
-    manager.classList.toggle("is-returning", to === "vault");
-    manager.classList.toggle("is-moving-right", toPosition > fromPosition);
-    manager.classList.toggle("is-moving-left", toPosition < fromPosition);
+    applyManagerMotion(motion);
     if (!state.isOpen) {
       status = "店门关闭 · 经理在金库待命";
     } else if (to === "vault") {
@@ -999,7 +1023,7 @@
     }
 
     document.getElementById("sceneManagerStatus").textContent = status;
-    document.getElementById("sceneManagerProgress").style.width = (state.isOpen ? routeProgress * 100 : 0) + "%";
+    document.getElementById("sceneManagerProgress").style.width = (state.isOpen ? motion.routeProgress * 100 : 0) + "%";
     document.getElementById("scenePendingCash").textContent = "柜台待收 ¥ " + formatMoney(getPendingCash());
   }
 
@@ -1754,6 +1778,7 @@
       applyProduction(seconds, economy.multiplier);
       updateManager(seconds);
     }
+    renderManagerMotion();
     if (state.isOpen && now - lastCoinPopAt > 3200) {
       var producingStat = economy.counterStats.find(function (stat) {
         return stat.incomePerSecond > 0;
