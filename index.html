@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f6f1e9" />
+    <title>Mellow Bean · 放置咖啡店原型</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true">MB</div>
+          <div class="brand-copy">
+            <span class="eyebrow">IDLE COFFEE CLUB</span>
+            <strong>Mellow Bean</strong>
+          </div>
+        </div>
+
+        <div class="topbar-meta">
+          <button class="business-status" id="businessStatus" type="button" title="点击切换营业状态">
+            <span class="status-dot"></span>
+            <span id="statusLabel">营业中</span>
+          </button>
+          <button class="icon-button" id="resetButton" type="button" title="重置本地进度" aria-label="重置本地进度">↺</button>
+        </div>
+      </header>
+
+      <main class="dashboard">
+        <section class="main-column">
+          <section class="welcome-panel panel">
+            <div class="welcome-copy">
+              <div class="section-kicker">WEDNESDAY · 08:40 AM</div>
+              <h1>让每一杯咖啡，<br /><em>慢慢变成好生意。</em></h1>
+              <p>你的第一家店已经开门。照顾好客人的早晨，咖啡馆会自己长大。</p>
+
+              <div class="welcome-actions">
+                <button class="primary-button" id="boostButton" type="button">
+                  <span class="button-icon">✦</span>
+                  <span>
+                    <strong id="boostLabel">晨间加速</strong>
+                    <small id="boostHint">营业效率 ×2 · 15 秒</small>
+                  </span>
+                </button>
+                <button class="secondary-button" id="collectButton" type="button">
+                  <span>收取零钱</span>
+                  <span class="arrow">↗</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="welcome-illustration" aria-hidden="true">
+              <div class="illustration-glow"></div>
+              <div class="illustration-steam steam-one"></div>
+              <div class="illustration-steam steam-two"></div>
+              <div class="illustration-cup">
+                <span class="cup-coffee"></span>
+                <span class="cup-handle"></span>
+              </div>
+              <div class="illustration-saucer"></div>
+              <div class="illustration-leaf leaf-one"></div>
+              <div class="illustration-leaf leaf-two"></div>
+              <div class="illustration-leaf leaf-three"></div>
+            </div>
+
+            <div class="welcome-metrics">
+              <div class="welcome-metric">
+                <span>今日营业额</span>
+                <strong id="todayRevenue">¥ 0</strong>
+              </div>
+              <div class="metric-divider"></div>
+              <div class="welcome-metric">
+                <span>今日服务客人</span>
+                <strong id="todayServed">0 <small>位</small></strong>
+              </div>
+              <div class="metric-divider"></div>
+              <div class="welcome-metric">
+                <span>当前倍率</span>
+                <strong id="currentMultiplier">1.0×</strong>
+              </div>
+            </div>
+
+            <div class="offline-notice" id="offlineNotice" hidden>
+              <span class="offline-spark">✦</span>
+              <span><strong id="offlineAmount">¥ 0</strong> 在你离开时悄悄赚到了</span>
+              <button id="offlineDismiss" type="button" aria-label="关闭离线收益提示">×</button>
+            </div>
+          </section>
+
+          <section class="section-block">
+            <div class="section-header">
+              <div>
+                <div class="section-kicker">THE SHOP FLOOR</div>
+                <h2>店内实况</h2>
+              </div>
+              <div class="live-note"><span class="live-dot"></span>LIVE · 每秒更新</div>
+            </div>
+
+            <article class="shopfloor panel">
+              <div class="shopfloor-topline">
+                <div>
+                  <strong>榛果街 17 号</strong>
+                  <span> · </span>
+                  <span id="shopMood">今天的空气很适合咖啡</span>
+                </div>
+                <div class="shop-level">
+                  <span>店铺等级</span>
+                  <strong id="shopLevel">Lv. 1</strong>
+                </div>
+              </div>
+
+              <div class="shop-scene" id="shopScene" role="img" aria-label="Mellow Bean 咖啡店营业场景">
+                <div class="scene-sky"></div>
+                <div class="scene-window-glow"></div>
+                <div class="scene-building building-back"></div>
+                <div class="scene-building building-front"></div>
+                <div class="scene-cloud cloud-one"></div>
+                <div class="scene-cloud cloud-two"></div>
+                <div class="scene-window">
+                  <div class="window-cross vertical"></div>
+                  <div class="window-cross horizontal"></div>
+                  <div class="window-view"></div>
+                </div>
+
+                <div class="scene-wall">
+                  <div class="wall-shelf">
+                    <span class="shelf-jar jar-one"></span>
+                    <span class="shelf-jar jar-two"></span>
+                    <span class="shelf-jar jar-three"></span>
+                    <span class="shelf-line"></span>
+                  </div>
+                  <div class="wall-menu">
+                    <span>today's pour</span>
+                    <strong>slow mornings</strong>
+                  </div>
+                  <div class="wall-plant">
+                    <span class="plant-stem stem-one"></span>
+                    <span class="plant-stem stem-two"></span>
+                    <span class="plant-leaf wall-leaf-one"></span>
+                    <span class="plant-leaf wall-leaf-two"></span>
+                    <span class="plant-pot"></span>
+                  </div>
+                </div>
+
+                <div class="scene-counter">
+                  <div class="counter-back"></div>
+                  <div class="coffee-machine">
+                    <div class="machine-top"></div>
+                    <div class="machine-face">
+                      <span class="machine-screen"></span>
+                      <span class="machine-button button-one"></span>
+                      <span class="machine-button button-two"></span>
+                      <span class="machine-nozzle"></span>
+                    </div>
+                    <div class="machine-cup"></div>
+                  </div>
+                  <div class="pastry-tray">
+                    <span class="pastry pastry-one"></span>
+                    <span class="pastry pastry-two"></span>
+                    <span class="pastry pastry-three"></span>
+                  </div>
+                  <div class="counter-front"><span>MELLOW BEAN</span></div>
+                </div>
+
+                <div class="scene-table table-one">
+                  <div class="table-top"></div>
+                  <div class="table-leg"></div>
+                  <span class="table-cup"></span>
+                </div>
+                <div class="scene-table table-two">
+                  <div class="table-top"></div>
+                  <div class="table-leg"></div>
+                  <span class="table-cup"></span>
+                </div>
+                <div class="scene-stool stool-one"></div>
+                <div class="scene-stool stool-two"></div>
+
+                <div class="customer customer-one">
+                  <span class="customer-shadow"></span>
+                  <span class="customer-body body-coral"></span>
+                  <span class="customer-head head-peach"></span>
+                  <span class="customer-hair hair-dark"></span>
+                </div>
+                <div class="customer customer-two">
+                  <span class="customer-shadow"></span>
+                  <span class="customer-body body-blue"></span>
+                  <span class="customer-head head-gold"></span>
+                  <span class="customer-hair hair-brown"></span>
+                </div>
+                <div class="customer customer-three">
+                  <span class="customer-shadow"></span>
+                  <span class="customer-body body-mint"></span>
+                  <span class="customer-head head-tan"></span>
+                  <span class="customer-hair hair-dark"></span>
+                </div>
+
+                <div class="barista">
+                  <span class="barista-shadow"></span>
+                  <span class="barista-body"></span>
+                  <span class="barista-head"></span>
+                  <span class="barista-hair"></span>
+                  <span class="barista-apron"></span>
+                </div>
+
+                <div class="scene-floor">
+                  <span class="floor-line floor-line-one"></span>
+                  <span class="floor-line floor-line-two"></span>
+                  <span class="floor-line floor-line-three"></span>
+                </div>
+                <div class="scene-caption"><span class="tiny-live-dot"></span>店里一切顺利</div>
+              </div>
+
+              <div class="shopfloor-footer">
+                <div class="flow-stat">
+                  <span class="flow-icon">☕</span>
+                  <span><strong id="flowRate">0.0</strong> 杯 / 分钟</span>
+                </div>
+                <div class="queue-stat">
+                  <span class="queue-label">排队中</span>
+                  <div class="queue-avatars" id="queueAvatars" aria-label="当前排队客人">
+                    <span>林</span><span>苏</span><span>陈</span><span class="more-avatar">+2</span>
+                  </div>
+                </div>
+                <div class="floor-tip" id="floorTip">升级设备，让香气走得更远。</div>
+              </div>
+            </article>
+          </section>
+
+          <section class="insight-grid">
+            <article class="goal-card panel">
+              <div class="card-heading">
+                <div>
+                  <div class="section-kicker">TODAY'S NOTE</div>
+                  <h3>今日小目标</h3>
+                </div>
+                <span class="goal-badge">+ ¥ 80</span>
+              </div>
+              <div class="goal-copy">
+                <strong>服务 50 位客人</strong>
+                <span id="goalProgressText">18 / 50</span>
+              </div>
+              <div class="progress-track"><span class="progress-fill" id="goalProgress"></span></div>
+              <button class="text-button" id="goalClaimButton" type="button" disabled>完成目标后领取奖励 <span>→</span></button>
+            </article>
+
+            <article class="activity-card panel">
+              <div class="card-heading">
+                <div>
+                  <div class="section-kicker">LITTLE MOMENTS</div>
+                  <h3>店内动态</h3>
+                </div>
+                <span class="activity-pulse"></span>
+              </div>
+              <ul class="activity-list" id="activityList">
+                <li><span class="activity-icon icon-bean">✦</span><span>新的一天，从一杯好咖啡开始。</span><time>刚刚</time></li>
+                <li><span class="activity-icon icon-heart">♡</span><span>苏女士说，今天的拿铁很顺滑。</span><time>2 分钟前</time></li>
+                <li><span class="activity-icon icon-sun">☼</span><span>阳光照进了靠窗的座位。</span><time>5 分钟前</time></li>
+              </ul>
+            </article>
+          </section>
+        </section>
+
+        <aside class="side-column">
+          <section class="wallet-card panel">
+            <div class="wallet-heading">
+              <span>店铺账户</span>
+              <span class="wallet-badge">● LIVE</span>
+            </div>
+            <div class="wallet-balance">
+              <small>可用余额</small>
+              <strong id="coins">¥ 120</strong>
+            </div>
+            <div class="wallet-foot">
+              <span><span class="tiny-coin"></span>每分钟自动入账</span>
+              <strong id="incomeRate">¥ 0 / 分钟</strong>
+            </div>
+          </section>
+
+          <section class="upgrade-panel panel">
+            <div class="panel-heading">
+              <div>
+                <div class="section-kicker">MAKE IT BETTER</div>
+                <h2>店铺升级</h2>
+              </div>
+              <span class="upgrade-count" id="upgradeCount">0 / 4</span>
+            </div>
+            <div class="upgrade-list" id="upgradeList">
+              <button class="upgrade-card" type="button" data-upgrade="machine">
+                <span class="upgrade-icon icon-machine">☕</span>
+                <span class="upgrade-info">
+                  <strong>磨豆机</strong>
+                  <small>提升制作速度</small>
+                  <span class="upgrade-level" data-level-for="machine">Lv. 1</span>
+                </span>
+                <span class="upgrade-buy"><span class="upgrade-cost" data-cost-for="machine">¥ 70</span><span class="buy-arrow">↗</span></span>
+              </button>
+              <button class="upgrade-card" type="button" data-upgrade="recipe">
+                <span class="upgrade-icon icon-recipe">✧</span>
+                <span class="upgrade-info">
+                  <strong>招牌配方</strong>
+                  <small>提高单杯售价</small>
+                  <span class="upgrade-level" data-level-for="recipe">Lv. 1</span>
+                </span>
+                <span class="upgrade-buy"><span class="upgrade-cost" data-cost-for="recipe">¥ 95</span><span class="buy-arrow">↗</span></span>
+              </button>
+              <button class="upgrade-card" type="button" data-upgrade="seats">
+                <span class="upgrade-icon icon-seats">⌂</span>
+                <span class="upgrade-info">
+                  <strong>窗边座位</strong>
+                  <small>增加同时接待人数</small>
+                  <span class="upgrade-level" data-level-for="seats">Lv. 1</span>
+                </span>
+                <span class="upgrade-buy"><span class="upgrade-cost" data-cost-for="seats">¥ 120</span><span class="buy-arrow">↗</span></span>
+              </button>
+              <button class="upgrade-card" type="button" data-upgrade="marketing">
+                <span class="upgrade-icon icon-marketing">♡</span>
+                <span class="upgrade-info">
+                  <strong>街角传单</strong>
+                  <small>吸引更多客人</small>
+                  <span class="upgrade-level" data-level-for="marketing">Lv. 1</span>
+                </span>
+                <span class="upgrade-buy"><span class="upgrade-cost" data-cost-for="marketing">¥ 145</span><span class="buy-arrow">↗</span></span>
+              </button>
+            </div>
+            <p class="upgrade-hint"><span>⌘</span> 小建议：优先升级磨豆机，回本更快。</p>
+          </section>
+
+          <section class="staff-panel panel">
+            <div class="panel-heading">
+              <div>
+                <div class="section-kicker">YOUR TEAM</div>
+                <h2>店里的伙伴</h2>
+              </div>
+              <span class="staff-count" id="staffCount">1 位</span>
+            </div>
+            <div class="staff-profile">
+              <div class="staff-avatar" aria-hidden="true">
+                <span class="avatar-face"></span>
+                <span class="avatar-hair"></span>
+                <span class="avatar-cup">☕</span>
+              </div>
+              <div class="staff-copy">
+                <strong>小麦 <span>· 主理人</span></strong>
+                <span>正在为你守店</span>
+              </div>
+              <span class="staff-status">在线</span>
+            </div>
+            <button class="hire-button" id="hireStaffButton" type="button">
+              <span class="hire-plus">＋</span>
+              <span><strong>招募咖啡师</strong><small id="hireCost">¥ 260</small></span>
+              <span class="hire-arrow">→</span>
+            </button>
+          </section>
+
+          <div class="side-footer">
+            <span class="bean-stamp">✦</span>
+            <span>把平凡的早晨，<br /><strong>煮成喜欢的样子。</strong></span>
+          </div>
+        </aside>
+      </main>
+    </div>
+
+    <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="true"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
