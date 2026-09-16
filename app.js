@@ -126,6 +126,7 @@
       totalServed: 18,
       todayServed: 18,
       tipJar: 8,
+      satisfaction: 72,
       selectedDrink: "americano",
       manualOrdersServed: 0,
       manualOrdersMissed: 0,
@@ -140,6 +141,7 @@
       goalClaimed: false,
       goalReachedNotified: false,
       dayKey: getDayKey(Date.now()),
+      lastShopLevel: 1,
       lastLoggedTen: 1,
       upgrades: {
         machine: 0,
@@ -177,6 +179,8 @@
   state.totalServed = Number(state.totalServed) || 0;
   state.todayServed = Number(state.todayServed) || 0;
   state.tipJar = Number(state.tipJar) || 0;
+  state.satisfaction = Math.max(0, Math.min(100, Number(state.satisfaction) || 72));
+  state.lastShopLevel = Math.max(1, Number(state.lastShopLevel) || 1);
   state.manualOrdersServed = Math.max(0, Number(state.manualOrdersServed) || 0);
   state.manualOrdersMissed = Math.max(0, Number(state.manualOrdersMissed) || 0);
   state.orderStreak = Math.max(0, Number(state.orderStreak) || 0);
@@ -194,6 +198,9 @@
   }
   if (state.unlockedLocations.indexOf(state.activeLocation) === -1) {
     state.activeLocation = "street";
+  }
+  if (!savedState || typeof savedState.lastShopLevel !== "number") {
+    state.lastShopLevel = 1 + Math.floor(state.totalServed / 50);
   }
   state.lastSeen = Number(state.lastSeen) || Date.now();
 
@@ -259,7 +266,11 @@
 
   function getOrderPatienceSeconds() {
     var seatsLevel = Number(state.upgrades.seats) || 0;
-    return 18 + Math.min(6, seatsLevel * 1.2);
+    return 30 + Math.min(8, seatsLevel * 1.5);
+  }
+
+  function getTipMultiplier() {
+    return 0.82 + state.satisfaction / 100 * 0.38;
   }
 
   function createOrder() {
@@ -324,7 +335,7 @@
     state.todayEarned += earnings;
     state.totalServed += served;
     state.todayServed += served;
-    state.tipJar += served * 0.18;
+    state.tipJar += served * 0.18 * getTipMultiplier();
     checkMilestones();
     return earnings;
   }
@@ -434,8 +445,41 @@
     }, 950);
   }
 
+  var sceneCoinCursor = 0;
+
+  function showSceneCoin(amount, isManual) {
+    var scene = document.getElementById("shopScene");
+    var coin = document.createElement("span");
+    var positions = [
+      { left: 18, top: 28 },
+      { left: 38, top: 18 },
+      { left: 56, top: 27 },
+      { left: 73, top: 20 },
+      { left: 29, top: 37 }
+    ];
+    var position = positions[sceneCoinCursor % positions.length];
+    sceneCoinCursor += 1;
+    coin.className = "scene-coin-pop" + (isManual ? " is-manual" : "");
+    coin.textContent = "+ ¥ " + formatMoney(amount);
+    coin.style.left = position.left + "%";
+    coin.style.top = position.top + "%";
+    scene.appendChild(coin);
+    window.setTimeout(function () {
+      if (coin.parentNode) {
+        coin.parentNode.removeChild(coin);
+      }
+    }, 1100);
+  }
+
   function checkMilestones() {
     var loggedTen = Math.floor(state.totalServed / 10);
+    var shopLevel = getShopLevel();
+
+    if (shopLevel > state.lastShopLevel) {
+      state.lastShopLevel = shopLevel;
+      addActivity("店铺升级到 Lv. " + shopLevel + "，新的客流正在赶来。", "✦", "icon-bean");
+      showToast("恭喜！店铺达到 Lv. " + shopLevel, "✦");
+    }
 
     if (state.todayServed >= 50 && !state.goalReachedNotified) {
       state.goalReachedNotified = true;
@@ -502,6 +546,41 @@
       container.appendChild(more);
     }
     container.setAttribute("aria-label", "当前排队 " + queueSize + " 位客人");
+  }
+
+  function renderSceneStations(economy) {
+    var machineLevel = Number(state.upgrades.machine) || 0;
+    var recipeLevel = Number(state.upgrades.recipe) || 0;
+    var seatsLevel = Number(state.upgrades.seats) || 0;
+    var metrics = {
+      machine: formatRate(economy.cupsPerMinute) + " 杯 / 分钟",
+      recipe: "单杯 ¥ " + formatMoney(economy.pricePerCup),
+      seats: "接待 " + economy.capacity + " 人"
+    };
+    var levels = {
+      machine: machineLevel,
+      recipe: recipeLevel,
+      seats: seatsLevel
+    };
+
+    document.getElementById("sceneLocationLabel").textContent = getActiveLocation().shortName;
+    document.getElementById("sceneCoins").textContent = "¥ " + formatMoney(state.coins);
+    document.getElementById("sceneLevel").textContent = getShopLevel();
+    document.getElementById("sceneSatisfaction").textContent = Math.round(state.satisfaction);
+    document.getElementById("sceneSatisfactionProgress").style.width = state.satisfaction + "%";
+    document.querySelector(".scene-satisfaction").classList.toggle("is-low", state.satisfaction < 45);
+    document.querySelector(".barista-extra-one").classList.toggle("is-active", state.staff >= 2);
+    document.querySelector(".barista-extra-two").classList.toggle("is-active", state.staff >= 3);
+
+    document.querySelectorAll("[data-scene-upgrade]").forEach(function (station) {
+      var key = station.getAttribute("data-scene-upgrade");
+      var cost = getUpgradeCost(key);
+      station.querySelector("[data-scene-level-for]").textContent = "Lv. " + (levels[key] + 1);
+      station.querySelector("[data-scene-cost-for]").textContent = "¥ " + formatMoney(cost);
+      station.querySelector("[data-scene-metric-for]").textContent = metrics[key];
+      station.classList.toggle("is-affordable", state.coins >= cost);
+      station.setAttribute("aria-label", upgradeConfig[key].name + "，当前 Lv. " + (levels[key] + 1) + "，升级需要 ¥ " + formatMoney(cost));
+    });
   }
 
   function renderScene(now) {
@@ -698,6 +777,10 @@
     document.getElementById("hireStaffButton").disabled = state.coins < staffCost;
     document.getElementById("collectButton").textContent = "收取零钱 · ¥ " + formatMoney(state.tipJar);
     document.getElementById("collectButton").disabled = state.tipJar < 1;
+    document.getElementById("sceneIncomeRate").textContent = "¥ " + formatRate(economy.incomePerMinute) + " / 分钟";
+    document.getElementById("sceneTipProgress").style.width = Math.min(100, (state.tipJar / 20) * 100) + "%";
+    document.getElementById("sceneCollectButton").textContent = "收取零钱 · ¥ " + formatMoney(state.tipJar);
+    document.getElementById("sceneCollectButton").disabled = state.tipJar < 1;
 
     var status = document.getElementById("businessStatus");
     var statusLabel = document.getElementById("statusLabel");
@@ -750,6 +833,7 @@
     renderScene(now);
     renderMenu();
     renderLocations();
+    renderSceneStations(economy);
 
     Object.keys(upgradeConfig).forEach(function (key) {
       var cost = getUpgradeCost(key);
@@ -768,11 +852,13 @@
   var lastUiAt = 0;
   var lastSaveAt = Date.now();
   var lastSceneCycle = -1;
+  var lastCoinPopAt = 0;
 
   function completeManualOrder() {
     var drink = drinkConfig[orderState.drink];
     var streakBonus = Math.min(8, state.orderStreak * 0.8);
-    var reward = getDrinkPrice(orderState.drink) + drink.tip + streakBonus;
+    var tip = drink.tip * getTipMultiplier();
+    var reward = getDrinkPrice(orderState.drink) + tip + streakBonus;
     var customer = orderState.customer;
 
     state.coins += reward;
@@ -780,7 +866,8 @@
     state.todayEarned += reward;
     state.totalServed += 1;
     state.todayServed += 1;
-    state.tipJar += drink.tip;
+    state.tipJar += tip;
+    state.satisfaction = Math.min(100, state.satisfaction + 3);
     state.manualOrdersServed += 1;
     state.orderStreak += 1;
     state.bestOrderStreak = Math.max(state.bestOrderStreak, state.orderStreak);
@@ -793,6 +880,7 @@
       "icon-bean"
     );
     showFloatingReward(reward);
+    showSceneCoin(reward, true);
     showToast(
       "订单完成，收入 ¥ " + formatMoney(reward) +
         (streakBonus > 0 ? "（含小费与连单加成）" : "（含小费）"),
@@ -819,6 +907,7 @@
     var hadStreak = state.orderStreak > 0;
     state.manualOrdersMissed += 1;
     state.orderStreak = 0;
+    state.satisfaction = Math.max(0, state.satisfaction - 4);
     addActivity(
       customer + "等不到 " + drink.shortName + "，先离开了店里。" + (hadStreak ? " 连单中断。" : ""),
       "☾",
@@ -843,6 +932,50 @@
     if (orderState.progress >= 1) {
       completeManualOrder();
     }
+  }
+
+  function purchaseUpgrade(key) {
+    var config = upgradeConfig[key];
+    var cost = getUpgradeCost(key);
+
+    if (state.coins < cost) {
+      showToast("还差 ¥ " + formatMoney(cost - state.coins) + "，再营业一会儿吧。", "☕");
+      return false;
+    }
+
+    state.coins -= cost;
+    state.upgrades[key] = (Number(state.upgrades[key]) || 0) + 1;
+    addActivity(config.name + "升级完成，" + config.effect + "提高了。", "✦", "icon-bean");
+    showToast(config.name + "已升级到 Lv. " + (state.upgrades[key] + 1), "✦");
+    saveState();
+    render(Date.now());
+    return true;
+  }
+
+  function activateBoost() {
+    if (state.boostUntil > Date.now()) {
+      return false;
+    }
+    state.boostUntil = Date.now() + 15000;
+    addActivity("晨间加速启动，今天的第一缕香气更快了。", "✦", "icon-bean");
+    showToast("晨间加速已启动，效率 ×2 持续 15 秒", "✦");
+    render(Date.now());
+    return true;
+  }
+
+  function collectTips() {
+    var amount = Math.floor(state.tipJar);
+    if (amount < 1) {
+      showToast("零钱罐还在慢慢积攒中。", "♡");
+      return false;
+    }
+    state.coins += amount;
+    state.tipJar -= amount;
+    addActivity("你收取了客人留下的 ¥ " + formatMoney(amount) + " 小费。", "♡", "icon-heart");
+    showToast("零钱已入账：¥ " + formatMoney(amount), "♡");
+    saveState();
+    render(Date.now());
+    return true;
   }
 
   document.querySelectorAll("[data-drink]").forEach(function (button) {
@@ -915,49 +1048,37 @@
     render(Date.now());
   });
 
-  document.querySelectorAll("[data-upgrade]").forEach(function (button) {
+  document.querySelectorAll("[data-scene-upgrade]").forEach(function (button) {
     button.addEventListener("click", function () {
-      var key = button.getAttribute("data-upgrade");
-      var config = upgradeConfig[key];
-      var cost = getUpgradeCost(key);
-
-      if (state.coins < cost) {
-        showToast("还差 ¥ " + formatMoney(cost - state.coins) + "，再营业一会儿吧。", "☕");
-        return;
-      }
-
-      state.coins -= cost;
-      state.upgrades[key] = (Number(state.upgrades[key]) || 0) + 1;
-      addActivity(config.name + "升级完成，" + config.effect + "提高了。", "✦", "icon-bean");
-      showToast(config.name + "已升级到 Lv. " + (state.upgrades[key] + 1), "✦");
-      saveState();
-      render(Date.now());
+      purchaseUpgrade(button.getAttribute("data-scene-upgrade"));
     });
   });
 
-  document.getElementById("boostButton").addEventListener("click", function () {
-    if (state.boostUntil > Date.now()) {
-      return;
-    }
-    state.boostUntil = Date.now() + 15000;
-    addActivity("晨间加速启动，今天的第一缕香气更快了。", "✦", "icon-bean");
-    showToast("晨间加速已启动，效率 ×2 持续 15 秒", "✦");
-    render(Date.now());
+  document.querySelectorAll("[data-scene-action]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var action = button.getAttribute("data-scene-action");
+      if (action === "orders") {
+        document.querySelector(".menu-block").scrollIntoView({ behavior: "smooth", block: "center" });
+        showToast("订单台已准备好，别让客人等太久。", "☻");
+      } else if (action === "boost") {
+        activateBoost();
+      } else if (action === "upgrade") {
+        document.querySelector(".upgrade-panel").scrollIntoView({ behavior: "smooth", block: "center" });
+        showToast("选一台设施，让店里跑得更快。", "↗");
+      }
+    });
   });
 
-  document.getElementById("collectButton").addEventListener("click", function () {
-    var amount = Math.floor(state.tipJar);
-    if (amount < 1) {
-      showToast("零钱罐还在慢慢积攒中。", "♡");
-      return;
-    }
-    state.coins += amount;
-    state.tipJar -= amount;
-    addActivity("你收取了客人留下的 ¥ " + formatMoney(amount) + " 小费。", "♡", "icon-heart");
-    showToast("零钱已入账：¥ " + formatMoney(amount), "♡");
-    saveState();
-    render(Date.now());
+  document.querySelectorAll("[data-upgrade]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      purchaseUpgrade(button.getAttribute("data-upgrade"));
+    });
   });
+
+  document.getElementById("boostButton").addEventListener("click", activateBoost);
+
+  document.getElementById("collectButton").addEventListener("click", collectTips);
+  document.getElementById("sceneCollectButton").addEventListener("click", collectTips);
 
   document.getElementById("hireStaffButton").addEventListener("click", function () {
     var cost = getStaffCost();
@@ -1043,6 +1164,10 @@
     updateOrderBrew(now);
     if (state.isOpen && seconds > 0) {
       applyProduction(seconds, economy.multiplier);
+    }
+    if (state.isOpen && now - lastCoinPopAt > 3200) {
+      showSceneCoin(economy.incomePerSecond * 3, false);
+      lastCoinPopAt = now;
     }
     lastTickAt = now;
 

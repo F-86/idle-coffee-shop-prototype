@@ -110,7 +110,10 @@
                 </div>
               </div>
 
-              <div class="shop-scene" id="shopScene" role="img" aria-label="Mellow Bean 咖啡店营业场景">
+              <div class="shop-scene scene-art-mode" id="shopScene" role="region" aria-label="Mellow Bean 咖啡店营业场景，可操作设施与快捷按钮">
+                <img class="scene-art scene-art-street" src="assets/coffee-shop-scene-v1.png" alt="" aria-hidden="true" />
+                <img class="scene-art scene-art-station" src="assets/coffee-shop-scene-station.png" alt="" aria-hidden="true" />
+                <img class="scene-art scene-art-seaside" src="assets/coffee-shop-scene-seaside.png" alt="" aria-hidden="true" />
                 <div class="scene-sky"></div>
                 <div class="scene-window-glow"></div>
                 <div class="scene-building building-back"></div>
@@ -202,11 +205,67 @@
                   <span class="barista-hair"></span>
                   <span class="barista-apron"></span>
                 </div>
+                <div class="barista extra-barista barista-extra-one" aria-hidden="true">
+                  <span class="barista-shadow"></span>
+                  <span class="barista-body"></span>
+                  <span class="barista-head"></span>
+                  <span class="barista-hair"></span>
+                  <span class="barista-apron"></span>
+                </div>
+                <div class="barista extra-barista barista-extra-two" aria-hidden="true">
+                  <span class="barista-shadow"></span>
+                  <span class="barista-body"></span>
+                  <span class="barista-head"></span>
+                  <span class="barista-hair"></span>
+                  <span class="barista-apron"></span>
+                </div>
 
                 <div class="scene-floor">
                   <span class="floor-line floor-line-one"></span>
                   <span class="floor-line floor-line-two"></span>
                   <span class="floor-line floor-line-three"></span>
+                </div>
+                <div class="scene-quick-actions" aria-label="店内快捷操作">
+                  <button type="button" data-scene-action="orders"><span>☻</span><small>订单</small></button>
+                  <button type="button" data-scene-action="boost"><span>✦</span><small>加速</small></button>
+                  <button type="button" data-scene-action="upgrade"><span>↗</span><small>升级</small></button>
+                </div>
+                <div class="scene-hud">
+                  <span class="scene-hud-chip"><span class="scene-hud-icon">☕</span><strong id="sceneLocationLabel">榛果街</strong></span>
+                  <span class="scene-hud-chip"><span class="tiny-coin"></span><strong id="sceneCoins">¥ 120</strong></span>
+                  <span class="scene-hud-chip scene-level-chip"><span>LEVEL</span><strong id="sceneLevel">1</strong></span>
+                </div>
+                <div class="scene-satisfaction">
+                  <span>店铺口碑</span>
+                  <strong id="sceneSatisfaction">72</strong>
+                  <span class="satisfaction-heart">♥</span>
+                  <div class="satisfaction-track"><span id="sceneSatisfactionProgress"></span></div>
+                </div>
+                <div class="scene-station-belt" aria-label="店内设施">
+                  <button class="scene-station station-machine" type="button" data-scene-upgrade="machine">
+                    <span class="station-icon">☕</span>
+                    <span class="station-copy"><strong>冲煮台</strong><small data-scene-metric-for="machine">6 杯 / 分钟</small></span>
+                    <span class="station-level" data-scene-level-for="machine">Lv. 1</span>
+                    <span class="station-cost" data-scene-cost-for="machine">¥ 70</span>
+                  </button>
+                  <button class="scene-station station-recipe" type="button" data-scene-upgrade="recipe">
+                    <span class="station-icon">✧</span>
+                    <span class="station-copy"><strong>配方台</strong><small data-scene-metric-for="recipe">单杯 ¥ 7</small></span>
+                    <span class="station-level" data-scene-level-for="recipe">Lv. 1</span>
+                    <span class="station-cost" data-scene-cost-for="recipe">¥ 95</span>
+                  </button>
+                  <button class="scene-station station-seats" type="button" data-scene-upgrade="seats">
+                    <span class="station-icon">⌂</span>
+                    <span class="station-copy"><strong>座位区</strong><small data-scene-metric-for="seats">接待 4 人</small></span>
+                    <span class="station-level" data-scene-level-for="seats">Lv. 1</span>
+                    <span class="station-cost" data-scene-cost-for="seats">¥ 120</span>
+                  </button>
+                </div>
+                <div class="scene-collect-bar">
+                  <span class="scene-collect-icon">¥</span>
+                  <span class="scene-collect-copy"><small>自动收益</small><strong id="sceneIncomeRate">¥ 42 / 分钟</strong></span>
+                  <span class="scene-collect-meter"><span id="sceneTipProgress"></span></span>
+                  <button id="sceneCollectButton" type="button">收取零钱 · ¥ 8</button>
                 </div>
                 <div class="scene-caption"><span class="tiny-live-dot"></span>店里一切顺利</div>
               </div>
@@ -317,7 +376,7 @@
                   <div class="order-ticket-card" id="orderTicketCard">
                     <div class="ticket-header">
                       <span>下一张订单</span>
-                      <span id="orderTimerLabel">耐心 18 秒</span>
+                      <span id="orderTimerLabel">耐心 30 秒</span>
                   </div>
                   <div class="order-customer">
                     <div class="order-avatar" id="orderAvatar">苏</div>
@@ -336,7 +395,7 @@
                     <strong id="orderBonus">首单，从一杯好咖啡开始</strong>
                   </div>
                   <div class="order-patience" id="orderPatienceRow">
-                    <div class="order-patience-label"><span>顾客耐心</span><strong id="orderPatienceValue">18 秒</strong></div>
+                    <div class="order-patience-label"><span>顾客耐心</span><strong id="orderPatienceValue">30 秒</strong></div>
                     <div class="patience-track"><span id="orderPatienceProgress"></span></div>
                   </div>
                   <div class="brew-progress">
