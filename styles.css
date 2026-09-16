@@ -4796,6 +4796,132 @@ body.modal-is-open .modal-window:not([hidden]) {
   }
 }
 
+/* Raster sprites keep the character surfaces, edges, and light consistent with the scene art. */
+.scene-barista-line {
+  top: 28%;
+  height: 166px;
+}
+
+.scene-barista {
+  width: 92px;
+  height: 142px;
+  bottom: 24px;
+  opacity: 0;
+  filter: drop-shadow(0 4px 0 rgba(54, 42, 43, 0.16));
+  transform: translate(-50%, 9px) scale(0.82);
+  transform-origin: 50% 100%;
+  transition: opacity 240ms ease, transform 240ms ease;
+}
+
+.scene-barista.is-active {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(0.82);
+}
+
+.scene-barista-one {
+  left: 18%;
+}
+
+.scene-barista-two {
+  left: 50%;
+}
+
+.scene-barista-three {
+  left: 82%;
+}
+
+.scene-character-sprite,
+.manager-character-sprite {
+  position: absolute;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.scene-barista > .scene-character-sprite {
+  inset: 0;
+}
+
+.scene-barista-two > .scene-character-sprite {
+  filter: hue-rotate(14deg) saturate(0.86) brightness(1.03);
+}
+
+.scene-barista-three > .scene-character-sprite {
+  filter: hue-rotate(-18deg) saturate(0.88) brightness(1.01);
+}
+
+.scene-barista.is-active .scene-character-sprite {
+  animation: spriteBaristaBrew 1100ms ease-in-out infinite alternate;
+}
+
+.scene-manager {
+  width: 108px;
+  height: 92px;
+  bottom: -2px;
+  filter: drop-shadow(0 4px 0 rgba(54, 42, 43, 0.16));
+}
+
+.scene-manager > .manager-character-sprite {
+  inset: -3px -4px -5px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  transition: transform 160ms ease;
+}
+
+.scene-manager.is-moving-right .manager-character-sprite {
+  animation: spriteManagerPush 720ms ease-in-out infinite alternate;
+}
+
+.scene-manager.is-returning .manager-character-sprite,
+.scene-manager.is-moving-left .manager-character-sprite {
+  transform: scaleX(-1);
+  animation: spriteManagerPush 720ms ease-in-out infinite alternate-reverse;
+}
+
+@keyframes spriteBaristaBrew {
+  from {
+    transform: translateY(1px) rotate(-0.6deg);
+  }
+  to {
+    transform: translateY(-2px) rotate(0.6deg);
+  }
+}
+
+@keyframes spriteManagerPush {
+  from {
+    margin-top: 1px;
+  }
+  to {
+    margin-top: -2px;
+  }
+}
+
+@media (max-width: 650px) {
+  .scene-barista-line {
+    top: 27%;
+    height: 154px;
+  }
+
+  .scene-barista {
+    bottom: 20px;
+    width: 70px;
+    height: 119px;
+    transform: translate(-50%, 8px) scale(0.68);
+  }
+
+  .scene-barista.is-active {
+    transform: translate(-50%, 0) scale(0.68);
+  }
+
+  .scene-manager {
+    width: 94px;
+    height: 80px;
+    bottom: -1px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
