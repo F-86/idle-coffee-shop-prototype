@@ -4802,8 +4802,8 @@ body.modal-is-open .modal-window:not([hidden]) {
 }
 
 .scene-barista {
-  width: 92px;
-  height: 142px;
+  width: 108px;
+  height: 118px;
   bottom: 24px;
   opacity: 0;
   filter: drop-shadow(0 4px 0 rgba(54, 42, 43, 0.16));
@@ -4922,8 +4922,8 @@ body.modal-is-open .modal-window:not([hidden]) {
 
   .scene-barista {
     bottom: 20px;
-    width: 70px;
-    height: 119px;
+    width: 82px;
+    height: 90px;
     transform: translate(-50%, 8px) scale(0.68);
   }
 

@@ -33,7 +33,7 @@
 - 分店解锁、切换与地点收入倍率
 - 三套无人物、同一块面语言的低多边形咖啡店背景，随经营地点切换
 - 场景内设施快捷升级、自动收益条、口碑条与金币飘字
-- TapTap 原型方向的低多边形方块人：咖啡师透明角色素材与经理推车角色素材统一光照、描边和接触阴影
+- TapTap 原型方向的硬边低多边形方块人：咖啡师与经理推车使用统一比例、光照和接触阴影
 - 咖啡师招募
 - 50 位客人的每日目标与奖励
 - 营业中 / 打烊状态切换
@@ -45,7 +45,7 @@
 - index.html：页面结构与场景元素
 - styles.css：界面、咖啡店场景和响应式样式
 - app.js：经营循环、收益、升级、存档和交互逻辑
-- assets/coffee-barista-v1.png、assets/manager-cart-v1.png：场景角色透明素材
+- assets/coffee-barista-blocky-v1.png、assets/manager-cart-blocky-v1.png：硬边方块人角色素材
 - assets/coffee-shop-scene-blocky-*.png：街角、车站、海边三套场景背景素材
 
 下一步可以接入音效、更多顾客事件和关卡，再将核心数值迁移到 Unity 或 Godot。
