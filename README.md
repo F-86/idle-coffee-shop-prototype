@@ -2,50 +2,54 @@
 
 这是一个参考放置经营类咖啡店玩法、但使用原创名称与视觉设计的纯前端原型。
 
+## 文档与协作
+
+- [文档导航](docs/README.md)：产品目标、里程碑、开发说明和测试体系。
+- [协作约定](AGENTS.md)：按验收规格开发及文档维护要求。
+- [分阶段迁移清单](docs/development/migration-plan.md)：当前迁移边界、阶段门槛和未验证项。
+- [测试文档规范](docs/testing/standards.md)：以最终产品行为定义可复用用例，通过里程碑选择本轮范围。
+
 ## 运行
 
-直接双击 index.html 即可打开。也可以在项目目录运行：
+当前唯一支持的运行方式是 Vite：
 
-    python3 -m http.server 8080
+    npm install
+    npm run dev
 
-然后访问 http://localhost:8080。
+然后访问 Vite 输出的本地地址。提交前执行：
+
+    node --check app.js
+    npm run typecheck
+    npm run build
+
+也可以使用 `npm run preview` 检查生产构建。项目保持本地浏览器原型范围，不部署到 GitHub，也不包含 GitHub Actions 或远程发布流程。
 
 ## 当前已实现
 
-- 咖啡师在已解锁柜台自动制作咖啡并产生待收现金
-- 经理推车沿“金库 → 柜台 → 金库”路线回收现金并入库
-- 场景内有咖啡师制作动画与经理推车行走动画
-- 主页面聚焦柜台营业、经理收钱和咖啡墙升级
-- 订单、经营数据、员工、目标与分店等次要内容收进弹窗
-- 金库位置直接提供经理推车等级与升级入口
-- 关闭页面后的离线收益
-- 柜台后的咖啡墙：五种咖啡的解锁与升级，升级提高售价并缩短制作时间
-- 三座柜台的解锁、升级与当前咖啡选择，柜台升级提高当前咖啡售价
-- 经理推车、待客培训、候客座位、街角传单四类经营升级
-- 晨间加速：15 秒双倍效率
-- 小费零钱罐与手动领取
-- 今日菜单与顾客点单
-- 手作出杯、冲泡进度和额外小费
-- 连单奖励、满意加成和金币飘字反馈
-- 顾客耐心、漏单与连单中断
-- 五种饮品的配方解锁节奏
-- 榛果街、中央车站、海边码头三处经营地点
-- 分店解锁、切换与地点收入倍率
-- 三套无人物、同一块面语言的低多边形咖啡店背景，随经营地点切换
-- 场景内设施快捷升级、自动收益条、口碑条与金币飘字
-- TapTap 原型方向的硬边低多边形方块人：咖啡师与经理推车使用统一比例、光照和接触阴影
-- 咖啡师招募
-- 50 位客人的每日目标与奖励
-- 营业中 / 打烊状态切换
-- 浏览器本地存档与重置
-- 桌面端与手机端响应式布局
+- 咖啡师在已解锁柜台自动制作咖啡并产生待收现金。
+- 每杯完成后按“同柜台队首取杯 → 一次待收 → 经理收走 → 回金库入账”结算。
+- Phaser 场景层承载柜台、咖啡师、顾客、经理和取杯/现金反馈；React 接管 HUD、控制、升级、订单和弹窗。
+- 核心状态、经济、生产、队列、经理运输、订单、存档和事件由纯 TypeScript 管理；React 与 Phaser 共享同一份 `GameView`，不各自维护金币或生产循环。
+- 单一 `requestAnimationFrame` 时间入口，支持营业暂停、刷新恢复和一次性离线收益。
+- 顾客按柜台实际产能进入、等待、取杯、带杯离店，新顾客自动补位。
+- 手机横屏优先的场景布局，竖屏支持横向滑动；桌面、横屏和竖屏共用响应式界面。
+- 手作订单、咖啡墙、柜台/员工/经营升级、目标、地点、设置、重置和本地存档。
+- 关闭页面后的离线收益；旧 `mellow-bean-idle-v1` 存档会在核心边界归一化，坏档与未来版本受保护。
 
 ## 文件结构
 
-- index.html：页面结构与场景元素
-- styles.css：界面、咖啡店场景和响应式样式
-- app.js：经营循环、收益、升级、存档和交互逻辑
-- assets/coffee-barista-blocky-v1.png、assets/manager-cart-blocky-v1.png：硬边方块人角色素材
-- assets/coffee-shop-scene-blocky-*.png：街角、车站、海边三套场景背景素材
+- `index.html`：最小 Vite HTML 入口，仅提供 React 挂载点和样式入口。
+- `app.js`：应用启动、存档接入、唯一时间循环、React/Phaser 桥接和只读测试适配器。
+- `src/core/config.ts`：业务配置、稳定 key 和公式所需配置。
+- `src/core/types.ts`：`GameState`、`SaveData`、动作、视图和事件类型。
+- `src/core/state.ts`：默认状态、旧存档迁移和字段归一化。
+- `src/core/engine.ts`：纯经济、逐杯生产、队列、经理运输、订单与交易。
+- `src/core/store.ts`：不依赖 Redux/Zustand 的轻量 action/event 边界。
+- `src/core/storage.ts`：本地存档读写、坏档保护和版本保护。
+- `src/game/ShopScene.ts`：只负责 Phaser 节点、动画和场景绘制，不推进业务时间。
+- `src/ui/react-app.tsx` / `src/ui/react-app.css`：React 页面、HUD、控件、弹窗和 UI 样式。
+- `styles.css` / `scene-layout.css`：既有视觉语言、场景背景和响应式布局。
+- `assets/`：场景、角色、柜台、咖啡杯、现金等视觉素材；Phaser 运行时通过 npm 依赖提供。
+- `package.json`、`vite.config.ts`、`tsconfig.json`：Vite、React、TypeScript strict 和 Phaser 工程配置。
 
-下一步可以接入音效、更多顾客事件和关卡，再将核心数值迁移到 Unity 或 Godot。
+当前不会部署到 GitHub。迁移顺序、阶段门槛和未决策项见 [分阶段迁移清单](docs/development/migration-plan.md)，最终验证见 [迁移验收报告](docs/testing/runs/2026-09-19-1030-vite-react-migration/test-run.md)。
