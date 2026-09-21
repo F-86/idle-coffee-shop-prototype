@@ -384,6 +384,7 @@ function CounterDetails({
 }) {
   const counter = view.counters[keyName];
   const config = counterConfig[keyName];
+  const drink = drinkConfig[counter.drink];
   const stat = view.economy.counterStats.find((item) => item.key === keyName);
   const cost = counter.unlocked ? Math.round(config.baseUpgradeCost * Math.pow(config.costScale, Math.max(0, counter.level - 1))) : config.unlockCost;
   const action = counter.unlocked ? "升级" : "解锁";
@@ -395,8 +396,8 @@ function CounterDetails({
   };
   return <div className="scene-detail-panel">
     <div className="scene-detail-hero">
-      <div className="scene-detail-icon" aria-hidden="true">☕</div>
-      <div><strong>{config.name}</strong><span>{counter.unlocked ? `${formatLevel(counter.level)} · ${counter.baristas > 0 ? "咖啡师已到岗" : "等待咖啡师"}` : `达到店铺 Lv. ${config.requiredLevel} 后开放`}</span></div>
+      <div className="scene-detail-icon scene-detail-drink-icon"><img src={drinkIconAssets[counter.drink]} alt={`${drink.name}图标`} /></div>
+      <div><strong>{config.name}</strong><span>{counter.unlocked ? `${drink.name} · ${formatLevel(counter.level)} · ${counter.baristas > 0 ? "咖啡师已到岗" : "等待咖啡师"}` : `达到店铺 Lv. ${config.requiredLevel} 后开放`}</span></div>
     </div>
     <dl className="scene-detail-stats">
       <div><dt>当前售价</dt><dd>{counter.unlocked ? money(stat?.price || 0) : "—"}</dd></div>
