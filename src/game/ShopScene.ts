@@ -459,7 +459,10 @@ export function mountShopScene({ engine: _engine }: { engine: GameStore }): Moun
   shopScene.classList.add("phaser-enabled");
   const scene = new ShopScene();
   const game = new Phaser.Game({
-    type: Phaser.AUTO,
+    // The authored Figma world is the visible scene layer. Keep Phaser's
+    // actor/event compatibility canvas-backed so mobile WebGL framebuffer
+    // limits cannot surface as console errors behind the hidden layer.
+    type: Phaser.CANVAS,
     parent: container,
     transparent: true,
     width: container.clientWidth || 800,

@@ -3455,3 +3455,488 @@ body.react-ui-enabled .scene-recipe-level-dot.is-filled {
 body.react-ui-enabled .scene-recipe.is-locked .scene-recipe-level-dots {
   opacity: .64;
 }
+
+/* Figma visual baseline --------------------------------------------------
+ * The local Figma export is the source-of-truth world art for the normal
+ * prototype. The DOM controls remain real buttons and keep their business
+ * behavior, but their visual chrome is transparent so it does not duplicate
+ * the authored wall, counter and rug components in the export. Focus states
+ * intentionally reveal the hit target for keyboard and assistive use.
+ */
+body.react-ui-enabled .scene-figma-baseline .scene-world-viewport {
+  background: #7d5438;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-world {
+  background: #7d5438;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-figma-world {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  pointer-events: none;
+  user-select: none;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-art-empty,
+body.react-ui-enabled .scene-figma-baseline .scene-rear-art-crop,
+body.react-ui-enabled .scene-figma-baseline .scene-sky,
+body.react-ui-enabled .scene-figma-baseline .scene-entry-marker,
+body.react-ui-enabled .scene-figma-baseline .scene-exit-marker,
+body.react-ui-enabled .scene-figma-baseline .phaser-scene-layer,
+body.react-ui-enabled .scene-figma-baseline .scene-collect-bar {
+  display: none !important;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-hud {
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 60;
+  display: block;
+  pointer-events: none;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-hud-chip {
+  position: absolute;
+  display: grid;
+  min-height: 54px;
+  padding: 8px 14px;
+  color: #fff4d2;
+  background: #234f46;
+  border: 0;
+  border-radius: 14px;
+  box-shadow: none;
+  font-family: "Noto Sans SC", "PingFang SC", sans-serif;
+  font-size: 13px;
+  line-height: 18px;
+  pointer-events: auto;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-location-chip,
+body.react-ui-enabled .scene-figma-baseline .scene-level-chip,
+body.react-ui-enabled .scene-figma-baseline .scene-hud-actions {
+  display: none;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-balance-chip {
+  top: 20px;
+  left: 24px;
+  width: 94px;
+  height: 54px;
+  align-content: center;
+  gap: 1px;
+  color: #fff6dc;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-balance-chip > span,
+body.react-ui-enabled .scene-figma-baseline .scene-balance-chip strong {
+  display: block;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-balance-chip > span {
+  color: #c9dccd;
+  font-size: 11px;
+  line-height: 13px;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-balance-chip strong {
+  color: #fff6dc;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-boost-chip {
+  top: 84px;
+  right: 24px;
+  width: 112px;
+  height: 54px;
+  align-content: center;
+  gap: 1px;
+  color: #5e4324;
+  background: #f4c968;
+  border-radius: 12px;
+  text-align: left;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-boost-chip strong,
+body.react-ui-enabled .scene-figma-baseline .scene-boost-chip small {
+  display: block;
+  color: inherit;
+  font-size: 12px;
+  line-height: 17px;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-boost-chip small {
+  font-size: 10px;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-business-toggle {
+  top: 84px;
+  left: 24px;
+  display: flex;
+  width: 106px;
+  height: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 10px;
+  color: #fff4d2;
+  background: #234f46;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 17px;
+  cursor: pointer;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-business-toggle.is-closed {
+  background: #6a4b3c;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-business-toggle .status-dot {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+}
+
+.test-clock-controls {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  color: #fff4d2;
+  background: rgba(35, 79, 70, .94);
+  border: 1px solid rgba(255, 236, 179, .34);
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgba(34, 46, 39, .22);
+  font: 11px/16px "Noto Sans SC", "PingFang SC", sans-serif;
+}
+
+.test-clock-controls button {
+  min-height: 32px;
+  padding: 4px 8px;
+  color: #234f46;
+  background: #f4d27a;
+  border: 0;
+  border-radius: 6px;
+  font: inherit;
+  cursor: pointer;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-brand-plaque {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  display: grid;
+  width: 166px;
+  height: 54px;
+  align-content: center;
+  gap: 1px;
+  padding: 8px 12px;
+  color: #fff4d2;
+  background: #234f46;
+  border-radius: 14px;
+  font-family: "Noto Sans SC", "PingFang SC", sans-serif;
+  pointer-events: auto;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-brand-plaque strong {
+  font-size: 17px;
+  line-height: 20px;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-brand-plaque small {
+  color: #c9dccd;
+  font-size: 11px;
+  line-height: 13px;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-recipe-wall {
+  top: 9.2%;
+  right: auto;
+  left: 24.2%;
+  z-index: 30;
+  width: 53.1%;
+  height: 24.2%;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-recipe-wall-heading {
+  display: none;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-recipe-grid {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
+  padding: 0;
+  overflow: visible;
+  pointer-events: auto;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-recipe {
+  display: block;
+  min-width: 0;
+  min-height: 44px;
+  height: 100%;
+  padding: 0;
+  color: transparent;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  opacity: 0;
+  pointer-events: auto;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-recipe:focus-visible {
+  opacity: 1;
+  outline: 3px solid #f4d27a;
+  outline-offset: -3px;
+  background: rgba(244, 210, 122, .16);
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-recipe > * {
+  visibility: hidden;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-customer-lanes {
+  position: absolute;
+  inset: 0;
+  z-index: 32;
+  display: block;
+  pointer-events: none;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-customer-lane {
+  position: absolute;
+  top: 63.3%;
+  width: 15.9%;
+  height: 25.5%;
+  pointer-events: none;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-customer-lane:nth-child(1) { left: 15.4%; }
+body.react-ui-enabled .scene-figma-baseline .scene-customer-lane:nth-child(2) { left: 34.5%; }
+body.react-ui-enabled .scene-figma-baseline .scene-customer-lane:nth-child(3) { left: 53.8%; }
+
+body.react-ui-enabled .scene-figma-baseline .scene-customer-rug {
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  clip-path: none;
+  opacity: 0;
+  pointer-events: auto;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-customer-rug:focus-visible {
+  opacity: 1;
+  outline: 3px solid #f4d27a;
+  outline-offset: -4px;
+  background: rgba(244, 210, 122, .14);
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-customer-lane-header,
+body.react-ui-enabled .scene-figma-baseline .scene-customer-slots {
+  display: none;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-manager-route {
+  top: 0;
+  right: auto;
+  bottom: auto;
+  left: 0;
+  z-index: 33;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-manager-route::before,
+body.react-ui-enabled .scene-figma-baseline .manager-route-line,
+body.react-ui-enabled .scene-figma-baseline .scene-vault-marker > * {
+  display: none;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-vault-marker {
+  position: absolute;
+  top: 13.5%;
+  left: 15.1%;
+  width: 6.3%;
+  height: 12.5%;
+  min-height: 44px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  opacity: 0;
+  pointer-events: auto;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-vault-marker:focus-visible {
+  opacity: 1;
+  outline: 3px solid #f4d27a;
+  outline-offset: -3px;
+  background: rgba(244, 210, 122, .16);
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-station-belt {
+  top: 49.1%;
+  right: auto;
+  bottom: auto;
+  left: 16.4%;
+  z-index: 34;
+  width: 75.4%;
+  height: 20.9%;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  pointer-events: none;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-station {
+  position: relative;
+  width: auto;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-counter-visual,
+body.react-ui-enabled .scene-figma-baseline .scene-station-main > *,
+body.react-ui-enabled .scene-figma-baseline .scene-station-actions,
+body.react-ui-enabled .scene-figma-baseline .station-cash,
+body.react-ui-enabled .scene-figma-baseline .station-brew-track {
+  visibility: hidden;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-station-main.station-brew-trigger {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 48%;
+  left: 0;
+  z-index: 1;
+  width: auto;
+  height: auto;
+  min-height: 44px;
+  background: transparent;
+  pointer-events: auto;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-station-main.station-brew-trigger:focus-visible {
+  visibility: visible;
+  outline: 3px solid #f4d27a;
+  outline-offset: -3px;
+  background: rgba(244, 210, 122, .14);
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-station-main.station-brew-trigger:focus-visible > * {
+  visibility: hidden;
+}
+
+body.react-ui-enabled .scene-figma-baseline .station-drink-picker {
+  position: absolute;
+  top: 52%;
+  right: auto;
+  bottom: auto;
+  left: 4%;
+  z-index: 4;
+  width: 34%;
+  height: 44%;
+  pointer-events: auto;
+}
+
+body.react-ui-enabled .scene-figma-baseline .station-drink-icon-button {
+  width: 100%;
+  height: 100%;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  opacity: 0;
+}
+
+body.react-ui-enabled .scene-figma-baseline .station-drink-icon-button:focus-visible {
+  opacity: 1;
+  outline: 3px solid #f4d27a;
+  outline-offset: -3px;
+  background: rgba(244, 210, 122, .16);
+}
+
+body.react-ui-enabled .scene-figma-baseline .station-drink-picker-menu {
+  top: 100%;
+  left: 0;
+  z-index: 80;
+}
+
+body.react-ui-enabled .scene-figma-baseline .station-upgrade-button {
+  position: absolute;
+  top: 52%;
+  right: 6%;
+  bottom: auto;
+  left: 39%;
+  z-index: 5;
+  width: 55%;
+  height: 44%;
+  min-height: 44px;
+  padding: 0;
+  overflow: hidden;
+  color: transparent;
+  background: transparent;
+  border: 0;
+  opacity: 0;
+  line-height: 1;
+}
+
+body.react-ui-enabled .scene-figma-baseline .station-upgrade-button:focus-visible {
+  opacity: 1;
+  outline: 3px solid #f4d27a;
+  outline-offset: -3px;
+  background: rgba(244, 210, 122, .16);
+}
+
+@media (max-width: 650px) and (orientation: portrait) {
+  body.react-ui-enabled .scene-figma-baseline .scene-brand-plaque {
+    right: 18px;
+  }
+
+  body.react-ui-enabled .scene-figma-baseline .scene-balance-chip {
+    left: 18px;
+  }
+
+  body.react-ui-enabled .scene-figma-baseline .scene-boost-chip {
+    right: 18px;
+  }
+}

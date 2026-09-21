@@ -1,15 +1,16 @@
 import { flushSync } from "react-dom";
 import cashPouchAsset from "../../assets/cash-pouch-blocky-v1.png";
 import counterAsset from "../../assets/coffee-counter-blocky-v2.png";
-import americanoIconAsset from "../../assets/coffee-icon-americano-v1.png";
-import latteIconAsset from "../../assets/coffee-icon-latte-v1.png";
-import mochaIconAsset from "../../assets/coffee-icon-mocha-v1.png";
-import coldBrewIconAsset from "../../assets/coffee-icon-coldbrew-v1.png";
-import macchiatoIconAsset from "../../assets/coffee-icon-macchiato-v1.png";
 import floorAsset from "../../assets/coffee-shop-empty-floor-v3.png";
 import streetSceneAsset from "../../assets/coffee-shop-scene-blocky-street-v1.png";
 import stationSceneAsset from "../../assets/coffee-shop-scene-blocky-station-v1.png";
 import seasideSceneAsset from "../../assets/coffee-shop-scene-blocky-seaside-v1.png";
+import figmaWorldAsset from "../../assets/figma/world-2.5d.png";
+import figmaAmericanoIconAsset from "../../assets/figma/coffee-icon-americano.png";
+import figmaLatteIconAsset from "../../assets/figma/coffee-icon-latte.png";
+import figmaColdBrewIconAsset from "../../assets/figma/coffee-icon-coldbrew.png";
+import figmaMochaIconAsset from "../../assets/figma/coffee-icon-mocha.png";
+import figmaMacchiatoIconAsset from "../../assets/figma/coffee-icon-macchiato.png";
 import {
   StrictMode,
   useEffect,
@@ -29,11 +30,11 @@ import "./react-app.css";
 const drinkKeys: DrinkKey[] = ["americano", "latte", "mocha", "coldbrew", "macchiato"];
 const upgradeKeys: UpgradeKey[] = ["machine", "recipe", "seats", "marketing"];
 const drinkIconAssets: Record<DrinkKey, string> = {
-  americano: americanoIconAsset,
-  latte: latteIconAsset,
-  mocha: mochaIconAsset,
-  coldbrew: coldBrewIconAsset,
-  macchiato: macchiatoIconAsset
+  americano: figmaAmericanoIconAsset,
+  latte: figmaLatteIconAsset,
+  mocha: figmaMochaIconAsset,
+  coldbrew: figmaColdBrewIconAsset,
+  macchiato: figmaMacchiatoIconAsset
 };
 
 const sceneBackdropAssets: Record<LocationKey, string> = {
@@ -333,7 +334,7 @@ function CustomerLanes({ view, dispatch }: { view: GameView; dispatch: GameStore
       const counter = view.counters[key];
       const capacity = Math.max(0, Math.floor(view.queueCapacity[key] || 0));
       return <div key={key} className={`scene-customer-lane ${counter.unlocked ? "is-open" : "is-locked"}`} data-counter-key={key} data-capacity={capacity}>
-        <button className="scene-customer-rug" type="button" disabled={!counter.unlocked} aria-label={counter.unlocked ? `点击${counterConfig[key].name}前方候客地毯催促出杯` : `${counterConfig[key].name}尚未开放`} onClick={() => dispatch({ type: "rush-counter", key })} />
+        <button className="scene-customer-rug" type="button" disabled={!counter.unlocked} aria-label={counter.unlocked ? `点击${counterConfig[key].name}前方候客地毯催促出杯，当前队列 ${counter.queue.length}/${capacity}` : `${counterConfig[key].name}尚未开放`} onClick={() => dispatch({ type: "rush-counter", key })} />
         <div className="scene-customer-lane-header"><strong>{counterConfig[key].shortName}</strong><small>{counter.unlocked ? `${counter.queue.length}/${capacity}` : "未开放"}</small></div>
         <div className="scene-customer-slots" aria-hidden="true">
           {Array.from({ length: capacity }, (_, index) => <span key={index} className={`scene-customer-slot ${index < counter.queue.length ? "is-filled" : ""}`} />)}
@@ -478,17 +479,19 @@ function ShopFloor({
       <div className="section-header"><div><div className="section-kicker">THE SHOP FLOOR</div><h2>店内实况</h2></div><div className="live-note"><span className="live-dot" />LIVE · 每秒更新</div></div>
       <article className="shopfloor panel">
         <div className="shopfloor-topline"><div><strong>{location.name}</strong><span> · </span><span>{location.mood}</span></div><div className="shop-level"><span>店铺等级</span><strong>Lv. {1 + Math.floor(view.totalServed / 50)}</strong></div></div>
-        <div className={`shop-scene scene-art-mode ${view.isOpen ? "" : "is-closed"}`} id="shopScene" role="region" aria-label="Mellow Bean 咖啡店营业场景，可操作设施与快捷按钮">
+        <div className={`shop-scene scene-art-mode scene-figma-baseline ${view.isOpen ? "" : "is-closed"}`} id="shopScene" role="region" aria-label={`Mellow Bean 咖啡店营业场景，可操作设施与快捷按钮；金库 ${money(view.coins)}，待收 ${money(view.pendingCash)}，经理携款 ${money(view.manager.carrying)}`}>
           <div className="scene-hud">
             <span className="scene-hud-chip scene-location-chip">☕ {location.shortName}</span>
-            <span className="scene-hud-chip scene-balance-chip" aria-label="金库余额">◉ {money(view.coins)}</span>
-            <button className={`scene-hud-chip scene-boost-chip ${view.economy.boostActive ? "is-active" : ""}`} type="button" disabled={view.economy.boostActive} aria-label={view.economy.boostActive ? `咖啡加速剩余 ${boostSeconds} 秒` : "启动咖啡加速"} onClick={() => dispatch({ type: "activate-boost" })}>✦ {view.economy.boostActive ? `${boostSeconds}s` : "加速"}</button>
+            <span className="scene-hud-chip scene-balance-chip" aria-label="金库余额"><span>当前余额</span><strong>{money(view.coins)}</strong></span>
+            <button className={`scene-hud-chip scene-boost-chip ${view.economy.boostActive ? "is-active" : ""}`} type="button" disabled={view.economy.boostActive} aria-label={view.economy.boostActive ? `咖啡加速剩余 ${boostSeconds} 秒` : "启动咖啡加速"} onClick={() => dispatch({ type: "activate-boost" })}><strong>✦ 咖啡加速 2×</strong><small>{view.economy.boostActive ? `剩余 00:${String(boostSeconds).padStart(2, "0")}` : "剩余 00:15"}</small></button>
             <button className={`scene-hud-chip scene-business-toggle ${view.isOpen ? "" : "is-closed"}`} type="button" onClick={() => dispatch({ type: "toggle-business" })}><span className="status-dot" />{view.isOpen ? "营业中" : "已打烊"}</button>
             <span className="scene-hud-chip scene-level-chip"><span>LEVEL</span><strong>{1 + Math.floor(view.totalServed / 50)}</strong></span>
             <span className="scene-hud-actions" aria-label="店铺操作"><button className="scene-hud-system-button" type="button" onClick={onManage} aria-label="打开经营管理">⌘<small>经营</small></button><button className="scene-hud-system-button" type="button" onClick={onSettings} aria-label="打开设置">⚙<small>设置</small></button></span>
+            <span className="scene-brand-plaque" aria-label={`当前店铺 ${location.shortName}`}><strong>MELLOW BEAN</strong><small>{location.shortName}</small></span>
           </div>
           <div className="scene-world-viewport" id="sceneWorldViewport" tabIndex={0} aria-label="可横向浏览的店内柜台；顾客从左侧入口进店，取杯或满位后从右侧出口离店">
             <div className="scene-world" id="sceneWorld" style={sceneWorldStyle}>
+              <img className="scene-figma-world" src={figmaWorldAsset} alt="" aria-hidden="true" />
               <img className="scene-art scene-art-empty" src={floorAsset} alt="" aria-hidden="true" />
               <div className="scene-rear-art-crop" aria-hidden="true">
                 <img className="scene-rear-art" src={sceneBackdropAssets[view.activeLocation]} alt="" />
