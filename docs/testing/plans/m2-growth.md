@@ -17,7 +17,7 @@
 | [TC-MANAGE-001](../cases/progression/management/TC-MANAGE-001.md) 四类经营升级分别作用对应属性 | 经理；培训；座位；传单 | 4 |
 | [TC-QUEUE-002](../cases/business/customers/queue/TC-QUEUE-002.md) 顾客从左侧入口进入地毯并从右侧出口离店补位 | 1280×800；844×390 | 2 |
 | [TC-QUEUE-003](../cases/business/customers/queue/TC-QUEUE-003.md) 单柜台满十人时新顾客从右侧出口离店 | 队列10人；第11人到店 | 1 |
-| [TC-ORDER-001](../cases/engagement/orders/complete/TC-ORDER-001.md) 点击柜台催制作并只交付一次 | 生产中点击；重复点击 | 2 |
+| [TC-ORDER-001](../cases/engagement/orders/complete/TC-ORDER-001.md) 点击候客地毯催制作并只交付一次 | 生产中点击；重复点击 | 2 |
 | [TC-BOOST-001](../cases/engagement/boost/TC-BOOST-001.md) 加速到期冷却与刷新防叠加 | 刷新；不刷新 | 2 |
 | [TC-REWARD-001](../cases/engagement/tips/TC-REWARD-001.md) 小费单次领取和刷新防重领 | 罐20；罐0 | 2 |
 | [TC-GOAL-001](../cases/engagement/goals/TC-GOAL-001.md) 目标门槛与奖励单次领取 | 进度2；进度3 | 2 |
