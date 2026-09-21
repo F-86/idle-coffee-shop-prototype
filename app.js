@@ -1,26 +1,56 @@
 import { createGameStore } from "./src/core/store.ts";
 import { createStorage } from "./src/core/storage.ts";
 import { createDefaultState } from "./src/core/state.ts";
+import { createTestFixture, isTestFixtureName } from "./src/testing/fixtures.ts";
 import { createReactRenderer } from "./src/ui/react-app.tsx";
 import { mountShopScene } from "./src/game/ShopScene.ts";
 
 const storage = createStorage();
 const bootNow = Date.now();
-const loaded = storage.load(bootNow);
+const query = new URLSearchParams(window.location.search);
+const testMode = query.has("test");
+const fixtureName = isTestFixtureName(query.get("fixture")) ? query.get("fixture") : null;
+const manualClock = testMode && query.get("clock") === "manual";
+const loaded = fixtureName
+  ? { state: createTestFixture(fixtureName, bootNow), issue: null, protectedRaw: false }
+  : storage.load(bootNow);
 const engine = createGameStore({
   initialState: loaded.state || createDefaultState(bootNow),
   now: bootNow
 });
 
-// Read-only test adapter. It exposes the same snapshot used by the renderers
-// without offering a shortcut to mutate or settle business state.
-if (new URLSearchParams(window.location.search).has("test")) {
+let testNow = bootNow;
+const testEvents = [];
+
+function cloneTestValue(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function advanceTestTime(seconds) {
+  if (!fixtureName || !manualClock) {
+    return { ok: false, reason: "manual fixture clock is not enabled" };
+  }
+  const duration = Math.max(0, Math.min(3600, Number(seconds) || 0));
+  testNow += duration * 1000;
+  engine.setNow(testNow);
+  const result = engine.advance(duration, { source: "online" });
+  renderer?.render(engine.getView());
+  phaser?.syncView(engine.getView());
+  return { ok: true, seconds: duration, result, view: engine.getView(), eventCursor: testEvents.length };
+}
+
+// Read-only test adapter. It prepares deterministic fixtures and a local test
+// clock, but does not expose dispatch or any shortcut for business actions.
+if (testMode) {
   window.__mellowBeanDebug = {
-    readView: () => engine.getView()
+    fixture: fixtureName,
+    readView: () => engine.getView(),
+    readEvents: (cursor = 0) => testEvents.slice(Math.max(0, Number(cursor) || 0)).map(cloneTestValue),
+    advanceTime: advanceTestTime
   };
 }
 
-let protectSave = Boolean(loaded.protectedRaw);
+let protectSave = Boolean(loaded.protectedRaw) || Boolean(fixtureName);
 let warnedSaveFailure = false;
 let lastFrameAt = performance.now();
 let lastUiAt = 0;
@@ -63,6 +93,23 @@ function resetGame() {
 renderer = createReactRenderer({ engine, onReset: resetGame });
 phaser = mountShopScene({ engine });
 
+if (manualClock) {
+  const clockPanel = document.createElement("aside");
+  clockPanel.className = "test-clock-controls";
+  clockPanel.setAttribute("aria-label", "测试时钟控制");
+  const label = document.createElement("span");
+  label.textContent = "测试时钟";
+  clockPanel.append(label);
+  [1, 5, 60].forEach((seconds) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = `推进 ${seconds} 秒`;
+    button.addEventListener("click", () => advanceTestTime(seconds));
+    clockPanel.append(button);
+  });
+  document.body.append(clockPanel);
+}
+
 const persistentEvents = new Set([
   "cup-delivered",
   "cash-collected",
@@ -83,6 +130,12 @@ const persistentEvents = new Set([
 ]);
 
 engine.subscribe((event) => {
+  if (testMode) {
+    testEvents.push(cloneTestValue(event));
+    if (testEvents.length > 2000) {
+      testEvents.shift();
+    }
+  }
   phaser.handleEvent(event);
   renderer.handleEvent(event);
   if (persistentEvents.has(event.type)) {
@@ -109,7 +162,7 @@ if (offlineResult.earnings > 0) {
 function gameLoop(frameNow) {
   const now = Date.now();
   engine.setNow(now);
-  if (!document.hidden) {
+  if (!document.hidden && !manualClock) {
     const seconds = Math.max(0, Math.min(0.5, (frameNow - lastFrameAt) / 1000));
     if (seconds > 0) {
       engine.advance(seconds, {
@@ -149,4 +202,8 @@ window.addEventListener("beforeunload", persist);
 const initialView = engine.getView();
 renderer.render(initialView);
 phaser.syncView(initialView);
+const initialTestAdvance = Number(query.get("advance"));
+if (manualClock && Number.isFinite(initialTestAdvance) && initialTestAdvance > 0) {
+  advanceTestTime(initialTestAdvance);
+}
 window.requestAnimationFrame(gameLoop);

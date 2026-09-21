@@ -9,6 +9,7 @@
 | REQ-PROD-001 | [TC-PROD-001](cases/business/production/TC-PROD-001.md)、[TC-PROD-002](cases/business/production/TC-PROD-002.md)、[TC-PROD-003](cases/business/production/TC-PROD-003.md) | M1 | 受控顾客 fixture、三柜台完整并行仍待独立验证 |
 | REQ-CASH-001 | [TC-CASH-001](cases/business/cash/transfer/TC-CASH-001.md)、[TC-CASH-002](cases/business/cash/transfer/TC-CASH-002.md) | M1 | 容量边界沿用未确认实现假设，需 Q1 fixture |
 | REQ-BIZ-001 | [TC-BIZ-001](cases/business/state/pause/TC-BIZ-001.md) | M1 | 长时间切换与后台页仍待验证 |
+| REQ-LOOP-001 | [TC-LOOP-001](cases/business/journey/TC-LOOP-001.md)、[TC-LOOP-002](cases/business/journey/TC-LOOP-002.md) | M3 | 十分钟经营、五次开关店和资产守恒需使用 FX-LONG-RUN 实际执行 |
 | REQ-IDLE-001 | [TC-IDLE-001](cases/idle/settlement/TC-IDLE-001.md) | M3 | 上限、最小时长、时钟异常、打烊待补 |
 | REQ-PROD-002 | [TC-ORDER-001](cases/engagement/orders/complete/TC-ORDER-001.md) | M2 | 点击催制作、即时交付、重复点击和异常条件需实际回归 |
 | REQ-UI-004 | [TC-UI-004](cases/interface/layout/TC-UI-004.md) | M3 | 横屏控件层级、字号和主要点击区域需用实际视口回归；不等同于原作逐像素复刻 |
@@ -18,5 +19,6 @@
 | REQ-UI-006 | [TC-UI-006](cases/interface/layout/TC-UI-006.md) | M2 | 不同 DPR、小横屏和素材透明边界下的清晰度仍需真实设备抽样 |
 | REQ-UI-007 | [TC-UI-006](cases/interface/layout/TC-UI-006.md)、[TC-UI-005](cases/interface/layout/TC-UI-005.md) | M2 | 侧向2.5D前后层级、入口/出口和经理后场通道需保存桌面与横屏证据 |
 | REQ-UI-008 | [TC-UI-007](cases/interface/layout/TC-UI-007.md) | M2 | 柜台详情、咖啡图标选择器、候客地毯催制作和咖啡墙详情购买需实际验证入口隔离与升级预览 |
+| REQ-UI-009 | [TC-UI-008](cases/interface/layout/TC-UI-008.md) | M2 | Figma 1280×720 视觉基线、Figma 素材映射、四柜台/八槽位构图与重点区域对照需实际回归 |
 
 产品地图中引导、自动生产、顾客、经理收款、柜台互动、员工、配方、目标、分店、适配目前还没有完整规格和用例。最终验收前必须逐域展开；不能只因本表已列用例全部通过就声称最终产品完成。

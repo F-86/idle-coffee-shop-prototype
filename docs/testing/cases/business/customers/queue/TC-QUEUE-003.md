@@ -6,7 +6,7 @@ status: draft
 priority: P0
 type: browser-integration
 tags: [regression, m2, scene, overflow]
-fixture: FX-QUEUE
+fixture: FX-QUEUE-10
 baseline: candidate-v0.1-Q1
 ---
 
@@ -20,7 +20,7 @@ baseline: candidate-v0.1-Q1
 
 - 独立初始化：一号柜台已解锁并营业，准备到达单柜台最多 10 名顾客的状态；暂停生产以避免测试期间队列被取杯改变。
 - 参数实例：已在队列 10 人；随后第 11 人从左侧入口到店。
-- fixture：FX-QUEUE，准备与能力要求见 [共享手册](../../../../shared/fixtures.md)。
+- fixture：FX-QUEUE-10，使用 `/?test=fixture&fixture=queue10` 准备；能力要求见 [共享手册](../../../../shared/fixtures.md)。
 
 ## 操作与预期
 

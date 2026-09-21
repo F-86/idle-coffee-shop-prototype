@@ -59,7 +59,8 @@ export function createGameEngine({
     now,
     eventId: 0,
     customerArrivalElapsed: {} as Record<string, number>,
-    overflowSequence: 0
+    overflowSequence: 0,
+    lastOverflowToastAt: Number.NEGATIVE_INFINITY
   };
 
   function emit(
@@ -280,6 +281,10 @@ export function createGameEngine({
             },
             exit: "right"
           }, options);
+          if (!options.silent && runtime.now - runtime.lastOverflowToastAt >= 2000) {
+            runtime.lastOverflowToastAt = runtime.now;
+            toast(`${counterConfig[key].shortName}已满位，顾客从右侧出口离店`, "→");
+          }
         } else {
           ensureCustomerQueue(key, options);
         }
