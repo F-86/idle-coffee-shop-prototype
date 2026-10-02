@@ -22,7 +22,15 @@
     npm run typecheck
     npm run build
 
-也可以使用 `npm run preview` 检查生产构建。项目保持纯前端浏览器原型范围。仓库现有 GitHub Pages 从 `main` 根目录进行 legacy 构建，推送会触发已有的 `pages build and deployment`；该设置不执行本项目的 npm/Vite 构建，Pages 任务成功不等同于 Vite 应用运行验收。本次沿用现有发布设置。
+也可以使用 `npm run preview` 检查生产构建。项目保持纯前端浏览器原型范围。
+
+## GitHub Pages
+
+`.github/workflows/pages.yml` 在 `main` 推送或手动触发时使用 Node 24、`npm ci`、语法检查和类型检查，再运行 `npm run build -- --base=/idle-coffee-shop-prototype/`，仅上传和发布 `dist/`。本地 `npm run dev` 与普通构建继续使用默认根路径，不需修改日常启动方式。
+
+首次启用此工作流，需要在仓库 Settings → Pages → Build and deployment 中将 Source 从 **Deploy from a branch** 改为 **GitHub Actions**，避免继续把未编译源文件当作站点。工作流不创建凭证；只使用 GitHub 的临时部署令牌，部署权限仅限 deploy job。
+
+发布目标为 `https://f-86.github.io/idle-coffee-shop-prototype/`。构建/部署任务成功后，还需实际打开站点，确认入口 JS/CSS 与素材成功加载、页面和交互正常；不能仅以绿色工作流代替运行验收。配置依据：[Vite 官方部署说明](https://vite.dev/guide/static-deploy#github-pages)。
 
 ## 当前已实现
 
