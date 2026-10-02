@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:scene": "node --test tests/shop-scene-events.test.mjs"
   },
   "dependencies": {
     "phaser": "3.90.0",

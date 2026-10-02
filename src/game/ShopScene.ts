@@ -310,6 +310,12 @@ export class ShopScene extends Phaser.Scene {
       }
       counter.queue.forEach((customer, index) => {
         activeIds.add(customer.id);
+        // Events arrive immediately, whereas GameView is refreshed on the UI
+        // cadence. An older queued snapshot must not reclaim an actor whose
+        // delivered-cup event already started its departure.
+        if (this.customerMotions.get(customer.id)?.leaving) {
+          return;
+        }
         let node = this.customerNodes.get(customer.id);
         const target = this.customerPosition(key, index, width, height);
         if (!node) {
@@ -341,10 +347,7 @@ export class ShopScene extends Phaser.Scene {
         } else {
           const previous = this.customerMotions.get(customer.id);
           const targetChanged = !previous || previous.key !== key || previous.index !== index || Math.abs(previous.targetX - target.x) > 1 || Math.abs(previous.targetY - target.y) > 1;
-          if (previous?.leaving) {
-            this.tweens.killTweensOf(node);
-            this.customerMotions.set(customer.id, { key, index, targetX: target.x, targetY: target.y, entering: false, leaving: false });
-          } else if (targetChanged) {
+          if (targetChanged) {
             this.tweens.killTweensOf(node);
             this.customerMotions.set(customer.id, {
               key,
