@@ -3463,6 +3463,13 @@ body.react-ui-enabled .scene-recipe.is-locked .scene-recipe-level-dots {
  * the authored wall, counter and rug components in the export. Focus states
  * intentionally reveal the hit target for keyboard and assistive use.
  */
+body.react-ui-enabled .scene-figma-baseline {
+  --figma-scene-ink: #2a4a43;
+  --figma-scene-gold: #f5c76c;
+  --figma-scene-cream: #fff8e8;
+  --figma-scene-mint: #a8d7c7;
+}
+
 body.react-ui-enabled .scene-figma-baseline .scene-world-viewport {
   background: #7d5438;
 }
@@ -3525,31 +3532,44 @@ body.react-ui-enabled .scene-figma-baseline .scene-hud-actions {
   display: none;
 }
 
+/* Live values retain the exact geometry of Figma nodes 43:2092 and 27:511.
+   Their text is runtime data; the design's sample balance is not game state. */
 body.react-ui-enabled .scene-figma-baseline .scene-balance-chip {
   top: 20px;
   left: 24px;
   width: 94px;
   height: 54px;
-  align-content: center;
-  gap: 1px;
-  color: #fff6dc;
+  padding: 0;
+  color: var(--figma-scene-cream);
+  background: var(--figma-scene-ink);
+  border-radius: 12px;
 }
 
 body.react-ui-enabled .scene-figma-baseline .scene-balance-chip > span,
 body.react-ui-enabled .scene-figma-baseline .scene-balance-chip strong {
+  position: absolute;
+  left: 14px;
   display: block;
+  margin: 0;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 body.react-ui-enabled .scene-figma-baseline .scene-balance-chip > span {
-  color: #c9dccd;
+  top: 8px;
+  color: var(--figma-scene-mint);
   font-size: 11px;
   line-height: 13px;
 }
 
 body.react-ui-enabled .scene-figma-baseline .scene-balance-chip strong {
-  color: #fff6dc;
+  top: 28px;
+  max-width: 76px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--figma-scene-cream);
   font-size: 13px;
-  line-height: 18px;
+  line-height: 16px;
 }
 
 body.react-ui-enabled .scene-figma-baseline .scene-boost-chip {
@@ -3557,24 +3577,39 @@ body.react-ui-enabled .scene-figma-baseline .scene-boost-chip {
   right: 24px;
   width: 112px;
   height: 54px;
-  align-content: center;
-  gap: 1px;
-  color: #5e4324;
-  background: #f4c968;
+  padding: 0;
+  color: var(--figma-scene-ink);
+  background: var(--figma-scene-gold);
   border-radius: 12px;
+  font-family: Inter, "Noto Sans SC", "PingFang SC", sans-serif;
   text-align: left;
 }
 
 body.react-ui-enabled .scene-figma-baseline .scene-boost-chip strong,
 body.react-ui-enabled .scene-figma-baseline .scene-boost-chip small {
+  position: absolute;
+  left: 10px;
   display: block;
+  margin: 0;
   color: inherit;
-  font-size: 12px;
-  line-height: 17px;
+}
+
+body.react-ui-enabled .scene-figma-baseline .scene-boost-chip strong {
+  top: 8px;
+  width: 94px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 16px;
+  white-space: nowrap;
 }
 
 body.react-ui-enabled .scene-figma-baseline .scene-boost-chip small {
-  font-size: 10px;
+  top: 31px;
+  width: 74px;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 13px;
+  text-align: right;
 }
 
 body.react-ui-enabled .scene-figma-baseline .scene-business-toggle {
@@ -3634,31 +3669,42 @@ body.react-ui-enabled .scene-figma-baseline .scene-business-toggle .status-dot {
   cursor: pointer;
 }
 
+/* Figma node 24:327; current location still comes from the game view. */
 body.react-ui-enabled .scene-figma-baseline .scene-brand-plaque {
   position: absolute;
   top: 20px;
   right: 24px;
-  display: grid;
+  display: block;
   width: 166px;
   height: 54px;
-  align-content: center;
-  gap: 1px;
-  padding: 8px 12px;
-  color: #fff4d2;
-  background: #234f46;
-  border-radius: 14px;
+  padding: 0;
+  color: var(--figma-scene-cream);
+  background: var(--figma-scene-ink);
+  border-radius: 12px;
   font-family: "Noto Sans SC", "PingFang SC", sans-serif;
   pointer-events: auto;
 }
 
+body.react-ui-enabled .scene-figma-baseline .scene-brand-plaque strong,
+body.react-ui-enabled .scene-figma-baseline .scene-brand-plaque small {
+  position: absolute;
+  left: 12px;
+  width: 142px;
+  margin: 0;
+}
+
 body.react-ui-enabled .scene-figma-baseline .scene-brand-plaque strong {
+  top: 7px;
   font-size: 17px;
+  font-weight: 700;
   line-height: 20px;
 }
 
 body.react-ui-enabled .scene-figma-baseline .scene-brand-plaque small {
-  color: #c9dccd;
+  top: 32px;
+  color: var(--figma-scene-mint);
   font-size: 11px;
+  font-weight: 400;
   line-height: 13px;
 }
 
@@ -3721,6 +3767,9 @@ body.react-ui-enabled .scene-figma-baseline .scene-recipe > * {
 body.react-ui-enabled .scene-figma-baseline .scene-customer-lanes {
   position: absolute;
   inset: 0;
+  /* Child hit areas use world percentages, not the legacy queue-band size. */
+  width: 100%;
+  height: 100%;
   z-index: 32;
   display: block;
   pointer-events: none;

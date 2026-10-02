@@ -22,7 +22,7 @@
     npm run typecheck
     npm run build
 
-也可以使用 `npm run preview` 检查生产构建。项目保持本地浏览器原型范围，不部署到 GitHub，也不包含 GitHub Actions 或远程发布流程。
+也可以使用 `npm run preview` 检查生产构建。项目保持纯前端浏览器原型范围。仓库现有 GitHub Pages 从 `main` 根目录进行 legacy 构建，推送会触发已有的 `pages build and deployment`；该设置不执行本项目的 npm/Vite 构建，Pages 任务成功不等同于 Vite 应用运行验收。本次沿用现有发布设置。
 
 ## 当前已实现
 
@@ -52,4 +52,4 @@
 - `assets/`：场景、角色、柜台、咖啡杯、现金等视觉素材；Phaser 运行时通过 npm 依赖提供。
 - `package.json`、`vite.config.ts`、`tsconfig.json`：Vite、React、TypeScript strict 和 Phaser 工程配置。
 
-当前不会部署到 GitHub。迁移顺序、阶段门槛和未决策项见 [分阶段迁移清单](docs/development/migration-plan.md)，最终验证见 [迁移验收报告](docs/testing/runs/2026-09-19-1030-vite-react-migration/test-run.md)。
+迁移顺序、阶段门槛和未决策项见 [分阶段迁移清单](docs/development/migration-plan.md)，迁移验证见 [迁移验收报告](docs/testing/runs/2026-09-19-1030-vite-react-migration/test-run.md)。2026-10-02 的 HUD 对齐与候客层命中修复、实际验证和未覆盖范围见 [目标回归报告](docs/testing/runs/2026-10-02-hud-queue-hit/report.md)。
