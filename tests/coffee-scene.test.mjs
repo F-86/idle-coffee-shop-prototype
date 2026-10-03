@@ -91,6 +91,8 @@ const physicalControls = [
   ['menu-latte', 'menu-latte', { type: 'menu', recipe: 'latte' }],
   ['vault', 'vault-bank-label', { type: 'vault' }],
   ['manager', 'manager-cart-control', { type: 'manager' }],
+  ['settings', 'shop-settings-control', { type: 'settings' }],
+  ['pause', 'shop-pause-control', { type: 'pause' }],
 ];
 
 test('TC-3D-006 all physical room controls dispatch detail actions without mutating economy', () => {
@@ -145,7 +147,7 @@ test('TC-3D-001 cups, brew progress, table money, manager cart and machine upgra
     f.renderer.update(state, .05);
     const scene = f.renderer.scene;
     assert.equal(scene.getMeshByName('counter-a-progress').isEnabled(), true);
-    assert.ok(Math.abs(scene.getMeshByName('counter-a-progress-fill').scaling.x - .99) < 1e-9);
+    assert.ok(Math.abs(scene.getMeshByName('counter-a-progress-fill').scaling.x - .45) < 1e-9);
     assert.equal(scene.getTransformNodeByName('counter-a-ready-cup').isEnabled(), true);
     assert.equal(scene.getTransformNodeByName('counter-a-ready-cup').scaling.x, .82);
     assert.equal(scene.getTransformNodeByName('customer-10-takeaway').isEnabled(), false, 'cup remains at the machine during brewing');
@@ -215,7 +217,7 @@ for (const [width, height] of [[1280, 900], [390, 844], [844, 390]]) {
           const span = camera.orthoRight - camera.orthoLeft;
           assert.ok(span < 6, 'portrait retains large counters');
         }
-        if (height < 500) for (const key of ['menu-espresso', 'menu-latte', 'counter-a-upgrade', 'counter-b-upgrade']) assert.equal(f.renderer.projectAnchor(key).visible, true, `${key} is initially reachable below the landscape HUD`);
+        if (height < 500) for (const key of ['menu-espresso', 'menu-latte', 'counter-a-upgrade', 'counter-b-upgrade']) assert.equal(f.renderer.projectAnchor(key).visible, true, `${key} is fully visible in the initial landscape world`);
         const counter = f.renderer.scene.getMeshByName('counter-a-countertop');
         counter.computeWorldMatrix(true);
         const projected = counter.getBoundingInfo().boundingBox.vectorsWorld.map(v => Vector3.Project(v, Matrix.Identity(), f.renderer.scene.getTransformMatrix(), f.renderer.scene.activeCamera.viewport.toGlobal(f.engine.getRenderWidth(), f.engine.getRenderHeight())));
@@ -224,12 +226,14 @@ for (const [width, height] of [[1280, 900], [390, 844], [844, 390]]) {
         for (const [key, mesh] of physicalControls) {
           f.renderer.focusAnchor(key);
           const p = f.renderer.projectAnchor(key), physical = screenPoint(f, mesh);
-          assert.equal(p.visible, true, `${key} can be brought into view with its entire wide 44px-high control clear of the HUD`);
-          assert.ok(p.x >= 60 && p.x <= width - 60 && p.y >= 116 && p.y <= height - 26);
-          assert.ok(Math.abs(p.x - (physical.clientX - 35)) < .01 && Math.abs(p.y - (physical.clientY - 80)) < .01, `${key} overlay and physical target share the same world point`);
+          assert.equal(p.visible, true, `${key} can be brought fully into view at its physical size`);
+          assert.ok(p.x >= 12 && p.x <= width - 12 && p.y >= 12 && p.y <= height - 12);
+          const footprint = f.renderer.getAnchorFootprint(key);
+          assert.ok(footprint.width >= 44 && footprint.height >= 44, `${key} actual geometry is at least 44 CSS px in both axes (${footprint.width.toFixed(1)}×${footprint.height.toFixed(1)})`);
+          assert.ok(Math.abs(p.x - (physical.clientX - 35)) < .01 && Math.abs(p.y - (physical.clientY - 80)) < .01, `${key} diagnostic and physical target share the same world point`);
           tap(f, mesh);
         }
-        assert.deepEqual(f.actions, physicalControls.map(([, , action]) => action), 'DPR is applied exactly once when picking all nine controls');
+        assert.deepEqual(f.actions, physicalControls.map(([, , action]) => action), 'DPR is applied exactly once when picking all eleven controls');
       } finally { f.dispose(); }
     });
   }
@@ -301,39 +305,287 @@ test('TC-3D-006 wall menus remain global recipe boards while each counter select
 });
 
 
-test('TC-3D-006 projected DOM hit areas share captured drag, hold, cancel and single-action guards', () => {
+
+function surfaceDiameter(f, meshName) {
+  const mesh = f.renderer.scene.getMeshByName(meshName);
+  mesh.computeWorldMatrix(true);
+  const { minimum: lo, maximum: hi } = mesh.getBoundingInfo().boundingBox;
+  const a = screenPoint(f, meshName, new Vector3(lo.x, lo.y, 0));
+  const b = screenPoint(f, meshName, new Vector3(hi.x, lo.y, 0));
+  const c = screenPoint(f, meshName, new Vector3(lo.x, hi.y, 0));
+  const ex = b.clientX - a.clientX, ey = b.clientY - a.clientY;
+  const fx = c.clientX - a.clientX, fy = c.clientY - a.clientY;
+  // Distance between parallel polygon edges. This is stronger than a rotated AABB:
+  // a 44px circle fits on the actual projected parallelogram, not just its bounding box.
+  return Math.abs(ex * fy - ey * fx) / Math.max(Math.hypot(ex, ey), Math.hypot(fx, fy));
+}
+
+for (const [width, height] of [[1280, 900], [390, 844], [844, 390]]) {
+  for (const dpr of [1, 1.75]) {
+    test(`TC-3D-008 actual control polygon accepts a 44px circle at ${width}×${height}, DPR ${dpr} (geometry only)`, () => {
+      const f = fixture(width, height, 1 / dpr);
+      try {
+        for (const [key, mesh] of physicalControls) {
+          f.renderer.focusAnchor(key);
+          const diameter = surfaceDiameter(f, mesh);
+          assert.ok(diameter >= 44, `${key}: actual plane edge spacing ${diameter.toFixed(2)} CSS px`);
+          assert.equal(f.renderer.getFocus(), key);
+          assert.equal(f.renderer.activateFocused(), true, `${key}: currently visible front physical surface activates by keyboard`);
+        }
+        const manager = f.renderer.scene.getTransformNodeByName('manager-cash-cart');
+        for (let n = 0; n < 24; n++) {
+          manager.rotation.y = n * Math.PI / 12;
+          f.renderer.focusAnchor('manager');
+          assert.ok(surfaceDiameter(f, 'manager-cart-control') >= 44, `cart rotation ${n} preserves a real 44px target`);
+        }
+        assert.deepEqual(f.actions, physicalControls.map(([, , action]) => action));
+      } finally { f.dispose(); }
+    });
+  }
+}
+
+test('TC-3D-008 every label is lit opaque depth-tested ink on a mounted non-billboard scene slab', () => {
+  const f = fixture();
+  try {
+    assert.equal(typeof f.renderer.beginAnchorPointer, 'undefined', 'obsolete DOM hit-area seam is absent');
+    const labels = f.renderer.scene.meshes.filter(mesh => mesh.metadata?.coffeeLabel);
+    assert.ok(labels.length === 14);
+    for (const mesh of labels) {
+      assert.equal(mesh.billboardMode, 0, `${mesh.name}: no screen-facing geometry`);
+      assert.equal(mesh.renderingGroupId, 0, `${mesh.name}: normal scene depth order`);
+      assert.equal(mesh.receiveShadows, true);
+      assert.equal(mesh.material.disableLighting, false, `${mesh.name}: follows lights`);
+      assert.equal(mesh.material.disableDepthWrite, false, `${mesh.name}: writes depth`);
+      assert.deepEqual(mesh.material.emissiveColor.asArray(), [0, 0, 0], `${mesh.name}: no self-lit HUD ink`);
+      assert.equal(mesh.material.alpha, 1);
+      const mount = f.renderer.scene.getMeshByName(mesh.metadata.coffeeMount);
+      assert.ok(mount?.isVisible, `${mesh.name}: opaque slab is physically present`);
+      assert.equal(mount.material.alpha, 1);
+      assert.equal(mount.parent, mesh.parent, `${mesh.name}: label and mounting share room transform`);
+    }
+    for (const mesh of f.renderer.scene.meshes) {
+      assert.equal(mesh.billboardMode, 0, `${mesh.name}: no billboard progress/cash/control`);
+      if (mesh.metadata?.coffeeAction) {
+        assert.equal(mesh.isVisible, true, `${mesh.name}: no hidden action hitbox`);
+        assert.equal(mesh.material?.alpha ?? 1, 1, `${mesh.name}: action geometry is opaque`);
+      }
+    }
+    assert.equal(f.renderer.scene.getMeshByName('counter-a-progress').parent.name, 'counter-a-machine');
+    assert.equal(f.renderer.scene.getMeshByName('counter-a-cash-total').parent.name, 'counter-a-station');
+    for (const obsolete of ['manager-cart-hit', 'invite-touch-target', 'counter-a-counter-hit', 'counter-b-counter-hit']) assert.equal(f.renderer.scene.getMeshByName(obsolete), null);
+  } finally { f.dispose(); }
+});
+
+const { CreateBox } = await import('@babylonjs/core/Meshes/Builders/boxBuilder.js');
+function addForegroundBlocker(f, meshName, size = 4) {
+  const target = f.renderer.scene.getMeshByName(meshName);
+  target.computeWorldMatrix(true);
+  const world = Vector3.TransformCoordinates(Vector3.Zero(), target.getWorldMatrix());
+  const camera = f.renderer.scene.activeCamera;
+  const direction = camera.position.subtract(camera.getTarget()).normalize();
+  const blocker = CreateBox('qa-visible-foreground-solid', { size }, f.renderer.scene);
+  blocker.position.copyFrom(world.add(direction.scale(3)));
+  blocker.computeWorldMatrix(true);
+  return blocker;
+}
+
+test('TC-3D-008 front solid blocks pointer and keyboard; removing it restores real mesh picking', () => {
   const f = fixture(390, 844, 1 / 1.75);
   try {
-    const key = 'counter-a-recipe';
-    f.renderer.focusAnchor(key);
-    const p = f.renderer.projectAnchor(key);
-    const pointer = (timeStamp, extra = {}) => ({ pointerId: 1, isPrimary: true, button: 0, clientX: p.x + 35 + 38, clientY: p.y + 80, timeStamp, ...extra });
-    f.renderer.beginAnchorPointer(key, pointer(0));
-    assert.equal(f.canvas.captured.has(1), true, 'DOM pointer is captured by the canvas');
-    f.canvas.emit('pointerup', pointer(150));
-    assert.deepEqual(f.actions, [{ type: 'recipe', id: 'counter-a' }], 'expanded DOM area dispatches its anchor action, not the counter underneath');
-    f.canvas.emit('pointerup', pointer(160));
-    assert.equal(f.actions.length, 1, 'extra up cannot duplicate the action');
-    f.renderer.beginAnchorPointer(key, pointer(200));
-    f.canvas.emit('pointerup', pointer(1050));
-    assert.equal(f.actions.length, 1, 'long hold on DOM control is not an action');
-    f.renderer.beginAnchorPointer(key, pointer(1200));
-    f.canvas.emit('pointermove', pointer(1260, { clientX: p.x + 135 }));
-    f.canvas.emit('pointermove', pointer(1300));
-    f.canvas.emit('pointerup', pointer(1350));
-    assert.equal(f.actions.length, 1, 'drag returning to DOM control cannot become a click');
-    f.renderer.focusAnchor(key);
-    const restored = f.renderer.projectAnchor(key);
-    const centered = { pointerId: 1, isPrimary: true, button: 0, clientX: restored.x + 35, clientY: restored.y + 80, timeStamp: 1500 };
-    f.renderer.beginAnchorPointer(key, centered);
-    f.canvas.emit('pointercancel', { ...centered, timeStamp: 1550 });
-    f.canvas.emit('pointerup', { ...centered, timeStamp: 1600 });
-    assert.equal(f.actions.length, 1, 'cancelled DOM press cannot fire later');
-    f.renderer.beginAnchorPointer(key, { ...centered, isPrimary: false, pointerId: 2 });
-    f.canvas.emit('pointerup', { ...centered, isPrimary: false, pointerId: 2 });
-    assert.equal(f.actions.length, 1, 'secondary DOM pointer is ignored');
-    f.renderer.beginAnchorPointer(key, { ...centered, timeStamp: 1800 });
-    f.canvas.emit('pointerup', { ...centered, timeStamp: 1900 });
-    assert.equal(f.actions.length, 2, 'ordinary DOM tap still works after interrupted gestures');
+    f.renderer.focusAnchor('menu-espresso');
+    const blocker = addForegroundBlocker(f, 'menu-espresso');
+    assert.equal(f.renderer.projectAnchor('menu-espresso').visible, true, 'projection alone does not know occlusion');
+    tap(f, 'menu-espresso');
+    assert.equal(f.renderer.activateFocused(), false, 'fully covered focused mesh cannot activate');
+    assert.deepEqual(f.actions, [], 'no predicate-only click-through');
+    blocker.setEnabled(false);
+    tap(f, 'menu-espresso');
+    assert.equal(f.renderer.activateFocused(), true);
+    assert.deepEqual(f.actions, [{ type: 'menu', recipe: 'espresso' }, { type: 'menu', recipe: 'espresso' }]);
+    f.renderer.panBy(100000, 100000);
+    assert.equal(f.renderer.projectAnchor('menu-espresso').visible, false);
+    assert.equal(f.renderer.activateFocused(), false, 'panned-away control cannot activate');
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-008 pointer start and release require the same moving visible mesh, exactly once', () => {
+  const f = fixture();
+  try {
+    f.renderer.focusAnchor('manager');
+    const point = screenPoint(f, 'manager-cart-control');
+    f.canvas.emit('pointerdown', { ...point, timeStamp: 10 });
+    const state = createInitialState();
+    state.manager.x = -4; state.manager.z = -1.7; state.manager.phase = 'moving';
+    f.renderer.update(state, .1);
+    f.canvas.emit('pointerup', { ...point, timeStamp: 160 });
+    assert.deepEqual(f.actions, [], 'moving cart leaving the original press cannot retarget it');
+    f.renderer.focusAnchor('manager');
+    const moved = screenPoint(f, 'manager-cart-control');
+    const blocker = addForegroundBlocker(f, 'manager-cart-control');
+    f.canvas.emit('pointerdown', { ...moved, timeStamp: 200 });
+    blocker.setEnabled(false);
+    f.canvas.emit('pointerup', { ...moved, timeStamp: 300 });
+    assert.deepEqual(f.actions, [], 'press on foreground cannot become an action on the newly uncovered cart');
+    f.renderer.focusAnchor('manager');
+    const centered = screenPoint(f, 'manager-cart-control');
+    const originalX = f.renderer.scene.getTransformNodeByName('manager').position.x;
+    f.canvas.emit('pointerdown', { ...centered, timeStamp: 350 });
+    state.manager.x = originalX + .5;
+    f.renderer.update(state, 0);
+    state.manager.x = originalX;
+    f.renderer.update(state, 0);
+    f.canvas.emit('pointerup', { ...centered, timeStamp: 550 });
+    assert.deepEqual(f.actions, [], 'moving away and back invalidates a press even when the same wide physical mesh remains underneath');
+    tap(f, 'manager-cart-control', 'manager');
+    f.canvas.emit('pointerup', { ...moved, timeStamp: 620 });
+    assert.deepEqual(f.actions, [{ type: 'manager' }], 'one captured tap fires once');
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-008 opening a modal cancels captured input; every interaction stays suspended until close', () => {
+  const f = fixture(390, 844);
+  try {
+    f.renderer.focusAnchor('counter-a-recipe');
+    const point = screenPoint(f, 'counter-a-recipe-selector');
+    f.canvas.emit('pointerdown', { ...point });
+    f.renderer.setInteractionEnabled(false);
+    assert.equal(f.canvas.captured.size, 0, 'dialog suspension releases active capture');
+    const camera = f.renderer.scene.activeCamera.position.asArray();
+    f.canvas.emit('pointermove', { ...point, clientX: point.clientX + 70 });
+    f.canvas.emit('pointerup', { ...point });
+    tap(f, 'invite-guest-sign');
+    f.renderer.panBy(100, 100);
+    assert.equal(f.renderer.focusNext(), null);
+    f.renderer.focusAnchor('settings');
+    assert.equal(f.renderer.activateFocused(), false);
+    assert.deepEqual(f.renderer.scene.activeCamera.position.asArray(), camera);
+    assert.deepEqual(f.actions, []);
+    f.renderer.setInteractionEnabled(true);
+    tap(f, 'counter-a-recipe-selector', 'counter-a-recipe');
+    assert.deepEqual(f.actions, [{ type: 'recipe', id: 'counter-a' }]);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-008 keyboard cycles every embodied control, preserves physical focus and is inert after disposal', () => {
+  const f = fixture();
+  try {
+    const keys = physicalControls.map(([key]) => key);
+    const visited = new Set();
+    for (let i = 0; i < keys.length; i++) {
+      const key = f.renderer.focusNext();
+      visited.add(key);
+      assert.equal(f.renderer.projectAnchor(key).visible, true);
+    }
+    assert.deepEqual([...visited].sort(), [...keys].sort());
+    const last = f.renderer.getFocus();
+    const next = f.renderer.focusNext(1);
+    assert.notEqual(next, last);
+    assert.equal(f.renderer.focusNext(-1), last);
+    const mesh = f.renderer.scene.meshes.find(mesh => mesh.metadata?.coffeeAnchor === last);
+    const mount = f.renderer.scene.getMeshByName(mesh.metadata.coffeeMount);
+    assert.deepEqual(mount.material.diffuseColor.asArray(), [225 / 255, 187 / 255, 105 / 255], 'highlight is a matte physical mounting rim');
+    f.renderer.dispose();
+    assert.equal(f.renderer.getFocus(), null);
+    assert.equal(f.renderer.focusNext(), null);
+    assert.equal(f.renderer.activateFocused(), false);
+    f.renderer.panBy(10, 10);
+    f.renderer.setInteractionEnabled(true);
+    assert.deepEqual(f.actions, []);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-008 side-front upgrade plaques remain hittable while a customer occupies the service point', () => {
+  const f = fixture(844, 390);
+  try {
+    const state = createInitialState();
+    state.customers = [0, 5].map((x, i) => ({ id: i + 1, x, z: 1.5, phase: 'serving', counterId: i ? 'counter-b' : 'counter-a', timer: 0, hasCup: false, skin: i }));
+    f.renderer.update(state, .05);
+    tap(f, 'counter-a-upgrade-plaque', 'counter-a-upgrade');
+    tap(f, 'counter-b-upgrade-plaque', 'counter-b-upgrade');
+    assert.deepEqual(f.actions, [{ type: 'counter', id: 'counter-a' }, { type: 'counter', id: 'counter-b' }], 'lane customer naturally occludes its own body without covering the side plaque center');
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-008 raised trolley cash bay stays visible while manager turns without orbiting tray into furniture', () => {
+  const f = fixture(844, 390, 1 / 1.75);
+  try {
+    const state = createInitialState();
+    state.manager.carrying = 3600; state.manager.x = -4; state.manager.z = -1.7; state.manager.phase = 'collecting';
+    f.renderer.update(state, 0);
+    const manager = f.renderer.scene.getTransformNodeByName('manager');
+    const cart = f.renderer.scene.getTransformNodeByName('manager-cash-cart');
+    const cartPosition = cart.position.asArray();
+    for (let n = 0; n < 24; n++) {
+      manager.rotation.y = n * Math.PI / 12;
+      f.renderer.focusAnchor('manager');
+      assert.deepEqual(cart.rotation.asArray(), [0, 0, 0], 'physical tray is world-oriented; it does not follow the camera or manager turns');
+      assert.deepEqual(cart.position.asArray(), cartPosition);
+      let visibleNote = false;
+      for (let i = 0; i < 6; i++) {
+        const point = screenPoint(f, `cart-cash-${i}-top`, new Vector3(0, .5, 0));
+        const pick = f.renderer.scene.pick(point.x * f.engine.getHardwareScalingLevel(), point.y * f.engine.getHardwareScalingLevel());
+        if (pick?.pickedMesh?.name.startsWith('cart-cash-')) visibleNote = true;
+      }
+      assert.equal(visibleNote, true, `manager angle ${n}: at least one actual transported note is visible to the camera`);
+    }
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-008 world-oriented trolley clears wall, counters and baristas throughout the service route', () => {
+  const f = fixture();
+  try {
+    const state = createInitialState();
+    state.manager.carrying = 3600;
+    const cart = f.renderer.scene.getTransformNodeByName('manager-cash-cart');
+    const parts = cart.getChildMeshes();
+    const scene = f.renderer.scene;
+    const managerParts = scene.getTransformNodeByName('manager').getChildMeshes();
+    // All visible opaque room solids, including every clipboard mount, wall panel,
+    // wainscot rail, station, barista and plant. Only the trolley and its handler are excluded.
+    const obstacles = scene.meshes.filter(mesh => mesh.isVisible && mesh.isEnabled() && mesh.material?.alpha === 1 && !parts.includes(mesh) && !managerParts.includes(mesh));
+    for (let x = -8; x <= 5; x += .5) {
+      state.manager.x = x; state.manager.z = -1.7; state.manager.phase = x === 0 || x === 5 ? 'collecting' : 'moving';
+      f.renderer.update(state, 0);
+      assert.deepEqual(cart.rotation.asArray(), [0, 0, 0]);
+      assert.equal(cart.position.y, 0, 'walking manager bob does not lift trolley off the floor');
+      for (const part of parts) {
+        if (!part.isEnabled()) continue;
+        part.computeWorldMatrix(true);
+        const a = part.getBoundingInfo().boundingBox;
+        for (const obstacle of obstacles) {
+          obstacle.computeWorldMatrix(true);
+          const b = obstacle.getBoundingInfo().boundingBox;
+          const overlap = ['x', 'y', 'z'].map(axis => Math.min(a.maximumWorld[axis], b.maximumWorld[axis]) - Math.max(a.minimumWorld[axis], b.minimumWorld[axis]));
+          assert.ok(overlap.some(value => value <= .001), `${part.name} does not penetrate ${obstacle.name} at manager route x=${x}`);
+        }
+      }
+      f.renderer.focusAnchor('manager');
+      let visible = false;
+      const occluders = [];
+      for (let i = 0; i < 6; i++) {
+        const point = screenPoint(f, `cart-cash-${i}-top`, new Vector3(0, .5, 0));
+        const pick = scene.pick(point.x, point.y);
+        if (pick?.pickedMesh?.name.startsWith('cart-cash-')) visible = true;
+        else if (pick?.pickedMesh) occluders.push(pick.pickedMesh);
+      }
+      if (x === -8 || state.manager.phase === 'collecting') assert.equal(visible, true, `transported notes are actually front-visible at cash handoff/deposit x=${x}`);
+      if (!visible) {
+        assert.equal(occluders.length, 6);
+        assert.ok(occluders.every(mesh => mesh.isVisible && mesh.material?.alpha === 1 && !mesh.name.includes('manager-cart-control')), 'between stops, any cash occlusion comes from actual opaque shop/person geometry, never the clipboard');
+      }
+    }
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-008 small pending cash stays physically visible beside the counter register', () => {
+  const f = fixture(390, 844, 1 / 1.75);
+  try {
+    const state = createInitialState();
+    state.counters[0].pendingCash = 110;
+    f.renderer.update(state, .05);
+    f.renderer.focusAnchor('counter-a-recipe');
+    const point = screenPoint(f, 'counter-a-cash-0-top', new Vector3(0, .5, 0));
+    const pick = f.renderer.scene.pick(point.x * f.engine.getHardwareScalingLevel(), point.y * f.engine.getHardwareScalingLevel());
+    assert.ok(pick?.pickedMesh?.name.startsWith('counter-a-cash-0-'), 'first small note pile is visible, rather than roofed by its cash amount display');
   } finally { f.dispose(); }
 });

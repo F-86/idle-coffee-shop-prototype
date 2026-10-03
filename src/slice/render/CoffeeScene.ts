@@ -27,19 +27,21 @@ export type CoffeeSceneAction =
   | { type: 'recipe'; id: CounterId }
   | { type: 'menu'; recipe: RecipeId }
   | { type: 'vault' }
-  | { type: 'manager' };
+  | { type: 'manager' }
+  | { type: 'settings' }
+  | { type: 'pause' };
 
 export type CoffeeSceneAnchor =
   | 'invite' | 'counter-a-upgrade' | 'counter-b-upgrade'
   | 'counter-a-recipe' | 'counter-b-recipe'
-  | 'menu-espresso' | 'menu-latte' | 'vault' | 'manager';
+  | 'menu-espresso' | 'menu-latte' | 'vault' | 'manager' | 'settings' | 'pause';
 export interface AnchorProjection { x: number; y: number; visible: boolean }
 
 /** The optional engine is a QA seam; normal callers only supply canvas and action callback. */
 export interface CoffeeSceneOptions { engine?: AbstractEngine; shadows?: boolean }
 
 type Shape = 'box' | 'cylinder' | 'sphere' | 'ring';
-type PointerGesture = { id: number; x: number; y: number; lastX: number; lastY: number; time: number; dragged: boolean; action?: CoffeeSceneAction };
+type PointerGesture = { id: number; x: number; y: number; lastX: number; lastY: number; time: number; dragged: boolean; target: Mesh | null; targetPoint: Vector3 | null; invalidated: boolean; action?: CoffeeSceneAction };
 type Label = { mesh: Mesh; texture: DynamicTexture | null; key: string };
 type Person = {
   root: TransformNode;
@@ -80,7 +82,7 @@ const SHIRTS = ['#c86e5d', '#5c9ca6', '#d3ac50', '#8b84ae', '#779f74', '#c28798'
 const HAIR = ['#3d3531', '#6c4531', '#d5b677', '#493b49', '#aba99d'];
 const TAU = Math.PI * 2;
 const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
-const cashText = (cents: number) => `¤ ${(cents / 100).toFixed(2)}`;
+const cashText = (cents: number) => `¥ ${(cents / 100).toFixed(2)}`;
 
 /**
  * Original, asset-free immersive coffee-shop room. It only presents snapshots: all movement,
@@ -109,14 +111,19 @@ export class CoffeeScene {
   private readonly labels: Label[] = [];
   private readonly manager: Person;
   private readonly managerLabel: Label;
+  private managerCart!: TransformNode;
   private readonly cartCash: TransformNode[] = [];
   private readonly invite: Label;
   private readonly vaultLamp: Mesh;
   private readonly shadowGenerator: ShadowGenerator | null;
   private disposed = false;
+  private interactionEnabled = true;
   private animationTime = 0;
   private lastInviteKey = '';
   private selected: CounterId | null = null;
+  private focused: CoffeeSceneAnchor | null = null;
+  private readonly focusMaterials = new Map<Mesh, StandardMaterial>();
+  private readonly pauseLabel: Label;
   private down: PointerGesture | null = null;
 
   constructor(
@@ -168,6 +175,7 @@ export class CoffeeScene {
     this.stations.set('counter-b', this.makeStation('counter-b', 5, COLORS.rose, COLORS.roseDark, 'B'));
     this.makeMenu('espresso', 0);
     this.makeMenu('latte', 5);
+    this.pauseLabel = this.makeServicePanel();
     this.invite = this.makeEntrance();
     this.vaultLamp = this.makeVault();
     this.manager = this.makePerson('manager', 1, '#e0ad52', false, true);
@@ -220,11 +228,20 @@ export class CoffeeScene {
     if (inviteKey !== this.lastInviteKey) {
       this.paintLabel(this.invite, inviteKey, (ctx, w, h) => {
         this.roundRect(ctx, 8, 8, w - 16, h - 16, 30, state.inviteCooldown > 0 ? '#a89973' : '#dca84b');
-        this.text(ctx, state.inviteCooldown > 0 ? `NEXT GUEST · ${Math.ceil(state.inviteCooldown)}s` : 'INVITE A GUEST  +', w / 2, h / 2 + 2, 46, '#ffffff');
+        this.text(ctx, state.inviteCooldown > 0 ? `稍候 ${Math.ceil(state.inviteCooldown)} 秒` : '迎接顾客  +', w / 2, h / 2 + 2, 94, '#ffffff');
       });
       this.lastInviteKey = inviteKey;
     }
+    this.paintLabel(this.pauseLabel, state.paused ? 'paused' : 'running', (ctx, w, h) => {
+      this.roundRect(ctx, 0, 0, w, h, 12, '#efe4c5');
+      this.text(ctx, state.paused ? '▶' : 'Ⅱ', w / 2, h * .38, 100, '#315d54');
+      this.text(ctx, state.paused ? '继续' : '暂停', w / 2, h * .78, 85, '#315d54');
+    });
     this.vaultLamp.material = this.material(state.manager.phase === 'depositing' && state.manager.carrying > 0 ? '#f6dc79' : '#92bfa3', true);
+    if (this.down?.target && this.down.targetPoint) {
+      const point = this.projectWorld(this.anchorWorld(this.down.target));
+      if (this.down.target.isDisposed() || Math.hypot(point.x - this.down.targetPoint.x, point.y - this.down.targetPoint.y) > 9) this.down.invalidated = true;
+    }
     this.scene.render();
   }
 
@@ -234,37 +251,77 @@ export class CoffeeScene {
     for (const [stationId, station] of this.stations) station.selection.setEnabled(stationId === id);
   }
 
-  /** CSS coordinates relative to the actual canvas, including a full 44px control footprint. */
+  /** CSS projection of the actual visible mesh, never a screen-space hit area. */
   projectAnchor(key: CoffeeSceneAnchor): AnchorProjection {
     const mesh = this.anchors.get(key);
     const rect = this.canvas.getBoundingClientRect();
     if (this.disposed || !mesh || !rect.width || !rect.height) return { x: 0, y: 0, visible: false };
-    const world = this.anchorWorld(mesh);
-    this.scene.updateTransformMatrix(true);
-    const width = this.engine.getRenderWidth(), height = this.engine.getRenderHeight();
-    const p = Vector3.Project(world, Matrix.IdentityReadOnly, this.scene.getTransformMatrix(), this.camera.viewport.toGlobal(width, height));
-    // Projection is framebuffer-based; CSS conversion uses the real rect, not a second DPR multiplier.
-    const x = p.x * rect.width / width, y = p.y * rect.height / height;
-    const sideInset = 60, bottomInset = 26, topInset = 116;
-    return { x, y, visible: mesh.isEnabled() && p.z >= 0 && p.z <= 1 && x >= sideInset && x <= rect.width - sideInset && y >= topInset && y <= rect.height - bottomInset };
+    const points = this.projectMesh(mesh);
+    const p = this.projectWorld(this.anchorWorld(mesh));
+    const minX = Math.min(...points.map(point => point.x)), maxX = Math.max(...points.map(point => point.x));
+    const minY = Math.min(...points.map(point => point.y)), maxY = Math.max(...points.map(point => point.y));
+    return { x: p.x, y: p.y, visible: mesh.isEnabled() && p.z >= 0 && p.z <= 1 && minX >= 12 && maxX <= rect.width - 12 && minY >= 12 && maxY <= rect.height - 12 };
   }
 
-  /** DOM hit areas use exactly the same captured drag/hold/cancel guard as physical picks. */
-  beginAnchorPointer(key: CoffeeSceneAnchor, event: PointerEvent): void {
-    if (this.disposed || this.down || !this.projectAnchor(key).visible) return;
-    const action = this.anchors.get(key)?.metadata?.coffeeAction as CoffeeSceneAction | undefined;
-    if (!action) return;
-    const down = this.handleDown(event);
-    if (down) down.action = action;
+  /** Diagnostic footprint is computed from the physical polygon, in CSS pixels. */
+  getAnchorFootprint(key: CoffeeSceneAnchor): { width: number; height: number } {
+    const mesh = this.anchors.get(key);
+    if (this.disposed || !mesh) return { width: 0, height: 0 };
+    const points = this.projectMesh(mesh);
+    return { width: Math.max(...points.map(p => p.x)) - Math.min(...points.map(p => p.x)), height: Math.max(...points.map(p => p.y)) - Math.min(...points.map(p => p.y)) };
   }
 
-  /** Brings a cropped physical control back into view without shrinking the entire shop. */
+  setInteractionEnabled(enabled: boolean): void {
+    if (this.disposed) return;
+    this.interactionEnabled = enabled;
+    if (!enabled) this.releasePointer();
+  }
+
+  getFocus(): CoffeeSceneAnchor | null { return this.disposed ? null : this.focused; }
+
+  /** Keyboard focus recolors a real mounting rim and centers that object at useful scale. */
   focusAnchor(key: CoffeeSceneAnchor): void {
-    if (this.disposed || this.projectAnchor(key).visible) return;
+    if (this.disposed || !this.interactionEnabled) return;
     const mesh = this.anchors.get(key);
     if (!mesh) return;
+    for (const [mount, material] of this.focusMaterials) mount.material = material;
+    this.focusMaterials.clear();
+    const mount = this.scene.getMeshByName(mesh.metadata?.coffeeMount ?? '');
+    if (mount instanceof Mesh && mount.material instanceof StandardMaterial) {
+      this.focusMaterials.set(mount, mount.material);
+      mount.material = this.material('#e1bb69');
+    }
+    this.focused = key;
+    this.refreshPanBounds();
     const relative = this.anchorWorld(mesh).subtract(this.baseTarget);
     this.setPan(Vector3.Dot(relative, this.screenRight), Vector3.Dot(relative, this.screenUp));
+  }
+
+  focusNext(direction = 1): CoffeeSceneAnchor | null {
+    if (this.disposed || !this.interactionEnabled) return null;
+    const keys = [...this.anchors.keys()];
+    const current = this.focused ? keys.indexOf(this.focused) : -1;
+    const next = current < 0 ? (direction < 0 ? keys.length - 1 : 0) : (current + (direction < 0 ? -1 : 1) + keys.length) % keys.length;
+    this.focusAnchor(keys[next]);
+    return this.focused;
+  }
+
+  activateFocused(): boolean {
+    if (this.disposed || !this.interactionEnabled || !this.focused || this.down) return false;
+    const mesh = this.anchors.get(this.focused);
+    const action = mesh?.metadata?.coffeeAction as CoffeeSceneAction | undefined;
+    if (!mesh?.isEnabled() || !action || !this.projectAnchor(this.focused).visible || !this.visibleSurface(mesh)) return false;
+    this.onAction(action);
+    return true;
+  }
+
+  /** Screen-plane keyboard pan shares the exact bounds and scale used by pointer dragging. */
+  panBy(cssDx: number, cssDy: number): void {
+    if (this.disposed || !this.interactionEnabled || !Number.isFinite(cssDx) || !Number.isFinite(cssDy)) return;
+    const rect = this.canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    this.setPan(this.panX + cssDx * (this.camera.orthoRight! - this.camera.orthoLeft!) / rect.width,
+      this.panY - cssDy * (this.camera.orthoTop! - this.camera.orthoBottom!) / rect.height);
   }
 
   resize(): void {
@@ -274,13 +331,13 @@ export class CoffeeScene {
     const aspect = Math.max(0.1, rect.width / Math.max(1, rect.height));
     // Phones crop a room at useful object scale. Landscape sees a close counter-and-wall view;
     // portrait has vertical room for queues, while dragging reveals the other shop areas.
-    const halfHeight = aspect > 1.8 ? 4.25 : 6.15;
+    const halfHeight = aspect > 1.8 ? 3.65 : 6.15;
     this.camera.orthoLeft = -halfHeight * aspect;
     this.camera.orthoRight = halfHeight * aspect;
     this.camera.orthoTop = halfHeight;
     this.camera.orthoBottom = -halfHeight;
     this.refreshPanBounds();
-    if (!this.hasSized && aspect > 1.8) this.panY = 2.4;
+    if (!this.hasSized && aspect > 1.8) { this.panX = -3.4; this.panY = 1.8; }
     this.hasSized = true;
     this.setPan(this.panX, this.panY);
   }
@@ -304,25 +361,25 @@ export class CoffeeScene {
     this.shapes.clear();
     this.labels.length = 0;
     this.anchors.clear();
+    this.focusMaterials.clear();
+    this.focused = null;
   }
 
   private readonly handleDown = (event: PointerEvent): PointerGesture | null => {
-    if (this.disposed || this.down || !event.isPrimary || event.button !== 0) return null;
-    this.down = { id: event.pointerId, x: event.clientX, y: event.clientY, lastX: event.clientX, lastY: event.clientY, time: event.timeStamp, dragged: false };
+    if (this.disposed || !this.interactionEnabled || this.down || !event.isPrimary || event.button !== 0) return null;
+    const target = this.pickAt(event.clientX, event.clientY);
+    const action = target?.metadata?.coffeeAction as CoffeeSceneAction | undefined;
+    const targetPoint = target ? this.projectWorld(this.anchorWorld(target)) : null;
+    this.down = { target, targetPoint, invalidated: false, action, id: event.pointerId, x: event.clientX, y: event.clientY, lastX: event.clientX, lastY: event.clientY, time: event.timeStamp, dragged: false };
     this.canvas.setPointerCapture(event.pointerId);
     return this.down;
   };
   private readonly handleMove = (event: PointerEvent): void => {
     const down = this.down;
-    if (!down || event.pointerId !== down.id) return;
+    if (!this.interactionEnabled || !down || event.pointerId !== down.id) return;
     if (Math.hypot(event.clientX - down.x, event.clientY - down.y) > 9) down.dragged = true;
     if (down.dragged) {
-      const rect = this.canvas.getBoundingClientRect();
-      if (rect.width && rect.height) {
-        const dx = event.clientX - down.lastX, dy = event.clientY - down.lastY;
-        this.setPan(this.panX - dx * (this.camera.orthoRight! - this.camera.orthoLeft!) / rect.width,
-          this.panY + dy * (this.camera.orthoTop! - this.camera.orthoBottom!) / rect.height);
-      }
+      this.panBy(down.lastX - event.clientX, down.lastY - event.clientY);
     }
     down.lastX = event.clientX; down.lastY = event.clientY;
   };
@@ -331,25 +388,65 @@ export class CoffeeScene {
   };
   private readonly handleUp = (event: PointerEvent): void => {
     const down = this.down;
-    if (!down || event.pointerId !== down.id) return;
+    if (!this.interactionEnabled || !down || event.pointerId !== down.id) return;
     this.releasePointer();
-    if (this.disposed || down.dragged || event.timeStamp - down.time > 800) return;
+    if (this.disposed || !this.interactionEnabled || down.dragged || down.invalidated || event.timeStamp - down.time > 800) return;
     if (Math.hypot(event.clientX - down.x, event.clientY - down.y) > 9) return;
+    const target = this.pickAt(event.clientX, event.clientY);
+    const action = target?.metadata?.coffeeAction as CoffeeSceneAction | undefined;
+    if (target && down.targetPoint) {
+      const point = this.projectWorld(this.anchorWorld(target));
+      if (Math.hypot(point.x - down.targetPoint.x, point.y - down.targetPoint.y) > 9) return;
+    }
+    // Both ends must hit the same actual mesh. A moving cart, new foreground customer,
+    // a background press or a camera jump cannot retarget a captured press on release.
+    if (target && target === down.target && action && down.action && JSON.stringify(action) === JSON.stringify(down.action)) this.onAction(action);
+  };
+
+  private pickAt(clientX: number, clientY: number): Mesh | null {
     const rect = this.canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    const cssX = event.clientX - rect.left, cssY = event.clientY - rect.top;
-    if (cssX < 0 || cssY < 0 || cssX > rect.width || cssY > rect.height) return;
-    if (down.action) { this.onAction(down.action); return; }
-    // Babylon's ray helper applies hardware scaling itself. Convert CSS into its logical
-    // rendering coordinates once, even when the backing buffer is 1.75× the canvas rect.
+    if (this.disposed || !rect.width || !rect.height) return null;
+    const cssX = clientX - rect.left, cssY = clientY - rect.top;
+    if (cssX < 0 || cssY < 0 || cssX > rect.width || cssY > rect.height) return null;
+    // Babylon applies hardware scaling in its ray helper; convert to logical coordinates once.
     const scale = this.engine.getHardwareScalingLevel();
     const x = cssX * this.engine.getRenderWidth() * scale / rect.width;
     const y = cssY * this.engine.getRenderHeight() * scale / rect.height;
     this.scene.updateTransformMatrix(true);
-    const pick = this.scene.pick(x, y, mesh => Boolean(mesh.metadata?.coffeeAction), false, this.camera);
-    const action = pick?.pickedMesh?.metadata?.coffeeAction as CoffeeSceneAction | undefined;
-    if (pick?.hit && action) this.onAction(action);
-  };
+    // Pick the front visible solid, including people, furniture and all control mounts.
+    // Restricting the predicate to actions would incorrectly click through occluding objects.
+    const pick = this.scene.pick(x, y, undefined, false, this.camera);
+    return pick?.hit && pick.pickedMesh instanceof Mesh ? pick.pickedMesh : null;
+  }
+
+  private visibleSurface(mesh: Mesh): boolean {
+    const rect = this.canvas.getBoundingClientRect();
+    const action = mesh.metadata?.coffeeAction;
+    const box = mesh.getBoundingInfo().boundingBox;
+    // Check actual surface points, never enlarged invisible rectangles. Partial occlusion
+    // leaves the visible part keyboard-usable while a fully covered object cannot activate.
+    for (const [u, v] of [[0, 0], [-.35, 0], [.35, 0], [0, -.35], [0, .35], [-.35, .35], [.35, .35], [-.35, -.35], [.35, -.35]]) {
+      const local = new Vector3((box.maximum.x - box.minimum.x) * u, (box.maximum.y - box.minimum.y) * v, 0);
+      const point = this.projectWorld(Vector3.TransformCoordinates(local, mesh.getWorldMatrix()));
+      const picked = this.pickAt(rect.left + point.x, rect.top + point.y);
+      if (picked && picked.metadata?.coffeeAction && JSON.stringify(picked.metadata.coffeeAction) === JSON.stringify(action)) return true;
+    }
+    return false;
+  }
+
+  private projectWorld(world: Vector3): Vector3 {
+    const rect = this.canvas.getBoundingClientRect();
+    this.scene.updateTransformMatrix(true);
+    const width = this.engine.getRenderWidth(), height = this.engine.getRenderHeight();
+    const p = Vector3.Project(world, Matrix.IdentityReadOnly, this.scene.getTransformMatrix(), this.camera.viewport.toGlobal(width, height));
+    p.x *= rect.width / width; p.y *= rect.height / height;
+    return p;
+  }
+
+  private projectMesh(mesh: Mesh): Vector3[] {
+    mesh.computeWorldMatrix(true);
+    return mesh.getBoundingInfo().boundingBox.vectorsWorld.map(point => this.projectWorld(point));
+  }
 
   private releasePointer(): void {
     const id = this.down?.id;
@@ -375,17 +472,9 @@ export class CoffeeScene {
       minX = Math.min(minX, x); maxX = Math.max(maxX, x);
       minY = Math.min(minY, y); maxY = Math.max(maxY, y);
     }
-    const halfWidth = this.camera.orthoRight!, halfHeight = this.camera.orthoTop!;
-    // A control-sized inset remains reachable at both ends. A fully visible room cannot
-    // be dragged off into empty space; cropped portrait/landscape can traverse its anchors.
-    const rect = this.canvas.getBoundingClientRect();
-    const insetX = Math.max(.8, halfWidth * 2 * 64 / Math.max(1, rect.width));
-    const insetBottom = Math.max(.8, halfHeight * 2 * 30 / Math.max(1, rect.height));
-    const insetTop = Math.max(.8, halfHeight * 2 * 120 / Math.max(1, rect.height));
-    this.panBounds = {
-      left: Math.min(0, minX + halfWidth - insetX), right: Math.max(0, maxX - halfWidth + insetX),
-      bottom: Math.min(0, minY + halfHeight - insetBottom), top: Math.max(0, maxY - halfHeight + insetTop),
-    };
+    // Each anchor can be centered. The continuous room extends beyond these bounded views;
+    // there is no zoom-out fitting step and keyboard and pointer use identical limits.
+    this.panBounds = { left: minX, right: maxX, bottom: minY, top: maxY };
   }
 
   private setPan(x: number, y: number): void {
@@ -423,7 +512,8 @@ export class CoffeeScene {
     }
     const mesh = base.clone(name, parent ?? null, true)!;
     mesh.isVisible = true;
-    mesh.isPickable = false;
+    mesh.isPickable = true;
+    mesh.receiveShadows = true;
     mesh.scaling.copyFrom(size);
     mesh.position.copyFrom(position);
     mesh.material = this.material(color);
@@ -458,7 +548,7 @@ export class CoffeeScene {
     for (let x = -28; x < 28; x += .72) this.box(`wall-panel-${x}`, .024, 1.1, .04, x, .64, -3.49, '#3f7b71', undefined, false);
     // A high picture rail and pendant lamps make the background read as an interior.
     this.box('wall-picture-rail', 140, .12, .15, 0, 4.28, -3.52, COLORS.woodLight, undefined, false);
-    for (const x of [-8, -2.5, 5.5, 10.5]) {
+    for (const x of [-11, 2.6, 10.8]) {
       this.box(`pendant-cord-${x}`, .025, 1.15, .025, x, 4.5, -.8, COLORS.dark, undefined, false);
       this.cylinder(`pendant-shade-${x}`, .78, .28, x, 3.84, -.8, COLORS.gold, undefined, false);
       this.cylinder(`pendant-glow-${x}`, .58, .035, x, 3.68, -.8, '#fff3bd', undefined, false).material = this.material('#fff3bd', true);
@@ -503,14 +593,15 @@ export class CoffeeScene {
     this.box(`${id}-countertop`, 3.65, 0.16, 1.58, 0, 1.13, 0, COLORS.metal, root);
     this.box(`${id}-top-inset`, 3.38, 0.025, 1.33, 0, 1.222, 0, '#d5d6c9', root, false);
     this.box(`${id}-front-accent`, 3.48, 0.08, 0.08, 0, 0.94, 0.716, deep, root, false);
-    const plaque = this.makeLabel(`${id}-upgrade-plaque`, 2.7, 0.53, new Vector3(0, 0.57, 0.72), root, { type: 'counter', id });
+    const plaque = this.makeLabel(`${id}-upgrade-plaque`, 1.36, 1.03, new Vector3(-1.02, 0.57, 0.765), root, { type: 'counter', id }, 512, 288);
     this.registerAnchor(`${id}-upgrade`, plaque.mesh);
     const selection = this.box(`${id}-selected`, 3.83, 0.022, 1.77, 0, 0.038, 0, '#e9c96e', root, false);
     selection.material = this.material('#e9c96e', true, 0.83);
+    selection.isPickable = false;
     selection.setEnabled(false);
-    this.box(`${id}-selector-stand`, .11, .33, .10, 1.22, 1.38, .43, deep, root);
-    this.box(`${id}-selector-frame`, 1.04, .58, .08, 1.22, 1.62, .45, deep, root);
-    const selector = this.makeLabel(`${id}-recipe-selector`, .94, .48, new Vector3(1.22, 1.62, .505), root, { type: 'recipe', id }, 512, 224);
+    this.box(`${id}-selector-stand`, .11, .45, .10, 1.20, 1.45, .52, deep, root);
+    this.box(`${id}-selector-frame`, 1.32, 1.13, .08, 1.20, 1.79, .56, deep, root);
+    const selector = this.makeLabel(`${id}-recipe-selector`, 1.18, 1.03, new Vector3(1.20, 1.79, .618), root, { type: 'recipe', id }, 512, 448);
     this.registerAnchor(`${id}-recipe`, selector.mesh);
     const barista = this.makePerson(`${id}-barista`, id === 'counter-a' ? 2 : 3, accent, false);
     barista.root.position.set(x - 0.5, 0, -0.89);
@@ -567,21 +658,22 @@ export class CoffeeScene {
       stack.setEnabled(false);
       cash.push(stack);
     }
-    const cashLabel = this.makeLabel(`${id}-cash-total`, 1.65, 0.32, new Vector3(x - 1.0, 1.9, 0.07), undefined, undefined, 512, 112, true);
+    const cashLabel = this.makeLabel(`${id}-cash-total`, .90, .42, new Vector3(.15, 1.49, .70), root, undefined, 512, 224);
+    cashLabel.mesh.metadata = { ...cashLabel.mesh.metadata, coffeeDisplay: 'pending-cash' };
+    // A counter-mounted register shows cash beside the actual banknote stacks.
+    this.box(`${id}-register-foot`, .12, .28, .12, .15, 1.35, .65, deep, root, false);
     cashLabel.mesh.setEnabled(false);
-    const progressRoot = CreatePlane(`${id}-progress`, { width: 2.15, height: 0.14, sideOrientation: Mesh.DOUBLESIDE }, this.scene);
-    progressRoot.position.set(x, 2.61, -0.08);
-    progressRoot.billboardMode = Mesh.BILLBOARDMODE_ALL;
-    progressRoot.material = this.material('#faf5e5', true);
-    progressRoot.isPickable = false;
-    const progressFill = this.box(`${id}-progress-fill`, 1, 0.075, 0.021, -0.98, 0, -0.025, accent, progressRoot, false);
-    progressFill.material = this.material(accent, true);
+    // The meter is a physical inset on the espresso machine front, not a floating bar.
+    const progressRoot = CreateBox(`${id}-progress`, { width: .98, height: .13, depth: .018 }, this.scene);
+    progressRoot.parent = machine;
+    progressRoot.position.set(-.05, .36, .191);
+    progressRoot.material = this.material('#faf5e5');
+    progressRoot.receiveShadows = true;
+    const progressFill = this.box(`${id}-progress-fill`, 1, .072, .018, -.45, 0, .018, accent, progressRoot, false);
+    progressRoot.metadata = { coffeeDisplay: 'brew-progress' };
     progressRoot.setEnabled(false);
-    // The whole counter and its physical plaque share the same intended action.
-    const counterHit = this.box(`${id}-counter-hit`, 3.5, 1.16, 1.43, 0, 0.61, 0, '#ffffff', root, false);
-    counterHit.material = this.material('#ffffff', false, 0);
-    counterHit.isPickable = true;
-    counterHit.metadata = { coffeeAction: { type: 'counter', id } };
+    const body = this.scene.getMeshByName(`${id}-body`)!;
+    body.metadata = { coffeeAction: { type: 'counter', id } };
     const station: Station = { root, barista, progressRoot, progressFill, plaque, selector, cashLabel, cash, machineExtras: extras, readyCup, selection, level: -1, recipe: '' };
     // Build the initial labels even before the first simulation frame arrives.
     this.updateStation(station, { id, x, level: 1, recipe: letter === 'A' ? 'espresso' : 'latte', pendingCash: 0, brewed: 0, brew: null }, false);
@@ -598,16 +690,15 @@ export class CoffeeScene {
     const coffee = recipeById[recipe], espresso = recipe === 'espresso';
     this.paintLabel(board, recipe, (ctx, w, h) => {
       this.roundRect(ctx, 1, 1, w - 2, h - 2, 15, '#2e4843');
-      this.text(ctx, 'COFFEE MENU', w / 2, 55, 30, '#ead4a1');
+      this.text(ctx, '咖啡菜单', w / 2, 55, 44, '#ead4a1');
       ctx.strokeStyle = '#648275'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(62, 87); ctx.lineTo(w - 62, 87); ctx.stroke();
       ctx.fillStyle = espresso ? '#d49c5b' : '#91bab0';
       ctx.beginPath(); ctx.moveTo(w / 2 - 58, 116); ctx.lineTo(w / 2 + 58, 116); ctx.lineTo(w / 2 + 43, 209); ctx.lineTo(w / 2 - 43, 209); ctx.closePath(); ctx.fill();
       ctx.fillStyle = '#f7ebd7'; ctx.fillRect(w / 2 - 63, 109, 126, 18);
       ctx.fillStyle = '#523c2f'; ctx.fillRect(w / 2 - 50, 133, 100, 18);
-      this.text(ctx, espresso ? 'ESPRESSO' : 'LATTE', w / 2, 263, 54, '#faf1db');
-      this.text(ctx, `${cashText(coffee.price)}  ·  ${coffee.brewSeconds.toFixed(1)}s`, w / 2, 318, 32, '#ead4a1');
-      this.text(ctx, espresso ? 'QUICK & BOLD' : 'SLOW & SILKY', w / 2, 363, 25, '#b9cbb7');
-      this.text(ctx, 'AVAILABLE  ·  DETAILS +', w / 2, 410, 23, '#ead4a1');
+      this.text(ctx, espresso ? '浓缩咖啡' : '拿铁咖啡', w / 2, 263, 78, '#faf1db');
+      this.text(ctx, `${cashText(coffee.price)}  ·  ${coffee.brewSeconds.toFixed(1)}s`, w / 2, 328, 52, '#ead4a1');
+      this.text(ctx, '已解锁 · 查看 +', w / 2, 400, 50, '#ead4a1');
     });
   }
 
@@ -615,7 +706,7 @@ export class CoffeeScene {
     if (station.level !== counter.level) {
       this.paintLabel(station.plaque, `level-${counter.level}`, (ctx, w, h) => {
         this.roundRect(ctx, 8, 8, w - 16, h - 16, 24, '#f5d98b');
-        this.text(ctx, `${counter.id === 'counter-a' ? 'A' : 'B'}  ·  LEVEL ${counter.level}    ↑`, w / 2, h / 2 + 1, 48, '#5a492b');
+        this.text(ctx, `${counter.id === 'counter-a' ? 'A' : 'B'} ${counter.level}  ↑`, w / 2, h / 2 + 1, 112, '#5a492b');
       });
       station.machineExtras[0].setEnabled(counter.level >= 2);
       station.machineExtras[1].setEnabled(counter.level >= 6);
@@ -625,8 +716,8 @@ export class CoffeeScene {
       const espresso = counter.recipe === 'espresso';
       this.paintLabel(station.selector, counter.recipe, (ctx, w, h) => {
         this.roundRect(ctx, 3, 3, w - 6, h - 6, 22, '#f5efda');
-        this.text(ctx, espresso ? 'ESPRESSO' : 'LATTE', w / 2, h * .40, 52, '#315d54');
-        this.text(ctx, 'RECIPE  ↔', w / 2, h * .76, 32, '#a4773f');
+        this.text(ctx, espresso ? '浓缩' : '拿铁', w / 2, h * .35, 120, '#315d54');
+        this.text(ctx, '配方 ↔', w / 2, h * .76, 82, '#a4773f');
       });
       station.recipe = counter.recipe;
     }
@@ -635,13 +726,13 @@ export class CoffeeScene {
     station.cashLabel.mesh.setEnabled(counter.pendingCash > 0);
     if (counter.pendingCash > 0) this.paintLabel(station.cashLabel, `${counter.pendingCash}`, (ctx, w, h) => {
       this.roundRect(ctx, 5, 5, w - 10, h - 10, 24, '#f4f5df');
-      this.text(ctx, cashText(counter.pendingCash), w / 2, h / 2 + 2, 54, '#477448');
+      this.text(ctx, cashText(counter.pendingCash), w / 2, h / 2 + 2, 102, '#477448');
     });
     const brew = counter.brew;
     const progress = brew ? clamp(brew.elapsed / Math.max(0.001, brew.duration)) : 0;
     station.progressRoot.setEnabled(Boolean(brew));
-    station.progressFill.scaling.x = Math.max(0.015, progress * 1.98);
-    station.progressFill.position.x = -0.99 + station.progressFill.scaling.x / 2;
+    station.progressFill.scaling.x = Math.max(0.015, progress * .90);
+    station.progressFill.position.x = -.45 + station.progressFill.scaling.x / 2;
     station.readyCup.setEnabled(Boolean(brew) && progress > 0.32 && progress < 1);
     if (brew) station.readyCup.scaling.setAll(brew.recipe === 'espresso' ? 0.82 : 1);
     if (!paused) {
@@ -705,6 +796,7 @@ export class CoffeeScene {
     cup.setEnabled(false);
     const shadow = this.shape('cylinder', `${name}-contact-shadow`, new Vector3(0.95, 0.008, 0.65), new Vector3(0, 0.039, 0), '#30433b', undefined, false);
     shadow.material = this.material('#30433b', false, 0.12);
+    shadow.isPickable = false;
     return { root, leftArm, rightArm, leftLeg, rightLeg, cup, shadow, previousX: 0, previousZ: 0 };
   }
 
@@ -745,7 +837,8 @@ export class CoffeeScene {
     const manager = state.manager;
     this.paintLabel(this.managerLabel, `level-${manager.level}`, (ctx, w, h) => {
       this.roundRect(ctx, 4, 4, w - 8, h - 8, 22, '#f1dd9f');
-      this.text(ctx, `MANAGER  ${manager.level}  ↑`, w / 2, h / 2 + 1, 42, '#405a45');
+      this.text(ctx, '经理', w / 2, h * .34, 136, '#405a45');
+      this.text(ctx, `Lv.${manager.level} ↑`, w / 2, h * .72, 90, '#405a45');
     });
     const dx = manager.x - person.previousX;
     const dz = manager.z - person.previousZ;
@@ -764,6 +857,9 @@ export class CoffeeScene {
       person.rightArm.rotation.x = manager.phase === 'collecting' || manager.phase === 'depositing' ? -1 + Math.sin(this.animationTime * 5) * 0.12 : -0.65;
       person.root.position.y = moving ? Math.abs(gait) * 0.026 : 0;
     }
+    // The trolley follows the bounded service lane in world orientation. The manager
+    // turns to reach stations; that turn must not orbit a wide trolley through the wall.
+    this.managerCart.position.set(person.root.position.x + 1.35, 0, person.root.position.z - .6);
     const stacks = manager.carrying > 0 ? Math.min(6, Math.max(1, Math.ceil(manager.carrying / 600))) : 0;
     this.cartCash.forEach((cash, i) => cash.setEnabled(i < stacks));
     person.shadow.position.set(person.root.position.x, 0.04, person.root.position.z);
@@ -791,28 +887,36 @@ export class CoffeeScene {
   }
 
   private makeCart(parent: TransformNode): Label {
-    const root = new TransformNode('manager-cash-cart', this.scene); root.parent = parent; root.position.set(0.83, 0, 0.08);
-    this.box('cart-base', 0.77, 0.12, 0.67, 0, 0.30, 0, '#866748', root);
-    this.box('cart-left-rail', 0.065, 0.27, 0.72, -0.37, 0.44, 0, COLORS.gold, root);
-    this.box('cart-right-rail', 0.065, 0.27, 0.72, 0.37, 0.44, 0, COLORS.gold, root);
-    this.box('cart-front-rail', 0.75, 0.19, 0.065, 0, 0.43, 0.33, COLORS.gold, root);
-    this.box('cart-back-rail', 0.75, 0.19, 0.065, 0, 0.43, -0.33, COLORS.gold, root);
-    for (const x of [-0.35, 0.35]) {
-      for (const z of [-0.24, 0.24]) this.cylinder(`cart-wheel-${x}-${z}`, 0.20, 0.09, x, 0.15, z, '#394844', root).rotation.z = Math.PI / 2;
+    const root = new TransformNode('manager-cash-cart', this.scene);
+    this.managerCart = root;
+    root.position.set(parent.position.x + 1.35, 0, parent.position.z - .6);
+    this.box('cart-base', 1.78, 0.12, 2.25, 0, 0.30, 0, '#866748', root);
+    this.box('cart-left-rail', 0.065, 0.18, 2.25, -.88, .41, 0, COLORS.gold, root);
+    this.box('cart-right-rail', 0.065, 0.18, 2.25, .88, .41, 0, COLORS.gold, root);
+    this.box('cart-front-rail', 1.76, .18, .065, 0, .41, 1.10, COLORS.gold, root);
+    this.box('cart-back-rail', 1.76, .18, .065, 0, .41, -1.10, COLORS.gold, root);
+    for (const x of [-.80, .80]) {
+      for (const z of [-.98, .98]) this.cylinder(`cart-wheel-${x}-${z}`, 0.20, 0.09, x, 0.15, z, '#394844', root).rotation.z = Math.PI / 2;
     }
-    this.box('cart-handle-post', 0.045, 0.5, 0.045, -0.38, 0.61, -0.32, COLORS.steel, root);
-    this.box('cart-handle', 0.38, 0.06, 0.06, -0.54, 0.85, -0.32, COLORS.dark, root);
+    this.box('cart-handle-post', 0.045, 0.5, 0.045, -.88, .61, .8, COLORS.steel, root);
+    this.box('cart-handle', 0.38, 0.06, 0.06, -.99, .75, .8, COLORS.dark, root);
+    this.box('cart-cash-bay', 1.52, .18, .51, 0, .65, .87, COLORS.woodLight, root);
+    this.box('cart-cash-bay-support', .17, .34, .44, 0, .45, .87, COLORS.woodDark, root);
     for (let pile = 0; pile < 6; pile++) {
       const stack = this.makeCashStack(`cart-cash-${pile}`, root);
-      stack.position.set(-0.19 + (pile % 2) * 0.36, 0.37 + Math.floor(pile / 2) * 0.085, 0);
+      stack.position.set(-.38 + (pile % 2) * .68, .75 + Math.floor(pile / 2) * .085, .87);
       stack.setEnabled(false);
       this.cartCash.push(stack);
     }
-    const label = this.makeLabel('manager-cart-control', 1.22, .39, new Vector3(0, 1.16, 0), root, { type: 'manager' }, 512, 160, true);
+    const clipboard = new TransformNode('manager-cart-clipboard', this.scene);
+    clipboard.parent = root;
+    clipboard.position.set(0, .445, -.25);
+    clipboard.rotation.x = -Math.PI / 2;
+    // A rear tray clipboard rotates with this trolley; the separate front cash bay
+    // stands above it so transported notes remain visible from every approach.
+    const label = this.makeLabel('manager-cart-control', 1.55, 1.55, new Vector3(0, 0, .03), clipboard, { type: 'manager' }, 512, 512);
     this.registerAnchor('manager', label.mesh);
-    const hit = this.box('manager-cart-hit', .90, .95, .80, 0, .62, 0, '#ffffff', root, false);
-    hit.material = this.material('#ffffff', false, 0); hit.isPickable = true;
-    hit.metadata = { coffeeAction: { type: 'manager' } };
+    for (const mesh of root.getChildMeshes()) if (mesh instanceof Mesh) mesh.metadata = { ...mesh.metadata, coffeeAction: { type: 'manager' } };
     return label;
   }
 
@@ -823,18 +927,11 @@ export class CoffeeScene {
     edge.material = this.material('#f9e6b1', true);
     this.box('entry-sign-post-left', 0.11, 1.16, 0.11, -8.68, 0.59, 5.62, COLORS.woodDark);
     this.box('entry-sign-post-right', 0.11, 1.16, 0.11, -7.32, 0.59, 5.62, COLORS.woodDark);
-    const label = this.makeLabel('invite-guest-sign', 2.48, 0.56, new Vector3(-8, 1.48, 5.62), undefined, { type: 'invite' }, 768, 176, true);
+    const label = this.makeLabel('invite-guest-sign', 2.48, 1.05, new Vector3(-8, 1.48, 5.62), undefined, { type: 'invite' }, 768, 288);
     this.registerAnchor('invite', label.mesh);
-    const hit = CreatePlane('invite-touch-target', { width: 2.9, height: 1.4, sideOrientation: Mesh.DOUBLESIDE }, this.scene);
-    hit.position.copyFrom(label.mesh.position);
-    hit.position.y -= 0.2;
-    hit.billboardMode = Mesh.BILLBOARDMODE_ALL;
-    hit.material = this.material('#ffffff', false, 0);
-    hit.isPickable = true;
-    hit.metadata = { coffeeAction: { type: 'invite' } };
     this.paintLabel(label, 'ready', (ctx, w, h) => {
       this.roundRect(ctx, 8, 8, w - 16, h - 16, 30, '#dca84b');
-      this.text(ctx, 'INVITE A GUEST  +', w / 2, h / 2 + 2, 46, '#ffffff');
+      this.text(ctx, '迎接顾客  +', w / 2, h / 2 + 2, 94, '#ffffff');
     });
     this.box('entry-arrow-stem', 0.62, 0.019, 0.14, -7.4, 0.066, 5.01, '#fff4da', undefined, false);
     const arrow = this.box('entry-arrow-top', 0.32, 0.019, 0.11, -7.15, 0.067, 4.89, '#fff4da', undefined, false); arrow.rotation.y = Math.PI / 4;
@@ -853,11 +950,12 @@ export class CoffeeScene {
     const wheel = this.cylinder('vault-wheel', 0.34, 0.072, 0, 0.78, 0.594, '#d8be76', vault); wheel.rotation.x = Math.PI / 2;
     this.box('vault-wheel-spoke', 0.29, 0.065, 0.045, 0, 0.78, 0.642, '#775d35', vault, false);
     this.box('vault-slot', 0.54, 0.063, 0.07, 0, 1.13, 0.55, '#213e37', vault, false);
-    const label = this.makeLabel('vault-bank-label', 1.55, .37, new Vector3(0, 1.58, .55), vault, { type: 'vault' }, 512, 128);
+    const label = this.makeLabel('vault-bank-label', 1.55, 1.04, new Vector3(0, 1.64, .55), vault, { type: 'vault' }, 512, 384);
     this.registerAnchor('vault', label.mesh);
     this.paintLabel(label, 'bank', (ctx, w, h) => {
       this.roundRect(ctx, 6, 6, w - 12, h - 12, 22, '#f1dd9f');
-      this.text(ctx, 'CASH VAULT', w / 2, h / 2 + 1, 42, '#405a45');
+      this.text(ctx, '金库', w / 2, h * .32, 110, '#405a45');
+      this.text(ctx, '存款明细', w / 2, h * .74, 68, '#405a45');
     });
     const lamp = this.cylinder('vault-deposit-light', 0.12, 0.045, 0.48, 1.14, 0.56, '#92bfa3', vault, false); lamp.rotation.x = Math.PI / 2;
     return lamp;
@@ -886,29 +984,49 @@ export class CoffeeScene {
     this.box('bench-cushion', 0.86, 0.1, 0.53, -0.5, 0.67, 0.01, '#7e9c7e', root);
   }
 
-  private makeLabel(name: string, width: number, height: number, position: Vector3, parent?: TransformNode, action?: CoffeeSceneAction, pixels = 768, pixelHeight = 192, billboard = false): Label {
+  private makeServicePanel(): Label {
+    const panel = new TransformNode('wall-service-panel', this.scene);
+    panel.position.set(8.15, 2.88, -3.35);
+    this.box('service-panel-case', 3.4, 1.43, .16, 0, 0, -.04, COLORS.woodDark, panel);
+    const pause = this.makeLabel('shop-pause-control', 1.42, 1.15, new Vector3(-.79, 0, .075), panel, { type: 'pause' }, 384, 288);
+    const settings = this.makeLabel('shop-settings-control', 1.42, 1.15, new Vector3(.79, 0, .075), panel, { type: 'settings' }, 384, 288);
+    this.registerAnchor('pause', pause.mesh);
+    this.registerAnchor('settings', settings.mesh);
+    this.paintLabel(settings, 'settings', (ctx, w, h) => {
+      this.roundRect(ctx, 0, 0, w, h, 12, '#efe4c5');
+      this.text(ctx, '⚙', w / 2, h * .38, 104, '#315d54');
+      this.text(ctx, '设置', w / 2, h * .78, 85, '#315d54');
+    });
+    return pause;
+  }
+
+  private makeLabel(name: string, width: number, height: number, position: Vector3, parent?: TransformNode, action?: CoffeeSceneAction, pixels = 768, pixelHeight = 192): Label {
+    // Every label is ink on a real opaque slab. Its material follows the room's light,
+    // ordinary depth testing and shadow reception; no billboard or rendering-group HUD.
+    const mount = this.box(`${name}-mount`, width + .10, height + .10, .075, position.x, position.y, position.z - .05, '#806345', parent);
+    if (action) mount.metadata = { coffeeAction: action };
     const mesh = CreatePlane(name, { width, height, sideOrientation: Mesh.DOUBLESIDE }, this.scene);
     mesh.position.copyFrom(position);
     if (parent) mesh.parent = parent;
-    if (billboard) mesh.billboardMode = Mesh.BILLBOARDMODE_ALL;
-    else mesh.rotation.y = Math.PI;
-    mesh.isPickable = Boolean(action);
-    if (action) mesh.metadata = { coffeeAction: action };
+    mesh.rotation.y = Math.PI;
+    mesh.isPickable = true;
+    mesh.receiveShadows = true;
+    mesh.metadata = { coffeeLabel: true, coffeeMount: mount.name, ...(action ? { coffeeAction: action } : {}) };
+    const mat = new StandardMaterial(`${name}-label-material`, this.scene);
+    mat.diffuseColor = Color3.White();
+    mat.emissiveColor = Color3.Black();
+    mat.specularColor = Color3.Black();
+    mat.disableLighting = false;
+    mat.backFaceCulling = false;
+    mat.disableDepthWrite = false;
     let texture: DynamicTexture | null = null;
-    // NullEngine QA intentionally skips canvas text; it still verifies meshes and state sync.
+    // NullEngine QA intentionally skips canvas ink while retaining the same physical material.
     if (typeof document !== 'undefined') {
       texture = new DynamicTexture(`${name}-ink`, { width: pixels, height: pixelHeight }, this.scene, false);
-      texture.hasAlpha = true;
-      const mat = new StandardMaterial(`${name}-label-material`, this.scene);
+      texture.hasAlpha = false;
       mat.diffuseTexture = texture;
-      mat.opacityTexture = texture;
-      mat.useAlphaFromDiffuseTexture = true;
-      mat.specularColor = Color3.Black();
-      mat.emissiveColor = Color3.White();
-      mat.disableLighting = true;
-      mat.backFaceCulling = false;
-      mesh.material = mat;
-    } else mesh.material = this.material('#f1dba1', true);
+    } else mat.diffuseColor = Color3.FromHexString('#f1dba1');
+    mesh.material = mat;
     const label = { mesh, texture, key: '' };
     this.labels.push(label);
     return label;
@@ -920,7 +1038,8 @@ export class CoffeeScene {
     if (!label.texture) return;
     const ctx = label.texture.getContext() as CanvasRenderingContext2D;
     const size = label.texture.getSize();
-    ctx.clearRect(0, 0, size.width, size.height);
+    ctx.fillStyle = '#eee4ca';
+    ctx.fillRect(0, 0, size.width, size.height);
     paint(ctx, size.width, size.height);
     label.texture.update();
   }

@@ -14,3 +14,8 @@
 ## 用户反馈后的全屏世界
 
 REQ-3D-009/010/011/012 → [TC-3D-007](cases/slice/TC-3D-007.md)，[计划](plans/fullscreen-world.md)。几何/输入/源代码契约与实际Mac scene-fill截图分别记录，不混作通过。
+
+
+## 用户反馈后的实体嵌入操作
+
+REQ-3D-013/014/015 → [TC-3D-008](cases/slice/TC-3D-008.md)，[计划](plans/embedded-scene-controls.md)。真实实体字牌、深度拾取、键盘与应用生命周期handler验证，和真实浏览器三尺寸截图分别记录。CPU模拟不代替视觉验收。

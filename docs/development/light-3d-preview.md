@@ -19,4 +19,8 @@ CloudKit 仅作同步存储，不执行经济逻辑。该方案不提供服务�
 
 canvas为真实viewport尺寸，100dvh与safe-area保护HUD/窗口；没有窄屏中的930px横向DOM画布或下方常驻经营卡片。镜头受限平移，墙体/地面延伸，竖屏局部逛店而非缩完整店面。
 
-CoffeeSceneAction只打开对应操作或入口招客；升级/选配方由窗口按钮执行。projectAnchor和focusAnchor从物件同一world点计算CSS坐标，DOM触控按钮和3D拾取保持DPR一致。窗内只显示当前panel，关闭/背景/Escape回店；源代码和NullEngine不证明真实像素填充。
+CoffeeSceneAction打开对应操作、入口招客或切换营业；升级/选配方由窗口按钮执行。常驻HTML只有¥钱包，全部操作入口由真实的墙面牌、柜台牌、金库、经理推车和营业/设置物件承载。文字用DynamicTexture绘制在固定实体面，几何的深度和光照正常生效；没有DOM投影按钮、billboard或透明点击箱。
+
+projectAnchor只供只读QA坐标诊断，不定位任何DOM控件。focusAnchor/focusNext/activateFocused/panBy为键盘访问实体提供相同语义；单个可聚焦canvas含中文操作说明，左右箭头选物件、上下平移、Home回A柜台、Enter/空格激活，重复按键不重复交易。弹窗切换对齐可见关闭按钮，关闭恢复canvas焦点。字体符号¥是虚拟游戏货币展示，无真实付款功能。
+
+几何拾取会先遇到前方可见实物，再决定有无对应action，不能穿过人物或家具。正常短按只发一次，拖动/长按/取消/不同目标抬起不发操作。全部入口用实体投影尺寸与受限pan做CPU验证；窗内只显示当前panel，关闭/背景/Escape回店。源代码和NullEngine不证明最终字体清晰度、光照、遮挡观感或Safari手势，仍交Mac真实QA。

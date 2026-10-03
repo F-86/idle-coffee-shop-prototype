@@ -39,6 +39,7 @@ button:disabled {
   cursor: default;
 }
 button:focus-visible,
+#coffee-canvas:focus-visible,
 summary:focus-visible {
   outline: 3px solid #f2d86b;
   outline-offset: 3px;
@@ -74,6 +75,10 @@ button:active:not(:disabled) {
 #coffee-canvas:active {
   cursor: grabbing;
 }
+#coffee-canvas:focus-visible {
+  outline: 3px solid #f2d86b;
+  outline-offset: -4px;
+}
 .hud {
   position: absolute;
   left: calc(16px + env(safe-area-inset-left, 0px));
@@ -95,21 +100,13 @@ button:active:not(:disabled) {
   border-radius: 17px;
   padding: 10px 16px 10px 11px;
   box-shadow: 0 3px 12px #344a2e12;
-  min-width: 130px;
+  min-width: 108px;
   pointer-events: auto;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
   backdrop-filter: blur(8px);
-}
-.coin-mark {
-  width: 33px;
-  height: 33px;
-  display: grid;
-  place-items: center;
-  background: #e7be65;
-  border: 3px solid #f3d591;
-  border-radius: 50%;
-  color: #805b2a;
-  font-family: Georgia, serif;
-  font-size: 24px;
 }
 .wallet-chip strong {
   font-size: 24px;
@@ -119,139 +116,15 @@ button:active:not(:disabled) {
   letter-spacing: -0.7px;
   display: block;
 }
-.wallet-chip small {
-  font-size: 9px;
-  color: #839276;
-  display: block;
-  margin-top: 4px;
-}
-.hud-actions {
-  display: flex;
-  gap: 8px;
-  pointer-events: auto;
-}
-.hud-button {
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
-  background: #fff8e8f2;
-  border: 1px solid #e6d9b9;
-  font-size: 21px;
-  font-weight: 650;
-  box-shadow: 0 3px 12px #344a2e12;
-  backdrop-filter: blur(8px);
-}
-.world-controls {
+.sr-only {
   position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 2;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
   overflow: hidden;
-}
-.world-button {
-  position: absolute;
-  left: 0;
-  top: 0;
-  min-height: 44px;
-  pointer-events: auto;
+  clip-path: inset(50%);
   white-space: nowrap;
-  backface-visibility: hidden;
-  will-change: transform;
-  font-size: 11px;
-  border-radius: 10px;
-  padding: 7px 12px;
-  box-shadow:
-    0 3px 0 #2d372830,
-    0 2px 12px #29443814;
-  border: 1px solid #ffffff50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  text-shadow: 0 1px #ffffff2b;
-}
-.world-button span {
-  font-weight: 700;
-}
-.world-button small {
-  font-size: 9px;
-  font-weight: 500;
-}
-.coffee-board {
-  flex-direction: column;
-  gap: 2px;
-  min-width: 102px;
-  background: #254f44ef;
-  color: #ffedbd;
-  border: 2px solid #b77f4d;
-  border-radius: 6px;
-  padding: 7px 13px;
-}
-.coffee-board small {
-  color: #c4d3a6;
-  font-size: 8px;
-}
-.vault-label {
-  background: #fff1bddf;
-  color: #496453;
-  min-width: 78px;
-  flex-direction: column;
-  border-color: #a3bda0;
-  border-radius: 7px;
-}
-.recipe-tag {
-  background: #f9f0dbe8;
-  color: #365c4c;
-  min-width: 78px;
-  border-color: #d9c8a3;
-  border-radius: 8px;
-}
-.upgrade-tag {
-  background: #e6b95deb;
-  color: #77502b;
-  min-width: 88px;
-  border: 2px solid #c18b47;
-  border-radius: 7px;
-  gap: 7px;
-}
-.upgrade-tag small {
-  font-weight: 650;
-}
-.invite-tag {
-  background: #d7a74af2;
-  color: #fff8df;
-  min-width: 106px;
-  border: 2px solid #ad853e;
-  font-weight: 750;
-  border-radius: 7px;
-}
-.manager-tag {
-  background: #fcf2d7e8;
-  color: #60775b;
-  min-width: 70px;
-  gap: 5px;
-  padding: 7px 9px;
-  transform-origin: center;
-}
-.pan-hint {
-  position: absolute;
-  left: 50%;
-  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
-  transform: translateX(-50%);
-  margin: 0;
-  z-index: 3;
-  pointer-events: none;
-  background: #fff7e4d9;
-  border: 1px solid #d9cbb1;
-  color: #70836b;
-  padding: 10px 16px;
-  border-radius: 20px;
-  font-size: 11px;
-  white-space: nowrap;
-  transition: opacity 0.3s;
-}
-.pan-hint.dismissed {
-  opacity: 0;
 }
 .render-error {
   position: absolute;
@@ -529,53 +402,8 @@ details p {
     gap: 7px;
     border-radius: 14px;
   }
-  .coin-mark {
-    width: 28px;
-    height: 28px;
-    font-size: 21px;
-  }
   .wallet-chip strong {
     font-size: 22px;
-  }
-  .wallet-chip small {
-    font-size: 8px;
-  }
-  .hud-button {
-    width: 44px;
-    height: 44px;
-    border-radius: 13px;
-    font-size: 20px;
-  }
-  .hud-actions {
-    gap: 6px;
-  }
-  .world-button {
-    font-size: 10px;
-    padding: 7px 9px;
-  }
-  .coffee-board {
-    min-width: 90px;
-    font-size: 10px;
-  }
-  .coffee-board small {
-    font-size: 7px;
-  }
-  .recipe-tag {
-    min-width: 72px;
-  }
-  .upgrade-tag {
-    min-width: 78px;
-    gap: 5px;
-  }
-  .upgrade-tag small {
-    font-size: 8px;
-  }
-  .vault-label {
-    min-width: 69px;
-  }
-  .manager-tag {
-    min-width: 62px;
-    font-size: 9px;
   }
   .operation-dialog {
     padding: 23px 20px;
@@ -585,11 +413,6 @@ details p {
   }
   .dialog-heading h1 {
     font-size: 21px;
-  }
-  .pan-hint {
-    font-size: 10px;
-    padding: 9px 14px;
-    bottom: calc(13px + env(safe-area-inset-bottom, 0px));
   }
   .toast {
     font-size: 11px;
@@ -605,18 +428,6 @@ details p {
   .wallet-chip strong {
     font-size: 20px;
   }
-  .wallet-chip small {
-    font-size: 8px;
-  }
-  .coin-mark {
-    width: 27px;
-    height: 27px;
-    font-size: 20px;
-  }
-  .hud-button {
-    width: 44px;
-    height: 44px;
-  }
   .operation-dialog {
     width: 360px;
     max-height: calc(
@@ -631,18 +442,10 @@ details p {
   .detail-grid {
     margin: 12px 0;
   }
-  .pan-hint {
-    bottom: 10px;
-  }
 }
 @media (prefers-reduced-motion: reduce) {
   button,
-  .toast,
-  .pan-hint {
+  .toast {
     transition: none;
   }
-}
-
-.world-button {
-  touch-action: none;
 }

@@ -16,20 +16,9 @@ import "./style.css";
 const root = document.querySelector<HTMLDivElement>("#slice-root")!;
 root.innerHTML = `
 <main class="coffee-world" aria-label="Mellow Bean 全屏咖啡店">
-  <canvas id="coffee-canvas" aria-label="拖动逛店；点击墙上的咖啡牌和金库、柜台的配方与等级牌"></canvas>
-  <header class="hud" aria-label="经营HUD">
-    <div class="wallet-chip"><span class="coin-mark" aria-hidden="true">¤</span><div><strong id="wallet">0.00</strong><small id="open-status">咖啡币 · 营业中</small></div></div>
-    <div class="hud-actions"><button id="pause" class="hud-button" aria-label="暂停营业">Ⅱ</button><button id="settings" class="hud-button" aria-label="打开店铺设置">⚙</button></div>
-  </header>
-  <nav id="world-controls" class="world-controls" aria-label="店铺内嵌操作">
-    <button class="world-button coffee-board" data-anchor="menu-espresso" data-menu="espresso" aria-label="墙上浓缩咖啡菜单"><span>浓缩咖啡</span><small>已解锁 · 查看</small></button>
-    <button class="world-button coffee-board" data-anchor="menu-latte" data-menu="latte" aria-label="墙上拿铁菜单"><span>拿铁</span><small>已解锁 · 查看</small></button>
-    <button class="world-button vault-label" data-anchor="vault" data-panel="vault" aria-label="墙上金库"><span>金库</span><small id="vault-balance">0.00</small></button>
-    ${(["counter-a", "counter-b"] as const).map((id, i) => `<button class="world-button recipe-tag" data-anchor="${id}-recipe" data-selector="${id}" aria-label="柜台${i === 0 ? "A" : "B"}配方选择"><span id="choice-${id}">${i === 0 ? "浓缩" : "拿铁"} ▾</span></button><button class="world-button upgrade-tag" data-anchor="${id}-upgrade" data-counter="${id}" aria-label="柜台${i === 0 ? "A" : "B"}升级"><span id="level-${id}">Lv. 1</span><small id="cost-${id}">↑ 8.00</small></button>`).join("")}
-    <button class="world-button invite-tag" data-anchor="invite" id="invite" aria-label="入口招呼客人">＋ 招呼客人</button>
-    <button class="world-button manager-tag" data-anchor="manager" data-panel="manager" aria-label="收钱经理升级"><span>经理</span><small id="manager-level">Lv. 1</small></button>
-  </nav>
-  <p id="pan-hint" class="pan-hint">拖动逛店 · 操作就在店里</p>
+  <canvas id="coffee-canvas" tabindex="0" aria-label="Mellow Bean 店铺场景" aria-describedby="scene-instructions"></canvas>
+  <p id="scene-instructions" class="sr-only">拖动逛店，点击墙上的咖啡菜单、金库、营业牌或设置牌，以及柜台配方牌、升级牌和经理推车。键盘左右箭头选择店内物件，上下箭头平移，Enter 或空格操作，Home 返回柜台 A。</p>
+  <header class="hud" aria-label="当前金额"><div class="wallet-chip"><strong id="wallet">¥0.00</strong></div></header>
   <div id="render-error" class="render-error" hidden></div>
   <dialog id="operation-dialog" class="operation-dialog" aria-labelledby="dialog-title">
     <button id="dialog-close" class="dialog-close" aria-label="关闭操作窗口">×</button>
@@ -42,17 +31,25 @@ root.innerHTML = `
     <div id="coffee-panel" class="operation-panel" hidden><div class="coffee-medallion" id="coffee-symbol" aria-hidden="true">☕</div><p id="coffee-detail"></p><p class="detail-note">两款配方已解锁。分配到柜台后，下一杯开始生效。</p><div class="assign-buttons"><button data-assign="counter-a">供给柜台 A</button><button data-assign="counter-b">供给柜台 B</button></div></div>
     <div id="vault-panel" class="operation-panel" hidden><div class="vault-total"><span>已存入金库</span><strong id="vault-total"></strong></div><div class="detail-grid"><span>台面待收<strong id="pending"></strong></span><span>经理运送<strong id="carrying"></strong></span></div><p class="detail-note">钱留在台面，再由经理沿后方通道送回。送到金库才可用于升级。</p><p id="served" class="detail-note"></p><button class="secondary-button" data-open-manager>查看收钱经理</button></div>
     <div id="manager-panel" class="operation-panel" hidden><div class="detail-grid"><span>收运等级<strong id="manager-rank"></strong></span><span>走路速度<strong id="manager-speed"></strong></span></div><p id="manager-status" class="detail-note"></p><p id="manager-preview"></p><button id="manager-upgrade" class="primary-button"></button></div>
-    <div id="settings-panel" class="operation-panel" hidden><p id="save-status" class="save-status">本地自动保存</p><p class="detail-note">当前只保存到本浏览器，iCloud 尚未配置。</p><div class="settings-grid"><button id="save">保存进度</button><button id="export">导出备份</button><button id="reload" hidden>读取最新档</button><button id="new-shop" hidden>备份并开始新店</button></div><p class="settings-label">逛逛小店</p><div class="jump-grid"><button data-focus="counter-a-recipe">柜台 A</button><button data-focus="counter-b-recipe">柜台 B</button><button data-focus="menu-espresso">咖啡墙</button><button data-focus="vault">金库</button><button data-focus="invite">入口</button></div><details><summary>怎么玩</summary><p>客人会自动进入、排队和取杯，入口也能招呼客人。柜台升级更快更值钱，经理升级提高收运。点柜台上的配方牌换咖啡，墙上菜单能查看配方或分配到柜台。制作中的那一杯不会被追改。</p><p>暂停冻结营业。离线收益最多结算 2 小时，且只结算一次。此版本没有真实跨设备同步。</p></details></div>
+    <div id="settings-panel" class="operation-panel" hidden><p id="save-status" class="save-status">本地自动保存</p><p class="detail-note">当前只保存到本浏览器，iCloud 尚未配置。</p><div class="settings-grid"><button id="save">保存进度</button><button id="export">导出备份</button><button id="reload" hidden>读取最新档</button><button id="new-shop" hidden>备份并开始新店</button></div><p class="settings-label">逛逛小店</p><div class="jump-grid"><button data-focus="counter-a-recipe">柜台 A</button><button data-focus="counter-b-recipe">柜台 B</button><button data-focus="menu-espresso">咖啡墙</button><button data-focus="vault">金库</button><button data-focus="invite">入口</button><button data-focus="pause">营业牌</button><button data-focus="settings">设置牌</button></div><details><summary>怎么玩</summary><p>客人会自动进入、排队和取杯，入口也能招呼客人。柜台升级更快更值钱，经理升级提高收运。点柜台上的配方牌换咖啡，墙上菜单能查看配方或分配到柜台。制作中的那一杯不会被追改。</p><p>点击墙上营业牌可以暂停或继续。暂停冻结营业。离线收益最多结算 2 小时，且只结算一次。此版本没有真实跨设备同步。</p></details></div>
   </dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>`;
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) =>
   root.querySelector<T>(selector)!;
-const money = (cents: number) => (cents / 100).toFixed(2);
+const money = (cents: number) => `¥${(cents / 100).toFixed(2)}`;
 const dialog = $<HTMLDialogElement>("#operation-dialog");
-const worldControls = [
-  ...root.querySelectorAll<HTMLButtonElement>("[data-anchor]"),
+const sceneAnchors: CoffeeSceneAnchor[] = [
+  "counter-a-recipe", "counter-a-upgrade", "counter-b-recipe", "counter-b-upgrade",
+  "menu-espresso", "menu-latte", "vault", "manager", "invite", "pause", "settings",
 ];
+const anchorNames: Record<CoffeeSceneAnchor, string> = {
+  "counter-a-recipe": "柜台 A 配方牌", "counter-a-upgrade": "柜台 A 升级牌",
+  "counter-b-recipe": "柜台 B 配方牌", "counter-b-upgrade": "柜台 B 升级牌",
+  "menu-espresso": "墙上浓缩咖啡菜单", "menu-latte": "墙上拿铁菜单",
+  vault: "墙上金库", manager: "收钱经理推车", invite: "入口招客牌",
+  pause: "墙上营业牌", settings: "墙上设置牌",
+};
 let browserStorage: Pick<Storage, "getItem" | "setItem" | "removeItem">;
 try {
   browserStorage = window.localStorage;
@@ -77,8 +74,7 @@ let stopped = false,
   frame = 0,
   lastSave = Date.now(),
   hiddenAt: number | null = document.hidden ? Date.now() : null;
-let toastTimer: ReturnType<typeof setTimeout> | null = null,
-  hintTimer: ReturnType<typeof setTimeout> | null = null;
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
 const listeners = new AbortController();
 const on = (
   target: EventTarget,
@@ -104,6 +100,7 @@ let panel: "counter" | "coffee" | "vault" | "manager" | "settings" | null =
     null,
   viewedRecipe: RecipeId = "espresso";
 let scene: CoffeeScene | null = null;
+let sceneInteractive = true;
 let returnFocus: HTMLElement | null = null;
 function toast(message: string) {
   if (stopped) return;
@@ -140,8 +137,17 @@ function save(manual = false, saveAt = Date.now()) {
     if (manual) toast("浏览器未允许保存，请导出存档备份");
   }
 }
+function setSceneInteractive(enabled: boolean) {
+  if (sceneInteractive === enabled) return;
+  sceneInteractive = enabled;
+  scene?.setInteractionEnabled(enabled);
+}
 function closePanel() {
-  if (dialog.open) dialog.close();
+  if (!dialog.open) return;
+  dialog.close();
+  // Native close is queued after open is removed. Navigation immediately after
+  // dismissal must not be dropped by the renderer's still-suspended input guard.
+  if (!dialog.open) setSceneInteractive(true);
 }
 function showPanel(
   next: NonNullable<typeof panel>,
@@ -154,6 +160,7 @@ function showPanel(
   }
   if (recipe) viewedRecipe = recipe;
   panel = next;
+  setSceneInteractive(false);
   root
     .querySelectorAll<HTMLElement>(".operation-panel")
     .forEach((el) => (el.hidden = el.id !== `${next}-panel`));
@@ -169,6 +176,7 @@ function showPanel(
   }
 }
 function sceneAction(action: CoffeeSceneAction) {
+  if (stopped || dialog.open) return;
   if (action.type === "invite") invite();
   else if (action.type === "counter" || action.type === "recipe")
     showPanel("counter", action.id);
@@ -176,6 +184,8 @@ function sceneAction(action: CoffeeSceneAction) {
     showPanel("coffee", undefined, action.recipe);
   else if (action.type === "vault") showPanel("vault");
   else if (action.type === "manager") showPanel("manager");
+  else if (action.type === "settings") showPanel("settings");
+  else if (action.type === "pause") togglePause();
 }
 try {
   scene = new CoffeeScene($("#coffee-canvas"), sceneAction);
@@ -183,7 +193,6 @@ try {
   $("#render-error").hidden = false;
   $("#render-error").textContent =
     "此浏览器无法开启 3D。请用支持 WebGL 的 Safari、Chrome 或 Edge 打开。";
-  worldControls.forEach((el) => (el.hidden = true));
   console.error(err);
 }
 function invite() {
@@ -229,18 +238,7 @@ on(root, "click", (event) => {
     "button",
   );
   if (!button) return;
-  // Pointer activation of world controls is owned by the shared scene gesture.
-  if (button.dataset.anchor && (event as MouseEvent).detail > 0) return;
-  if (button.id === "invite") invite();
-  else if (button.dataset.counter)
-    showPanel("counter", button.dataset.counter as CounterId);
-  else if (button.dataset.selector)
-    showPanel("counter", button.dataset.selector as CounterId);
-  else if (button.dataset.menu)
-    showPanel("coffee", undefined, button.dataset.menu as RecipeId);
-  else if (button.dataset.panel)
-    showPanel(button.dataset.panel as "vault" | "manager");
-  else if (button.dataset.selectRecipe)
+  if (button.dataset.selectRecipe)
     changeRecipe(selected, button.dataset.selectRecipe as RecipeId);
   else if (button.dataset.assign) {
     const id = button.dataset.assign as CounterId;
@@ -251,21 +249,9 @@ on(root, "click", (event) => {
   } else if (button.dataset.focus) {
     closePanel();
     scene?.focusAnchor(button.dataset.focus as CoffeeSceneAnchor);
-    positionControls();
   } else if (button.hasAttribute("data-open-manager")) showPanel("manager");
 });
-for (const button of worldControls) {
-  on(button, "pointerdown", (event) => {
-    const pointer = event as PointerEvent;
-    if (dialog.open || !pointer.isPrimary || pointer.button !== 0) return;
-    pointer.preventDefault();
-    scene?.beginAnchorPointer(
-      button.dataset.anchor as CoffeeSceneAnchor,
-      pointer,
-    );
-  });
-}
-on($("#pause"), "click", () => {
+function togglePause() {
   if (conflictBlocked) {
     toast("先读取最新存档，再继续营业");
     return;
@@ -274,25 +260,45 @@ on($("#pause"), "click", () => {
   last = performance.now();
   save();
   updateUI();
+  toast(engine.state.paused ? "小店休息中，点击营业牌继续" : "小店继续营业");
+}
+const canvas = $<HTMLCanvasElement>("#coffee-canvas");
+on(canvas, "pointerdown", () => {
+  if (!dialog.open) canvas.focus({ preventScroll: true });
 });
-on($("#settings"), "click", () => showPanel("settings"));
+on(canvas, "keydown", (event) => {
+  const e = event as KeyboardEvent;
+  if (stopped || dialog.open || !scene || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+    e.preventDefault();
+    const key = scene.focusNext(e.key === "ArrowLeft" ? -1 : 1);
+    if (key) toast(anchorNames[key]);
+  } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+    e.preventDefault();
+    scene.panBy(0, e.key === "ArrowUp" ? 80 : -80);
+  } else if (e.key === "Home") {
+    e.preventDefault();
+    scene.focusAnchor("counter-a-recipe");
+    toast(anchorNames["counter-a-recipe"]);
+  } else if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    if (e.repeat) return;
+    if (!scene.getFocus()) scene.focusAnchor("counter-a-recipe");
+    if (!scene.activateFocused())
+      toast("这个物件暂时无法操作，换个位置再试");
+  }
+});
 on($("#dialog-close"), "click", closePanel);
 on(dialog, "close", () => {
+  // Ignore an older queued close when another scene action has reopened it.
+  if (dialog.open) return;
   panel = null;
+  setSceneInteractive(true);
   scene?.selectedCounter(null);
-  const anchoredKey = returnFocus?.dataset.anchor as
-    | CoffeeSceneAnchor
-    | undefined;
-  const stillVisible =
-    !anchoredKey || scene?.projectAnchor(anchoredKey).visible;
-  if (
-    returnFocus?.isConnected &&
-    !returnFocus.hidden &&
-    returnFocus.matches("button,a,[tabindex]") &&
-    stillVisible
-  )
+  if (returnFocus?.isConnected && !returnFocus.hidden &&
+      returnFocus.matches("button,a,[tabindex]"))
     returnFocus.focus({ preventScroll: true });
-  else $("#settings").focus({ preventScroll: true });
+  else canvas.focus({ preventScroll: true });
   returnFocus = null;
 });
 on(dialog, "click", (event) => {
@@ -413,38 +419,9 @@ on($("#new-shop"), "click", () => {
   updateUI();
   toast("旧存档已本地备份，新店开始营业");
 });
-function positionControls() {
-  if (!scene || stopped) return;
-  for (const button of worldControls) {
-    const anchor = scene.projectAnchor(
-      button.dataset.anchor as CoffeeSceneAnchor,
-    );
-    button.hidden = !anchor.visible;
-    button.style.transform = `translate(${anchor.x.toFixed(2)}px,${anchor.y.toFixed(2)}px) translate(-50%,-50%)`;
-  }
-}
 function updateUI() {
   const s = engine.state;
   $("#wallet").textContent = money(s.wallet);
-  $("#vault-balance").textContent = money(s.wallet);
-  $("#open-status").textContent = s.paused
-    ? "咖啡币 · 休息中"
-    : "咖啡币 · 营业中";
-  $("#pause").textContent = s.paused ? "▶" : "Ⅱ";
-  $("#pause").setAttribute("aria-label", s.paused ? "继续营业" : "暂停营业");
-  $("#invite").toggleAttribute("disabled", s.paused || s.inviteCooldown > 0);
-  $("#invite").textContent =
-    s.inviteCooldown > 0
-      ? `再等 ${Math.ceil(s.inviteCooldown)} 秒`
-      : "＋ 招呼客人";
-  for (const c of s.counters) {
-    const q = engine.quote(c.id);
-    $("#choice-" + c.id).textContent =
-      `${c.recipe === "espresso" ? "浓缩" : "拿铁"} ▾`;
-    $("#level-" + c.id).textContent = `Lv. ${c.level}`;
-    $("#cost-" + c.id).textContent = q.capped ? "已满级" : `↑ ${money(q.cost)}`;
-  }
-  $("#manager-level").textContent = `Lv. ${s.manager.level}`;
   if (panel === "counter") {
     const c = s.counters.find((c) => c.id === selected)!,
       q = engine.quote(selected);
@@ -459,17 +436,17 @@ function updateUI() {
       selected === "counter-a"
         ? "柜台擅长：浓缩制作快 25%"
         : "柜台擅长：拿铁售价高 12%";
-    $("#counter-price").textContent = `${money(q.beforePrice)} 币`;
+    $("#counter-price").textContent = `${money(q.beforePrice)}`;
     $("#counter-seconds").textContent = `${q.beforeSeconds.toFixed(1)} 秒`;
     $("#counter-preview").textContent = q.capped
       ? "柜台已满级"
-      : `下一级 ${money(q.afterPrice)} 币 / ${q.afterSeconds.toFixed(1)} 秒`;
+      : `下一级 ${money(q.afterPrice)} / ${q.afterSeconds.toFixed(1)} 秒`;
     $("#counter-payback").textContent = q.capped
       ? "更多经营内容还在路上"
       : `满负荷增量回本约 ${Math.ceil(q.paybackSeconds)} 秒`;
     $("#counter-upgrade").textContent = q.capped
       ? "已满级"
-      : `升级柜台 · ${money(q.cost)} 币`;
+      : `升级柜台 · ${money(q.cost)}`;
     $("#counter-upgrade").toggleAttribute(
       "disabled",
       q.capped || s.wallet < q.cost || conflictBlocked,
@@ -490,7 +467,7 @@ function updateUI() {
     $("#dialog-title").textContent = r.name;
     $("#dialog-description").textContent = "墙上的咖啡菜单";
     $("#coffee-detail").textContent =
-      `${r.description} 基础杯价 ${money(r.price)} 币，制作 ${r.brewSeconds.toFixed(1)} 秒。`;
+      `${r.description} 基础杯价 ${money(r.price)}，制作 ${r.brewSeconds.toFixed(1)} 秒。`;
     $("#coffee-symbol").style.background = r.color;
     root
       .querySelectorAll<HTMLButtonElement>("[data-assign]")
@@ -499,10 +476,10 @@ function updateUI() {
     $("#dialog-eyebrow").textContent = "WALL VAULT";
     $("#dialog-title").textContent = "小店金库";
     $("#dialog-description").textContent = "经理送回后，现金才正式到账";
-    $("#vault-total").textContent = `${money(s.wallet)} 币`;
+    $("#vault-total").textContent = `${money(s.wallet)}`;
     $("#pending").textContent =
-      `${money(s.counters.reduce((n, c) => n + c.pendingCash, 0))} 币`;
-    $("#carrying").textContent = `${money(s.manager.carrying)} 币`;
+      `${money(s.counters.reduce((n, c) => n + c.pendingCash, 0))}`;
+    $("#carrying").textContent = `${money(s.manager.carrying)}`;
     $("#served").textContent = `这间小店已卖出 ${s.totalServed} 杯咖啡`;
   } else if (panel === "manager") {
     const q = engine.managerQuote();
@@ -522,7 +499,7 @@ function updateUI() {
       : `下一级走路速度 ${q.nextSpeed.toFixed(2)} 米/秒，收运容量也会提升。`;
     $("#manager-upgrade").textContent = q.capped
       ? "已满级"
-      : `升级经理 · ${money(q.cost)} 币`;
+      : `升级经理 · ${money(q.cost)}`;
     $("#manager-upgrade").toggleAttribute(
       "disabled",
       q.capped || s.wallet < q.cost || conflictBlocked,
@@ -540,7 +517,6 @@ function tick(now: number) {
   last = now;
   engine.advance(Math.max(0, dt));
   scene?.update(engine.state, dt);
-  positionControls();
   hudElapsed += dt;
   if (hudElapsed >= 0.15) {
     hudElapsed = 0;
@@ -560,7 +536,7 @@ function resumeVisible() {
     if (secs >= 30) {
       const result = engine.applyOffline(secs, `hidden-${start}`);
       if (result.accepted && result.amount > 0)
-        toast(`欢迎回来！离线经营存入 ${money(result.amount)} 币`);
+        toast(`欢迎回来！离线经营存入 ${money(result.amount)}`);
     } else engine.advance(secs);
     save();
   }
@@ -585,31 +561,23 @@ const sizeObserver =
   typeof ResizeObserver !== "undefined"
     ? new ResizeObserver(() => {
         scene?.resize();
-        positionControls();
       })
     : null;
 sizeObserver?.observe($("#coffee-canvas"));
 on(window, "resize", () => {
   scene?.resize();
-  positionControls();
 });
 const visualViewport = window.visualViewport;
 if (visualViewport)
   on(visualViewport, "resize", () => {
     scene?.resize();
-    positionControls();
   });
-on($("#coffee-canvas"), "pointermove", () =>
-  $("#pan-hint").classList.add("dismissed"),
-);
-hintTimer = setTimeout(() => $("#pan-hint").classList.add("dismissed"), 6500);
 function cleanup(persist = true) {
   if (stopped) return;
   if (persist) save(false, hiddenAt ?? Date.now());
   stopped = true;
   cancelAnimationFrame(frame);
   if (toastTimer) clearTimeout(toastTimer);
-  if (hintTimer) clearTimeout(hintTimer);
   listeners.abort();
   sizeObserver?.disconnect();
   scene?.dispose();
@@ -624,12 +592,11 @@ if (new URLSearchParams(location.search).has("qa"))
     value: {
       readState: (): SliceState => engine.snapshot(),
       selected: () => selected,
+      focusedObject: () => scene?.getFocus(),
+      readFootprints: () => Object.fromEntries(sceneAnchors.map((key) => [key, scene?.getAnchorFootprint(key)])),
       readAnchors: () =>
         Object.fromEntries(
-          worldControls.map((el) => [
-            el.dataset.anchor,
-            scene?.projectAnchor(el.dataset.anchor as CoffeeSceneAnchor),
-          ]),
+          sceneAnchors.map((key) => [key, scene?.projectAnchor(key)]),
         ),
     },
     configurable: true,

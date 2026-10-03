@@ -2,17 +2,27 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
-import { stripTypeScriptTypes } from 'node:module';
+import { registerHooks, stripTypeScriptTypes } from 'node:module';
 import postcss from 'postcss';
 
-// Static markup/CSS contracts only. These do not replace browser interaction or pixel QA.
+registerHooks({ resolve(specifier, context, nextResolve) {
+  try { return nextResolve(specifier, context); }
+  catch (error) {
+    if (specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier)) return nextResolve(`${specifier}.ts`, context);
+    throw error;
+  }
+} });
+const { createEngine, createInitialState, recipeById } = await import('../src/slice/core/engine.ts');
+const { LocalSaveRepository, SAVE_KEY, createMemoryStorage } = await import('../src/slice/core/persistence.ts');
+
+// These checks inspect actual markup/CSS and execute actual app handlers with a fake
+// DOM/scene and real core/save repository. They are NOT browser/native-dialog/pixel QA.
 const main = readFileSync(new URL('../src/slice/main.ts', import.meta.url), 'utf8');
 const css = postcss.parse(readFileSync(new URL('../src/slice/style.css', import.meta.url), 'utf8'));
 const index = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const template = main.match(/root\.innerHTML\s*=\s*(`[\s\S]+?`)\s*;\s*const \$/)?.[1];
 assert.ok(template, 'the actual app markup is available to inspect');
-const generated = stripTypeScriptTypes(`globalThis.html = ${template};`);
-const html = runInNewContext(`${generated}\nhtml;`, {}, { timeout: 1000 });
+const html = runInNewContext(`${stripTypeScriptTypes(`globalThis.html = ${template};`)}\nhtml;`, {}, { timeout: 1000 });
 const modalStart = html.indexOf('<dialog '), modalEnd = html.indexOf('</dialog>') + '</dialog>'.length;
 const modal = html.slice(modalStart, modalEnd);
 const outsideModal = html.slice(0, modalStart) + html.slice(modalEnd);
@@ -26,51 +36,220 @@ function declarations(selector, property) {
 }
 function openingTags(markup, tag) { return [...markup.matchAll(new RegExp(`<${tag}\\b[^>]*>`, 'g'))].map(match => match[0]); }
 
-test('TC-3D-007 REQ-3D-009 full-viewport scene has no webpage frame or page scroll (static contract)', () => {
+class FakeElement {
+  listeners = new Map();
+  attributes = new Map();
+  dataset = {};
+  style = {};
+  hidden = false;
+  disabled = false;
+  isConnected = true;
+  textContent = '';
+  focused = 0;
+  constructor(tag, document) {
+    this.tagName = tag.toUpperCase(); this.ownerDocument = document;
+    const classes = new Set();
+    this.classList = { add: (...names) => names.forEach(name => classes.add(name)), remove: (...names) => names.forEach(name => classes.delete(name)), contains: name => classes.has(name), toggle: (name, force) => { const add = force ?? !classes.has(name); add ? classes.add(name) : classes.delete(name); return add; } };
+  }
+  get id() { return this.attributes.get('id') ?? ''; }
+  setAttribute(name, value) {
+    this.attributes.set(name, String(value));
+    if (name.startsWith('data-')) this.dataset[name.slice(5).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())] = String(value);
+    if (name === 'class') this.classList.add(...String(value).split(/\s+/));
+    if (name === 'hidden') this.hidden = true;
+    if (name === 'disabled') this.disabled = true;
+  }
+  getAttribute(name) { return this.attributes.get(name) ?? null; }
+  hasAttribute(name) { return this.attributes.has(name); }
+  toggleAttribute(name, force) { const on = force ?? !this.hasAttribute(name); if (on) this.setAttribute(name, ''); else { this.attributes.delete(name); if (name === 'disabled') this.disabled = false; if (name === 'hidden') this.hidden = false; } return on; }
+  matches(selector) {
+    return selector.split(',').some(part => {
+      const value = part.trim();
+      if (value.startsWith('#')) return this.id === value.slice(1);
+      if (value.startsWith('.')) return this.classList.contains(value.slice(1));
+      if (value.startsWith('[')) return this.hasAttribute(value.slice(1, -1));
+      return this.tagName.toLowerCase() === value;
+    });
+  }
+  closest(selector) { return this.matches(selector) ? this : null; }
+  addEventListener(type, listener, options = {}) {
+    const set = this.listeners.get(type) ?? new Set(); set.add(listener); this.listeners.set(type, set);
+    options.signal?.addEventListener('abort', () => set.delete(listener), { once: true });
+  }
+  removeEventListener(type, listener) { this.listeners.get(type)?.delete(listener); }
+  emit(type, values = {}) {
+    const event = { type, target: this, detail: 1, prevented: false, preventDefault() { this.prevented = true; }, ...values };
+    for (const listener of [...this.listeners.get(type) ?? []]) listener(event);
+    return event;
+  }
+  focus() { this.focused++; this.ownerDocument.activeElement = this; }
+  getBoundingClientRect() { return { left: 100, right: 500, top: 100, bottom: 650, width: 400, height: 550 }; }
+}
+function fixture({ initial = createInitialState(), raw, storageUnavailable = false, deferDialogClose = false } = {}) {
+  const clock = { now: Date.now(), performance: 0 };
+  const nodes = [], closeEvents = [];
+  const document = new FakeElement('document', null);
+  document.ownerDocument = document;
+  document.activeElement = null;
+  document.hidden = false;
+  const root = new FakeElement('div', document);
+  root.setAttribute('id', 'slice-root');
+  root.querySelector = selector => nodes.find(node => node.matches(selector)) ?? null;
+  root.querySelectorAll = selector => nodes.filter(node => node.matches(selector));
+  Object.defineProperty(root, 'innerHTML', { set(markup) {
+    nodes.length = 0;
+    for (const match of markup.matchAll(/<([a-z][\w-]*)\b([^>]*?)>/g)) {
+      const element = new FakeElement(match[1], document);
+      for (const attribute of match[2].matchAll(/([\w-]+)(?:="([^"]*)")?/g)) element.setAttribute(attribute[1], attribute[2] ?? '');
+      if (element.tagName === 'DIALOG') {
+        element.open = false;
+        element.showModalCalls = 0;
+        element.showModal = () => { element.previousFocus = document.activeElement; element.open = true; element.showModalCalls++; root.querySelector('#dialog-close')?.focus(); };
+        element.close = () => { if (!element.open) return; element.open = false; if (element.previousFocus) element.previousFocus.focus(); else document.activeElement = null; const notify = () => element.emit('close'); if (deferDialogClose) closeEvents.push(notify); else notify(); };
+      }
+      nodes.push(element);
+    }
+  } });
+  document.querySelector = selector => selector === '#slice-root' ? root : root.querySelector(selector);
+  document.querySelectorAll = selector => root.querySelectorAll(selector);
+  const downloads = [], blobs = [];
+  document.createElement = tag => { const element = new FakeElement(tag, document); element.click = () => downloads.push(element); return element; };
+  const memory = createMemoryStorage();
+  if (raw !== undefined) memory.setItem(SAVE_KEY, raw);
+  else if (initial) { const repo = new LocalSaveRepository(memory); repo.load(clock.now); assert.equal(repo.save(initial, clock.now).ok, true); }
+  const storage = storageUnavailable ? { getItem() { throw new Error('storage unavailable'); }, setItem() { throw new Error('storage unavailable'); }, removeItem() { throw new Error('storage unavailable'); } } : memory;
+  const window = new FakeElement('window', document);
+  window.localStorage = storage;
+  window.visualViewport = new FakeElement('visualViewport', document);
+  window.confirm = () => true;
+  const frames = new Map(), timers = new Map();
+  let nextId = 0, renderer, observer, hmrCleanup;
+  class FakeScene {
+    updates = []; focusCalls = []; selection = []; interactionCalls = []; interactionEnabled = true; panCalls = []; focused = null; activationCalls = 0; disposed = false; resizeCalls = 0;
+    constructor(canvas, action) { this.canvas = canvas; this.action = action; renderer = this; }
+    update(state, dt) { this.updates.push({ state: structuredClone(state), dt }); }
+    selectedCounter(id) { this.selection.push(id); }
+    resize() { this.resizeCalls++; }
+    focusAnchor(key) { if (!this.interactionEnabled) return; this.focusCalls.push(key); this.focused = key; }
+    getFocus() { return this.focused; }
+    focusNext(direction) {
+      const keys = ['counter-a-recipe', 'counter-a-upgrade', 'counter-b-recipe', 'counter-b-upgrade', 'menu-espresso', 'menu-latte', 'vault', 'manager', 'invite', 'pause', 'settings'];
+      const current = this.focused ? keys.indexOf(this.focused) : -1;
+      this.focusAnchor(keys[current < 0 ? (direction < 0 ? keys.length - 1 : 0) : (current + direction + keys.length) % keys.length]);
+      return this.focused;
+    }
+    panBy(...args) { this.panCalls.push(args); }
+    activateFocused() { this.activationCalls++; if (!this.focused || !this.interactionEnabled) return false; this.activateAnchor(this.focused); return true; }
+    projectAnchor() { return { x: 200, y: 250, visible: true }; }
+    setInteractionEnabled(value) { this.interactionEnabled = value; this.interactionCalls.push(value); }
+    getAnchorFootprint() { return { width: 60, height: 60 }; }
+    dispose() { this.disposed = true; }
+    activateAnchor(key) {
+      const actions = { invite: { type: 'invite' }, pause: { type: 'pause' }, settings: { type: 'settings' }, vault: { type: 'vault' }, manager: { type: 'manager' }, 'menu-espresso': { type: 'menu', recipe: 'espresso' }, 'menu-latte': { type: 'menu', recipe: 'latte' }, 'counter-a-recipe': { type: 'recipe', id: 'counter-a' }, 'counter-b-recipe': { type: 'recipe', id: 'counter-b' }, 'counter-a-upgrade': { type: 'counter', id: 'counter-a' }, 'counter-b-upgrade': { type: 'counter', id: 'counter-b' } };
+      if (actions[key]) this.action(actions[key]);
+    }
+  }
+  class FakeResizeObserver {
+    observed = []; disconnected = false;
+    constructor(callback) { this.callback = callback; observer = this; }
+    observe(element) { this.observed.push(element); }
+    disconnect() { this.disconnected = true; }
+  }
+  class FakeDate extends Date { constructor(...args) { super(...(args.length ? args : [clock.now])); } static now() { return clock.now; } }
+  const source = main.replace(/^import\s[\s\S]*?;\n/gm, '').replace(/if \(import\.meta\.hot\) import\.meta\.hot\.dispose\(\(\) => cleanup\(\)\);/, 'captureCleanup(() => cleanup());');
+  const context = { document, window, location: { search: '?qa' }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, createEngine, recipeById, LocalSaveRepository, SAVE_KEY, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL() {} }, Blob, console, setTimeout: callback => { const id = ++nextId; timers.set(id, callback); return id; }, clearTimeout: id => timers.delete(id), requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
+  runInNewContext(stripTypeScriptTypes(source), context, { timeout: 1500 });
+  const state = () => structuredClone(window.__coffeeSliceDebug.readState());
+  return { clock, document, window, root, nodes, renderer, observer, frames, timers, memory, downloads, blobs, state, flushCloseEvents() { for (const callback of closeEvents.splice(0)) callback(); }, element: selector => root.querySelector(selector), action: action => renderer.action(action), click(selector, extra = {}) { const target = root.querySelector(selector); assert.ok(target, selector); if (!target.disabled) { const event = { target, detail: 1, ...extra }; target.emit('click', event); root.emit('click', event); } }, tick(seconds = .2) { clock.now += seconds * 1000; clock.performance += seconds * 1000; const pending = [...frames.values()]; frames.clear(); for (const callback of pending) callback(clock.performance); }, dispose() { hmrCleanup?.(); } };
+}
+
+test('TC-3D-008 REQ-3D-015 full-viewport scene has no webpage frame or page scroll (static contract)', () => {
   assert.deepEqual(declarations('.coffee-world', 'position'), ['fixed']);
   assert.deepEqual(declarations('.coffee-world', 'inset'), ['0']);
   assert.deepEqual(declarations('.coffee-world', 'width'), ['100vw']);
   assert.deepEqual(declarations('.coffee-world', 'height'), ['100vh', '100dvh']);
-  for (const selector of ['html', 'body', '#slice-root']) {
-    assert.deepEqual(declarations(selector, 'margin'), ['0']);
-    assert.deepEqual(declarations(selector, 'overflow'), ['hidden']);
-  }
+  for (const selector of ['html', 'body', '#slice-root']) { assert.deepEqual(declarations(selector, 'margin'), ['0']); assert.deepEqual(declarations(selector, 'overflow'), ['hidden']); }
   assert.deepEqual(declarations('#coffee-canvas', 'width'), ['100%']);
   assert.deepEqual(declarations('#coffee-canvas', 'height'), ['100%']);
   assert.deepEqual(declarations('#coffee-canvas', 'touch-action'), ['none']);
   assert.equal(declarations('.coffee-world', 'border').length, 0);
   assert.equal(declarations('.coffee-world', 'border-radius').length, 0);
-  assert.equal(declarations('#coffee-canvas', 'min-width').length, 0, 'no oversized scrolling canvas surrogate');
+  assert.equal(declarations('#coffee-canvas', 'min-width').length, 0);
   assert.doesNotMatch(outsideModal, /<aside\b|counter-card|station-card|save-panel|经营卡片/);
   assert.equal(openingTags(outsideModal, 'canvas').length, 1);
 });
 
-test('TC-3D-007 REQ-3D-009 permanent HUD contains only balance/status and two small actions (static contract)', () => {
+test('TC-3D-008 REQ-3D-013 the only permanent HUD is a noninteractive ¥ amount (static contract)', () => {
   const hud = html.match(/<header\b[^>]*class="hud"[\s\S]*?<\/header>/)?.[0];
   assert.ok(hud);
-  const buttons = openingTags(hud, 'button');
-  assert.equal(buttons.length, 2);
-  assert.match(buttons[0], /id="pause"/);
-  assert.match(buttons[1], /id="settings"/);
-  assert.doesNotMatch(hud, /<h[1-6]\b|MELLOW BEAN|本地存档|data-counter|data-select-recipe/);
+  assert.equal(openingTags(hud, 'button').length, 0);
+  assert.equal(openingTags(hud, 'strong').length, 1);
+  assert.match(hud, /id="wallet"/);
+  assert.doesNotMatch(hud, /open-status|coin-mark|hud-actions|id="pause"|id="settings"|咖啡币|营业中|休息中|¤|<small\b/);
+  assert.deepEqual(declarations('.hud', 'pointer-events'), ['none']);
+  assert.deepEqual(declarations('.wallet-chip', 'pointer-events'), ['auto'], 'the visible amount blocks clicks on obscured scene pixels without becoming an action');
+  assert.deepEqual(declarations('.wallet-chip', 'touch-action'), ['none']);
+  assert.deepEqual(declarations('.wallet-chip', 'user-select'), ['none']);
+  assert.doesNotMatch(outsideModal, /<button\b|<nav\b|data-anchor=|world-controls|world-button/);
+  assert.doesNotMatch(main, /positionControls|beginAnchorPointer|\.style\.transform\s*=\s*`translate\(/, 'no permanent screen-projected DOM controls remain');
+  assert.equal(rules('.world-button').length, 0);
+  assert.equal(rules('.hud-button').length, 0);
 });
 
-test('TC-3D-007 REQ-3D-010 all nine accessible controls are tied to room anchors (static contract)', () => {
-  const nav = html.match(/<nav\b[^>]*id="world-controls"[\s\S]*?<\/nav>/)?.[0];
-  assert.ok(nav);
-  const buttons = openingTags(nav, 'button');
-  const anchors = buttons.map(button => button.match(/data-anchor="([^"]+)"/)?.[1]);
-  assert.deepEqual(anchors.sort(), ['counter-a-recipe', 'counter-a-upgrade', 'counter-b-recipe', 'counter-b-upgrade', 'invite', 'manager', 'menu-espresso', 'menu-latte', 'vault'].sort());
-  for (const button of buttons) assert.match(button, /aria-label="[^"]+"/);
-  assert.match(nav, /data-menu="espresso"/);
-  assert.match(nav, /data-menu="latte"/);
-  assert.doesNotMatch(nav, /研发|购买配方|未解锁/);
-  assert.match(main, /scene\.projectAnchor\(/);
-  assert.match(main, /button\.hidden = !anchor\.visible/);
-  assert.match(main, /anchor\.x\.toFixed\(2\)[\s\S]*?anchor\.y\.toFixed\(2\)/);
+test('TC-3D-008 REQ-3D-013 all rendered amounts use ¥ with two fractional digits (app harness)', () => {
+  const f = fixture();
+  try {
+    assert.match(f.element('#wallet').textContent, /^¥\s?\d+\.\d{2}$/);
+    const beforeWallet = f.state();
+    const wallet = f.nodes.find(node => node.classList.contains('wallet-chip'));
+    wallet.emit('pointerdown'); f.root.emit('click', { target: wallet });
+    assert.deepEqual(f.state(), beforeWallet);
+    assert.equal(f.element('#operation-dialog').open, false, 'amount display has no action route');
+    for (const action of [{ type: 'counter', id: 'counter-a' }, { type: 'menu', recipe: 'latte' }, { type: 'vault' }, { type: 'manager' }]) {
+      f.action(action);
+      const shown = f.nodes.filter(node => !node.hidden && /\d+\.\d{2}/.test(node.textContent)).map(node => node.textContent);
+      assert.ok(shown.length);
+      for (const text of shown) { assert.doesNotMatch(text, /¤|\d\.\d{2}\s*币/); if (!/米\/秒/.test(text)) assert.match(text, /¥\s?\d+\.\d{2}/, text); }
+      f.click('#dialog-close');
+    }
+  } finally { f.dispose(); }
 });
 
-test('TC-3D-007 REQ-3D-012 operating panels exist only inside a closed native dialog (static contract)', () => {
+test('TC-3D-008 REQ-3D-013 physical scene actions open each corresponding panel without hidden DOM anchors (app harness)', () => {
+  const f = fixture();
+  try {
+    for (const [action, expected] of [[{ type: 'counter', id: 'counter-b' }, 'counter-panel'], [{ type: 'recipe', id: 'counter-a' }, 'counter-panel'], [{ type: 'menu', recipe: 'latte' }, 'coffee-panel'], [{ type: 'vault' }, 'vault-panel'], [{ type: 'manager' }, 'manager-panel'], [{ type: 'settings' }, 'settings-panel']]) {
+      const before = f.state();
+      f.action(action);
+      assert.equal(f.element('#operation-dialog').open, true);
+      assert.deepEqual(f.nodes.filter(node => node.classList.contains('operation-panel') && !node.hidden).map(node => node.id), [expected]);
+      assert.deepEqual(f.state(), before, 'opening scene detail does not alter economy');
+      f.click('#dialog-close');
+    }
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-008 REQ-3D-013 pause and settings are dispatched from physical scene objects; pause freezes time (app harness)', () => {
+  const f = fixture();
+  try {
+    assert.equal(f.element('#pause'), null);
+    assert.equal(f.element('#settings'), null);
+    f.action({ type: 'pause' });
+    assert.equal(f.state().paused, true);
+    const paused = f.state();
+    f.tick(4);
+    assert.deepEqual(f.state(), paused);
+    f.action({ type: 'pause' });
+    assert.equal(f.state().paused, false);
+    f.tick(.5);
+    assert.ok(f.state().elapsed > paused.elapsed);
+    f.action({ type: 'settings' });
+    assert.equal(f.element('#settings-panel').hidden, false);
+    assert.equal(f.element('#operation-dialog').open, true);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-008 REQ-3D-015 closed native dialog is the sole location of DOM operating buttons (static contract)', () => {
   assert.ok(modalStart >= 0);
   assert.doesNotMatch(openingTags(modal, 'dialog')[0], /\bopen(?:\s|=|>)/);
   const panels = openingTags(modal, 'div').filter(tag => tag.includes('class="operation-panel"'));
@@ -79,27 +258,196 @@ test('TC-3D-007 REQ-3D-012 operating panels exist only inside a closed native di
   assert.doesNotMatch(outsideModal, /class="operation-panel"|id="counter-panel"|id="settings-panel"/);
   assert.deepEqual(declarations('[hidden]', 'display'), ['none']);
   assert.ok(rules('[hidden]')[0].nodes.some(node => node.prop === 'display' && node.important));
-  assert.match(main, /dialog\.showModal\(\)/, 'native modal supplies inert background and Escape handling');
+  assert.match(main, /dialog\.showModal\(\)/, 'native modal provides inert background/Escape, still requiring browser QA');
   assert.match(main, /on\(dialog, "close"/);
   assert.match(main, /on\(\$\("#dialog-close"\), "click", closePanel\)/);
   assert.match(main, /event\.target === dialog/);
 });
 
-test('TC-3D-007 REQ-3D-012 controls maintain 44px targets, safe-area and dynamic viewport hooks (static contract)', () => {
+test('TC-3D-008 REQ-3D-015 modal close/backdrop restore canvas focus and reject background scene actions (app harness)', () => {
+  const f = fixture();
+  try {
+    const canvas = f.element('#coffee-canvas'), dialog = f.element('#operation-dialog');
+    canvas.focus();
+    f.action({ type: 'counter', id: 'counter-a' });
+    assert.equal(f.document.activeElement, f.element('#dialog-close'));
+    assert.equal(f.renderer.interactionEnabled, false);
+    assert.deepEqual(f.renderer.interactionCalls, [false]);
+    const before = f.state();
+    f.action({ type: 'pause' });
+    f.action({ type: 'invite' });
+    assert.deepEqual(f.state(), before, 'scene callback cannot mutate background while modal is open');
+    f.click('#dialog-close');
+    assert.equal(dialog.open, false);
+    assert.equal(f.renderer.interactionEnabled, true);
+    assert.deepEqual(f.renderer.interactionCalls, [false, true]);
+    assert.equal(f.document.activeElement, canvas, 'close returns to the actual scene entry, no removed settings HUD');
+    f.action({ type: 'vault' });
+    dialog.emit('click', { target: dialog, clientX: 90, clientY: 90 });
+    assert.equal(dialog.open, false, 'click outside the dialog rectangle closes it');
+    f.action({ type: 'vault' });
+    dialog.emit('click', { target: dialog, clientX: 150, clientY: 150 });
+    assert.equal(dialog.open, true, 'click in the dialog content does not dismiss it');
+    dialog.close(); // Simulates the close event native Escape supplies; not proof of browser Escape.
+    assert.equal(f.document.activeElement, canvas);
+    f.action({ type: 'pause' });
+    assert.equal(f.state().paused, true, 'physical input is usable after dismissing a modal');
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-008 REQ-3D-014 scene keyboard access is provided on the real canvas with instructions (static contract)', () => {
+  const canvas = openingTags(outsideModal, 'canvas')[0];
+  assert.match(canvas, /tabindex="0"/);
+  assert.match(canvas, /aria-describedby="[^"]+"/);
+  assert.match(outsideModal, /键盘|Tab|Enter|方向键|空格/);
+  assert.match(main, /keydown/);
+  assert.doesNotMatch(outsideModal, /<button\b/, 'keyboard support cannot reintroduce offscreen duplicate scene buttons');
+  assert.ok(rules('#coffee-canvas:focus-visible').length, 'keyboard users can locate their scene focus');
+  assert.ok(declarations('#coffee-canvas:focus-visible', 'outline-offset').some(value => Number.parseFloat(value) < 0), 'full-viewport focus ring must be inset so overflow:hidden does not clip it');
+});
+
+test('TC-3D-008 REQ-3D-014 actual canvas keys select, pan and activate scene objects once, with modal/modifier guards (app harness)', () => {
+  const f = fixture();
+  try {
+    const canvas = f.element('#coffee-canvas');
+    canvas.emit('pointerdown');
+    assert.equal(f.document.activeElement, canvas);
+    let event = canvas.emit('keydown', { key: 'ArrowRight' });
+    assert.equal(event.prevented, true);
+    assert.equal(f.renderer.getFocus(), 'counter-a-recipe');
+    assert.match(f.element('#toast').textContent, /柜台 A 配方牌/);
+    canvas.emit('keydown', { key: 'ArrowLeft' });
+    assert.equal(f.renderer.getFocus(), 'settings');
+    canvas.emit('keydown', { key: 'ArrowUp' }); canvas.emit('keydown', { key: 'ArrowDown' });
+    assert.deepEqual(f.renderer.panCalls, [[0, 80], [0, -80]]);
+    const focusCount = f.renderer.focusCalls.length;
+    event = canvas.emit('keydown', { key: 'ArrowRight', ctrlKey: true });
+    assert.equal(event.prevented, false);
+    assert.equal(f.renderer.focusCalls.length, focusCount);
+    event = canvas.emit('keydown', { key: 'Tab' });
+    assert.equal(event.prevented, false, 'ordinary Tab keeps normal browser focus navigation');
+    canvas.emit('keydown', { key: 'Home' });
+    assert.equal(f.renderer.getFocus(), 'counter-a-recipe');
+    canvas.emit('keydown', { key: 'Enter', repeat: true });
+    assert.equal(f.renderer.activationCalls, 0, 'held Enter cannot repeat purchase/open action');
+    canvas.emit('keydown', { key: 'Enter', repeat: false });
+    assert.equal(f.renderer.activationCalls, 1);
+    assert.equal(f.element('#counter-panel').hidden, false);
+    canvas.emit('keydown', { key: 'ArrowRight' });
+    canvas.emit('keydown', { key: ' ', repeat: false });
+    assert.equal(f.renderer.getFocus(), 'counter-a-recipe', 'inert modal background cannot change selected scene object');
+    assert.equal(f.renderer.activationCalls, 1);
+    f.click('#dialog-close');
+    f.renderer.focusAnchor('pause');
+    canvas.emit('keydown', { key: ' ', repeat: false });
+    assert.equal(f.state().paused, true);
+    canvas.emit('keydown', { key: ' ', repeat: true });
+    assert.equal(f.state().paused, true, 'held Space cannot toggle back to running');
+    f.renderer.focusAnchor('settings');
+    canvas.emit('keydown', { key: 'Enter', repeat: false });
+    assert.equal(f.element('#settings-panel').hidden, false);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-008 REQ-3D-015 dialog recipe/upgrade/navigation routes preserve core rules and visible close focus (app harness)', () => {
+  const f = fixture();
+  try {
+    f.action({ type: 'counter', id: 'counter-a' });
+    const latte = f.nodes.find(node => node.dataset.selectRecipe === 'latte');
+    f.root.emit('click', { target: latte });
+    assert.equal(f.state().counters[0].recipe, 'latte');
+    const beforeUpgrade = f.state();
+    f.click('#counter-upgrade');
+    assert.equal(f.state().counters[0].level, beforeUpgrade.counters[0].level + 1);
+    assert.ok(f.state().wallet < beforeUpgrade.wallet);
+    f.click('#dialog-close');
+    f.action({ type: 'vault' });
+    const managerLink = f.nodes.find(node => node.hasAttribute('data-open-manager'));
+    f.root.emit('click', { target: managerLink });
+    assert.equal(f.element('#manager-panel').hidden, false);
+    assert.equal(f.document.activeElement, f.element('#dialog-close'), 'switching panel refocuses a visible close control');
+    assert.equal(f.element('#operation-dialog').showModalCalls, 2, 'an already open dialog is switched without opening it again');
+    f.click('#dialog-close');
+    f.action({ type: 'menu', recipe: 'espresso' });
+    const assign = f.nodes.find(node => node.dataset.assign === 'counter-b');
+    f.root.emit('click', { target: assign });
+    assert.equal(f.state().counters[1].recipe, 'espresso');
+    assert.equal(f.element('#operation-dialog').open, false);
+    assert.equal(f.document.activeElement, f.element('#coffee-canvas'));
+    assert.equal(f.renderer.focusCalls.at(-1), 'counter-b-recipe');
+    f.action({ type: 'settings' });
+    const settingsJump = f.nodes.find(node => node.dataset.focus === 'settings');
+    f.root.emit('click', { target: settingsJump });
+    assert.equal(f.element('#operation-dialog').open, false);
+    assert.equal(f.renderer.focusCalls.at(-1), 'settings');
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-008 REQ-3D-015 post-dialog navigation survives native asynchronous close-event ordering (app harness)', () => {
+  const f = fixture({ deferDialogClose: true });
+  try {
+    f.action({ type: 'settings' });
+    const jump = f.nodes.find(node => node.dataset.focus === 'vault');
+    f.root.emit('click', { target: jump });
+    assert.equal(f.element('#operation-dialog').open, false);
+    f.flushCloseEvents();
+    assert.equal(f.renderer.focusCalls.at(-1), 'vault', 'native close-event delay must not discard the pending scene navigation while input is suspended');
+    f.action({ type: 'menu', recipe: 'espresso' });
+    const assign = f.nodes.find(node => node.dataset.assign === 'counter-b');
+    f.root.emit('click', { target: assign });
+    f.flushCloseEvents();
+    assert.equal(f.state().counters[1].recipe, 'espresso');
+    assert.equal(f.renderer.focusCalls.at(-1), 'counter-b-recipe', 'assignment must reveal the destination physical counter after asynchronous dismissal');
+    assert.equal(f.document.activeElement, f.element('#coffee-canvas'));
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-008 REQ-3D-015 a stale queued close cannot dismantle a newly reopened native dialog (app harness)', () => {
+  const f = fixture({ deferDialogClose: true });
+  try {
+    f.element('#coffee-canvas').focus();
+    f.action({ type: 'settings' });
+    f.click('#dialog-close');
+    assert.equal(f.renderer.interactionEnabled, true);
+    f.action({ type: 'vault' });
+    assert.equal(f.renderer.interactionEnabled, false);
+    f.flushCloseEvents();
+    assert.equal(f.element('#operation-dialog').open, true);
+    assert.equal(f.element('#vault-panel').hidden, false);
+    assert.equal(f.renderer.interactionEnabled, false, 'an older close event must not unlock a new modal background');
+    const focus = f.document.activeElement, before = f.state();
+    f.action({ type: 'pause' });
+    assert.deepEqual(f.state(), before);
+    assert.equal(f.document.activeElement, focus);
+    f.tick(.5);
+    assert.match(f.element('#dialog-title').textContent, /金库/);
+    f.click('#dialog-close');
+    f.flushCloseEvents();
+    assert.equal(f.renderer.interactionEnabled, true);
+    assert.equal(f.document.activeElement, f.element('#coffee-canvas'));
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-008 REQ-3D-014 physical invite remains cooldown/paused guarded without duplicate DOM handlers (app harness)', () => {
+  const f = fixture();
+  try {
+    const expected = createEngine(f.state()); expected.invite(); expected.invite();
+    f.action({ type: 'invite' }); f.action({ type: 'invite' });
+    assert.deepEqual(f.state(), expected.snapshot(), 'one accepted invite keeps the existing three-guest core rule; immediate repeat is rejected');
+    assert.ok(f.state().inviteCooldown > 0);
+    f.action({ type: 'pause' });
+    const paused = f.state();
+    f.action({ type: 'invite' });
+    assert.deepEqual(f.state(), paused);
+    assert.equal(f.element('#invite'), null, 'no parallel DOM invite can duplicate a geometry tap');
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-008 REQ-3D-015 modal controls maintain 44px targets, safe-area and dynamic viewport hooks (static contract)', () => {
   assert.match(index, /viewport-fit=cover/);
-  assert.deepEqual(declarations('.world-button', 'min-height'), ['44px']);
-  assert.deepEqual(declarations('.world-button', 'touch-action'), ['none'], 'capturing an overlay-started drag must also disable native panning at the original hit target');
-  for (const selector of ['.hud-button', '.dialog-close']) {
-    for (const property of ['width', 'height']) {
-      for (const value of declarations(selector, property)) assert.ok(Number.parseFloat(value) >= 44, `${selector} ${property}: ${value}`);
-    }
-  }
-  for (const selector of ['.primary-button', '.secondary-button', '.assign-buttons button', '.settings-grid button', '.jump-grid button', '.recipe-picker button', 'summary']) {
-    assert.ok(declarations(selector, 'min-height').some(value => Number.parseFloat(value) >= 44), selector);
-  }
-  for (const [property, inset] of [['left', 'left'], ['right', 'right'], ['top', 'top']]) {
-    assert.ok(declarations('.hud', property).every(value => value.includes(`safe-area-inset-${inset}`)));
-  }
+  for (const property of ['width', 'height']) for (const value of declarations('.dialog-close', property)) assert.ok(Number.parseFloat(value) >= 44, `.dialog-close ${property}: ${value}`);
+  for (const selector of ['.primary-button', '.secondary-button', '.assign-buttons button', '.settings-grid button', '.jump-grid button', '.recipe-picker button', 'summary']) assert.ok(declarations(selector, 'min-height').some(value => Number.parseFloat(value) >= 44), selector);
+  for (const [property, inset] of [['left', 'left'], ['top', 'top']]) assert.ok(declarations('.hud', property).every(value => value.includes(`safe-area-inset-${inset}`)));
   assert.ok(declarations('.operation-dialog', 'max-height').every(value => value.includes('dvh') && value.includes('safe-area-inset-bottom')));
   assert.match(main, /sizeObserver\?\.observe\(\$\("#coffee-canvas"\)\)/);
   assert.match(main, /on\(visualViewport, "resize"/);
@@ -107,30 +455,105 @@ test('TC-3D-007 REQ-3D-012 controls maintain 44px targets, safe-area and dynamic
   assert.match(main, /listeners\.abort\(\)/);
 });
 
-test('TC-3D-007 REQ-3D-012 delegated clicks reject pointer activation but preserve keyboard actions (handler seam)', () => {
-  // Invoke the actual delegated callback with synthetic events. This is not a browser gesture test.
-  const body = main.match(/on\(root,\s*"click",\s*([\s\S]*?)\n\}\);/)?.[1];
-  assert.ok(body, 'the delegated app callback is available');
-  const calls = [];
-  const context = {
-    invite: () => calls.push('invite'),
-    showPanel: (...args) => calls.push(args),
-  };
-  const handler = runInNewContext(stripTypeScriptTypes(`(${body}\n})`), context);
-  for (const button of [
-    { id: 'invite', dataset: { anchor: 'invite' } },
-    { id: '', dataset: { anchor: 'counter-a-recipe', selector: 'counter-a' } },
-    { id: '', dataset: { anchor: 'menu-latte', menu: 'latte' } },
-  ]) {
-    const event = { target: { closest: () => button }, detail: 1 };
-    handler(event);
-  }
-  assert.deepEqual(calls, [], 'pointer-generated click cannot duplicate shared scene activation or turn an interrupted gesture into a click');
-  handler({ target: { closest: () => ({ id: 'invite', dataset: { anchor: 'invite' } }) }, detail: 0 });
-  handler({ target: { closest: () => ({ id: '', dataset: { anchor: 'counter-a-recipe', selector: 'counter-a' } }) }, detail: 0 });
-  handler({ target: { closest: () => ({ id: '', dataset: { anchor: 'menu-latte', menu: 'latte' } }) }, detail: 0 });
-  assert.deepEqual(calls, ['invite', ['counter', 'counter-a'], ['coffee', undefined, 'latte']]);
-  assert.match(main, /on\(button, "pointerdown"/);
-  assert.match(main, /scene\?\.beginAnchorPointer\(/);
-  assert.match(main, /if \(dialog\.open\)[\s\S]*?#dialog-close[\s\S]*?\.focus\(/, 'switching an open modal puts focus on a visible control');
+test('TC-3D-008 REQ-3D-006 physical settings preserve manual save and export, with corrupt bytes protected (app harness)', async () => {
+  const f = fixture();
+  try {
+    f.action({ type: 'settings' });
+    f.click('#save');
+    const envelope = JSON.parse(f.memory.getItem(SAVE_KEY));
+    assert.deepEqual(envelope.state, f.state());
+    f.click('#export');
+    assert.equal(f.downloads.length, 1);
+    assert.equal(f.downloads[0].download, 'mellow-bean-local-backup.json');
+    assert.deepEqual(JSON.parse(await f.blobs[0].text()).state, f.state());
+  } finally { f.dispose(); }
+  const raw = '{ definitely not a save';
+  const corrupt = fixture({ raw });
+  try {
+    corrupt.action({ type: 'settings' });
+    assert.equal(corrupt.element('#new-shop').hidden, false);
+    corrupt.click('#save');
+    corrupt.tick(10);
+    assert.equal(corrupt.memory.getItem(SAVE_KEY), raw, 'manual/autosave must not overwrite unreadable source bytes');
+    corrupt.click('#export');
+    assert.equal(corrupt.downloads.length, 1);
+    assert.equal(await corrupt.blobs[0].text(), raw, 'corrupt export preserves exact original bytes instead of exporting invented replacement state');
+  } finally { corrupt.dispose(); }
+});
+
+test('TC-3D-008 REQ-3D-015 names and save feedback are transient; disabled browser storage still permits backup (app harness)', async () => {
+  const f = fixture({ storageUnavailable: true });
+  try {
+    assert.match(f.element('#save-status').textContent, /不可用/);
+    f.action({ type: 'settings' });
+    f.click('#save');
+    assert.match(f.element('#save-status').textContent, /失败/);
+    assert.equal(f.element('#toast').classList.contains('visible'), true);
+    for (const callback of [...f.timers.values()]) callback();
+    assert.equal(f.element('#toast').classList.contains('visible'), false, 'feedback does not become permanent HUD');
+    f.click('#export');
+    assert.equal(f.downloads.length, 1);
+    assert.deepEqual(JSON.parse(await f.blobs[0].text()).state, f.state());
+    assert.doesNotMatch(outsideModal, /pan-hint|open-status/);
+    assert.match(main, /setTimeout\([\s\S]*?#toast[\s\S]*?classList\.remove\("visible"\)[\s\S]*?3500\)/);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-008 REQ-3D-006 external save conflict freezes and blocks physical resume/purchases (app harness)', () => {
+  const f = fixture();
+  try {
+    const newer = JSON.parse(f.memory.getItem(SAVE_KEY)); newer.recordChangeTag = 'other-client';
+    f.memory.setItem(SAVE_KEY, JSON.stringify(newer));
+    f.window.emit('storage', { key: SAVE_KEY, newValue: JSON.stringify(newer) });
+    assert.equal(f.state().paused, true);
+    f.action({ type: 'pause' });
+    assert.equal(f.state().paused, true, 'physical pause must not bypass conflict protection');
+    f.action({ type: 'counter', id: 'counter-a' });
+    assert.equal(f.element('#counter-upgrade').disabled, true);
+    f.click('#dialog-close');
+    f.action({ type: 'settings' });
+    assert.equal(f.element('#reload').hidden, false);
+    assert.match(f.element('#save-status').textContent, /变化|最新/);
+    f.click('#save');
+    assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).recordChangeTag, 'other-client');
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-008 REQ-3D-004 hidden/BFCache resume applies elapsed time only once and retains one RAF owner (app harness)', () => {
+  const f = fixture();
+  try {
+    f.tick(.5);
+    f.document.hidden = true; f.document.emit('visibilitychange');
+    assert.equal(f.frames.size, 0);
+    const hidden = f.state();
+    f.clock.now += 45000; f.clock.performance += 45000;
+    f.document.hidden = false; f.document.emit('visibilitychange');
+    const resumed = f.state();
+    assert.ok(resumed.elapsed > hidden.elapsed);
+    assert.equal(f.frames.size, 1);
+    f.window.emit('pageshow', { persisted: true });
+    assert.deepEqual(f.state(), resumed, 'visibility and BFCache callbacks cannot double-claim the same interval');
+    assert.equal(f.frames.size, 1);
+    f.window.emit('pagehide', { persisted: true });
+    assert.equal(f.renderer.disposed, false, 'BFCache suspension must not destroy its scene');
+    f.clock.now += 2000; f.clock.performance += 2000;
+    f.window.emit('pageshow', { persisted: true });
+    assert.equal(f.frames.size, 1);
+    assert.ok(f.state().elapsed > resumed.elapsed);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-008 REQ-3D-004 final disposal removes UI listeners, observer and RAF; late scene actions are harmless (app harness)', () => {
+  const f = fixture();
+  f.window.emit('pagehide', { persisted: false });
+  assert.equal(f.renderer.disposed, true);
+  assert.equal(f.observer.disconnected, true);
+  assert.equal(f.frames.size, 0);
+  assert.equal(f.timers.size, 0);
+  for (const target of [f.root, f.document, f.window, f.window.visualViewport, ...f.nodes]) assert.equal([...target.listeners.values()].reduce((n, listeners) => n + listeners.size, 0), 0);
+  const before = f.state();
+  f.action({ type: 'pause' }); f.action({ type: 'invite' }); f.action({ type: 'settings' });
+  assert.deepEqual(f.state(), before);
+  assert.equal(f.element('#operation-dialog').open, false);
+  f.dispose();
 });
