@@ -1,0 +1,711 @@
+:root {
+  font-family:
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
+  color: #24443c;
+  background: #f4eee3;
+  font-synthesis: none;
+  font-weight: 450;
+  -webkit-tap-highlight-color: transparent;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button,
+a {
+  touch-action: manipulation;
+}
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 0;
+  color: inherit;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid #de9265;
+  outline-offset: 4px;
+}
+button {
+  transition:
+    background 0.15s,
+    transform 0.15s;
+}
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+a {
+  color: inherit;
+}
+.coffee-app {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 22px 32px 18px;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  margin-bottom: 18px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+  font-size: 15px;
+}
+.brand small {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 1px;
+  margin-top: 5px;
+  color: #7c897a;
+  font-weight: 450;
+}
+.bean-logo {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50% 50% 42% 45%;
+  background: #285c4f;
+  color: #ffdf9d;
+  font-family: Georgia, serif;
+  font-weight: 500;
+  font-size: 37px;
+  line-height: 1;
+  transform: rotate(-12deg);
+}
+.wallet {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  column-gap: 10px;
+}
+.wallet > span {
+  font-size: 11px;
+  color: #839182;
+  grid-column: 1/-1;
+  text-align: center;
+  margin-bottom: 2px;
+}
+.wallet strong {
+  font-variant-numeric: tabular-nums;
+  font-size: 29px;
+  letter-spacing: -1px;
+}
+.wallet small {
+  font-size: 11px;
+  color: #748476;
+}
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.local-badge {
+  font-size: 11px;
+  white-space: nowrap;
+  background: #e5eadb;
+  padding: 7px 10px;
+  border-radius: 20px;
+  color: #698065;
+}
+.icon-button {
+  background: #fffaf0;
+  width: 42px;
+  height: 42px;
+  border: 1px solid #dfdecd;
+  border-radius: 13px;
+  font-weight: 750;
+}
+.shop-shell {
+  position: relative;
+  border-radius: 23px;
+  background: #dedace;
+  overflow: hidden;
+  border: 1px solid #d2d6c4;
+  box-shadow: 0 8px 32px #2b443a0c;
+}
+.scene-caption {
+  position: absolute;
+  z-index: 2;
+  top: 18px;
+  left: 20px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  background: #fdf8e7ed;
+  border-radius: 25px;
+  padding: 9px 13px;
+  pointer-events: none;
+}
+.open-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #598c59;
+}
+.scene-pan-hint {
+  display: none;
+  color: #728677;
+}
+.world-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  touch-action: pan-x pan-y;
+  scrollbar-width: thin;
+  scrollbar-color: #b0bdad #e2e5d6;
+}
+.world-scroll canvas {
+  display: block;
+  width: 100%;
+  min-width: 960px;
+  height: 520px;
+  outline: none;
+  touch-action: pan-x pan-y;
+}
+.scene-bottom {
+  position: absolute;
+  bottom: 18px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  pointer-events: none;
+}
+.scene-bottom > span {
+  font-size: 11px;
+  background: #fff9e8e6;
+  padding: 10px 14px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px #24443c10;
+}
+.invite-button {
+  pointer-events: auto;
+  color: #fff8e3;
+  background: #285e50;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 650;
+  padding: 11px 17px;
+  box-shadow: 0 5px 0 #1c433a;
+}
+.invite-button span {
+  display: block;
+  font-size: 9px;
+  font-weight: 400;
+  opacity: 0.7;
+  margin-top: 4px;
+}
+.render-error {
+  position: absolute;
+  inset: 80px 20px auto;
+  background: #fcf6e8;
+  padding: 30px;
+  text-align: center;
+  border-radius: 16px;
+}
+.store-metrics {
+  display: flex;
+  align-items: center;
+  gap: 27px;
+  padding: 15px 6px 17px;
+  font-size: 11px;
+  color: #82907e;
+}
+.store-metrics strong {
+  color: #426253;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.metric-note {
+  margin-left: auto;
+  color: #7d8d7a;
+}
+.counter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.counter-card {
+  background: #fffaf0;
+  border: 1px solid #e2ddcf;
+  border-radius: 19px;
+  padding: 18px 20px;
+  box-shadow: 0 4px 15px #35453903;
+}
+.counter-card.selected {
+  border-color: #c4ccab;
+}
+.card-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.counter-number {
+  font-size: 11px;
+  color: #97a17e;
+  align-self: flex-start;
+  padding-top: 4px;
+}
+.card-heading h2 {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+}
+.card-heading p {
+  font-size: 10px;
+  color: #8b967f;
+  margin: 4px 0 0;
+}
+.recipe-symbol {
+  margin-left: auto;
+  border-radius: 12px;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  background: #e8d8bd;
+  font-size: 19px;
+}
+.recipe-choice {
+  display: flex;
+  gap: 6px;
+  margin: 14px 0 10px;
+  background: #eeeadd;
+  border-radius: 10px;
+  padding: 4px;
+}
+.recipe-choice button {
+  flex: 1;
+  background: transparent;
+  color: #829079;
+  font-size: 11px;
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+.recipe-choice button.active {
+  background: #fffdf5;
+  color: #3b6451;
+  box-shadow: 0 2px 5px #273d2910;
+  font-weight: 650;
+}
+.recipe-detail {
+  font-size: 10px;
+  color: #879381;
+  margin: 10px 0 15px;
+  min-height: 15px;
+}
+.upgrade-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.upgrade-row strong {
+  font-size: 11px;
+  display: block;
+  font-weight: 650;
+}
+.upgrade-row small {
+  display: block;
+  font-size: 9px;
+  color: #9a9f89;
+  margin-top: 5px;
+}
+.upgrade-button {
+  font-size: 11px;
+  border-radius: 11px;
+  background: #e8c183;
+  color: #664b26;
+  padding: 10px 14px;
+  white-space: nowrap;
+  font-weight: 650;
+}
+.upgrade-button span {
+  margin-left: 5px;
+  font-variant-numeric: tabular-nums;
+}
+.store-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 2px 0;
+}
+.manager-upgrade {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.manager-icon {
+  display: grid;
+  place-items: center;
+  width: 33px;
+  height: 33px;
+  background: #e5e7d8;
+  border-radius: 11px;
+  font-size: 21px;
+  color: #6c8370;
+}
+.manager-upgrade strong {
+  font-size: 11px;
+  display: block;
+}
+.manager-upgrade small {
+  font-size: 9px;
+  color: #8b9581;
+  display: block;
+  margin-top: 3px;
+}
+.manager-upgrade button {
+  background: #e6e8d8;
+  border-radius: 9px;
+  font-size: 10px;
+  padding: 9px 12px;
+  margin-left: 5px;
+  white-space: nowrap;
+}
+.save-controls {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  color: #8e9783;
+  font-size: 9px;
+}
+.save-controls button {
+  font-size: 10px;
+  background: transparent;
+  padding: 7px 2px;
+}
+.save-controls a {
+  font-size: 10px;
+}
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translate(-50%, 15px);
+  background: #224e43;
+  color: #fff9e9;
+  z-index: 10;
+  padding: 12px 20px;
+  border-radius: 14px;
+  font-size: 12px;
+  opacity: 0;
+  transition: 0.2s;
+  pointer-events: none;
+  box-shadow: 0 8px 30px #1c3c3220;
+  max-width: 90vw;
+  text-align: center;
+}
+.toast.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+dialog {
+  border: 0;
+  border-radius: 24px;
+  background: #fffaf0;
+  color: #36564a;
+  padding: 30px;
+  max-width: 440px;
+  box-shadow: 0 20px 100px #173a3a30;
+}
+dialog::backdrop {
+  background: #203e3566;
+  backdrop-filter: blur(3px);
+}
+dialog h2 {
+  font-size: 23px;
+  margin: 10px 0 18px;
+}
+dialog p {
+  font-size: 12px;
+  line-height: 1.9;
+  color: #6d8070;
+}
+.eyebrow {
+  font-size: 10px !important;
+  letter-spacing: 1.5px;
+}
+.dialog-close:not(.primary-button) {
+  position: absolute;
+  right: 16px;
+  top: 12px;
+  background: transparent;
+  font-size: 24px;
+}
+.primary-button {
+  padding: 13px 20px;
+  border-radius: 12px;
+  background: #285e50;
+  color: #fff7e6;
+  font-size: 12px;
+  width: 100%;
+  margin-top: 12px;
+}
+@media (min-width: 1450px) {
+  .coffee-app {
+    padding-top: 30px;
+  }
+}
+@media (max-width: 1000px) {
+  .coffee-app {
+    padding: 16px 20px;
+  }
+  .world-scroll canvas {
+    height: 490px;
+  }
+  .metric-note {
+    display: none;
+  }
+  .store-footer {
+    flex-wrap: wrap;
+  }
+  .save-controls {
+    margin-left: auto;
+  }
+}
+@media (max-width: 680px) {
+  .coffee-app {
+    padding: 14px 12px 20px;
+  }
+  .topbar {
+    gap: 8px;
+    margin-bottom: 13px;
+  }
+  .brand {
+    font-size: 10px;
+    letter-spacing: 0.8px;
+    gap: 7px;
+  }
+  .brand small {
+    font-size: 8px;
+    letter-spacing: 0;
+  }
+  .bean-logo {
+    width: 33px;
+    height: 33px;
+    font-size: 28px;
+  }
+  .wallet {
+    gap: 4px;
+  }
+  .wallet > span {
+    font-size: 9px;
+  }
+  .wallet strong {
+    font-size: 22px;
+  }
+  .wallet small {
+    display: none;
+  }
+  .top-actions {
+    gap: 7px;
+  }
+  .local-badge {
+    font-size: 8px;
+    padding: 5px 7px;
+  }
+  .icon-button {
+    width: 35px;
+    height: 35px;
+    border-radius: 10px;
+  }
+  .shop-shell {
+    border-radius: 19px;
+  }
+  .scene-caption {
+    top: 13px;
+    left: 12px;
+    font-size: 9px;
+    padding: 7px 10px;
+  }
+  .scene-pan-hint {
+    display: inline;
+    margin-left: 6px;
+    font-size: 8px;
+  }
+  .world-scroll canvas {
+    min-width: 930px;
+    height: 460px;
+  }
+  .scene-bottom {
+    left: 12px;
+    right: 12px;
+    bottom: 15px;
+    align-items: flex-end;
+  }
+  .scene-bottom > span {
+    font-size: 9px;
+    line-height: 1.6;
+    max-width: 190px;
+    padding: 8px 10px;
+  }
+  .invite-button {
+    font-size: 10px;
+    padding: 9px 12px;
+  }
+  .invite-button span {
+    font-size: 8px;
+  }
+  .store-metrics {
+    gap: 12px;
+    justify-content: space-between;
+    padding: 13px 3px 15px;
+    font-size: 9px;
+  }
+  .counter-grid {
+    gap: 10px;
+  }
+  .counter-card {
+    padding: 14px 12px;
+    border-radius: 16px;
+  }
+  .counter-number {
+    font-size: 9px;
+  }
+  .card-heading {
+    gap: 7px;
+  }
+  .card-heading h2 {
+    font-size: 11px;
+  }
+  .card-heading p {
+    font-size: 8px;
+  }
+  .recipe-symbol {
+    width: 28px;
+    height: 28px;
+    font-size: 15px;
+    border-radius: 9px;
+  }
+  .recipe-choice {
+    margin-top: 12px;
+    gap: 2px;
+    padding: 3px;
+  }
+  .recipe-choice button {
+    font-size: 9px;
+    padding: 9px 4px;
+    min-height: 35px;
+  }
+  .recipe-detail {
+    font-size: 8px;
+    line-height: 1.7;
+    min-height: 28px;
+    margin: 9px 0;
+  }
+  .upgrade-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .upgrade-row strong {
+    font-size: 9px;
+  }
+  .upgrade-row small {
+    font-size: 8px;
+  }
+  .upgrade-button {
+    font-size: 10px;
+    padding: 10px;
+    min-height: 37px;
+  }
+  .store-footer {
+    padding-top: 16px;
+    gap: 13px;
+  }
+  .manager-upgrade {
+    width: 100%;
+  }
+  .manager-upgrade button {
+    margin-left: auto;
+    font-size: 9px;
+  }
+  .save-controls {
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .save-controls button {
+    min-height: 36px;
+    font-size: 10px;
+  }
+  .save-controls span {
+    font-size: 8px;
+  }
+  .toast {
+    font-size: 11px;
+    padding: 11px 15px;
+    bottom: 18px;
+  }
+  dialog {
+    padding: 24px;
+    margin: auto 18px;
+    max-width: calc(100vw - 36px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  button,
+  .toast {
+    transition: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+.affinity {
+  font-size: 9px;
+  color: #7b8d70;
+  margin: 11px 0 -4px;
+}
+.save-controls [hidden] {
+  display: none !important;
+}
+@media (max-width: 680px) {
+  .affinity {
+    font-size: 8px;
+  }
+}
+
+@media (max-width: 680px) {
+  .icon-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .recipe-choice button,
+  .upgrade-button,
+  .manager-upgrade button,
+  .save-controls button,
+  .invite-button {
+    min-height: 44px;
+  }
+  .recipe-choice button {
+    font-size: 10px;
+  }
+}

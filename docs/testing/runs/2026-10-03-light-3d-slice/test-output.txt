@@ -1,0 +1,47 @@
+
+> idle-coffee-shop-prototype@0.2.0 test
+> node --test tests/*.test.mjs
+
+BJS - [12:52:46]: Babylon.js v9.29.0 - Null engine
+BJS - [12:52:47]: Babylon.js v9.29.0 - Null engine
+BJS - [12:52:47]: Babylon.js v9.29.0 - Null engine
+BJS - [12:52:47]: Babylon.js v9.29.0 - Null engine
+BJS - [12:52:48]: Babylon.js v9.29.0 - Null engine
+BJS - [12:52:48]: Babylon.js v9.29.0 - Null engine
+BJS - [12:52:48]: Babylon.js v9.29.0 - Null engine
+BJS - [12:52:48]: Babylon.js v9.29.0 - Null engine
+BJS - [12:52:48]: Babylon.js v9.29.0 - Null engine
+BJS - [12:52:49]: Babylon.js v9.29.0 - Null engine
+✔ TC-3D-006 original reusable geometry presents snapshots without changing business state (752.664021ms)
+✔ TC-3D-006 physical invite, counter and menu taps dispatch the correct action (235.924221ms)
+✔ TC-3D-006 panning, long holds, cancelled and secondary pointers cannot become taps (227.876877ms)
+✔ TC-3D-001 cups, brew progress, table money, manager cart and machine upgrades are state-driven (335.951244ms)
+✔ TC-3D-006 pause freezes animation, disposal removes listeners and late input is harmless (284.517719ms)
+✔ TC-3D-006 critical scene targets stay in view at 1100×600 (projection only) (209.93139ms)
+✔ TC-3D-006 critical scene targets stay in view at 1340×520 (projection only) (194.33573ms)
+✔ TC-3D-006 critical scene targets stay in view at 930×460 (projection only) (196.427062ms)
+✔ TC-3D-006 high-density picking applies hardware scale exactly once (0.5714285714285714) (198.221539ms)
+✔ TC-3D-006 high-density picking applies hardware scale exactly once (0.5) (196.506294ms)
+✔ TC-3D-001 cash stays conserved through visible customer and manager phases (17.916263ms)
+✔ TC-3D-003 fixed-step advance is independent of frame partition and save round trips (21.284241ms)
+✔ TC-3D-002 recipes and upgrades affect the next brew only (1.240759ms)
+✔ TC-3D-002 original counter affinities create a meaningful recipe tradeoff (14.712304ms)
+✔ TC-3D-003 repeated input is bounded by cooldown, capacity, cost and maximum level (97.242868ms)
+✔ TC-3D-003 paused time and invalid deltas cannot create progress (0.6626ms)
+✔ TC-3D-004 corrupt and future saves preserve original bytes and reject autosave (1.581924ms)
+✔ TC-3D-004 strict validation catches enums, non-finite values, bounds and broken ledgers (0.78421ms)
+✔ TC-3D-004 offline close-loop income is bounded and claimed only once (69.838623ms)
+✔ TC-3D-004 paused offline, storage errors and another client cannot overwrite valid progress (0.483112ms)
+✔ TC-3D-004 overlapping reload endpoints and backwards clocks never reclaim the same interval (3.781597ms)
+✔ TC-3D-004 failed offline anchor writes grant no income and remain retryable (2.394055ms)
+✔ TC-3D-004 save validator accepts every live phase under mixed deterministic actions (122.155256ms)
+✔ TC-3D-001 capped production exposes a real transport bottleneck removable by manager upgrades (31.110957ms)
+✔ TC-3D-005 opaque CAS tags, idempotent retry and offline two-client conflict (2.465416ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 25
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3225.622155

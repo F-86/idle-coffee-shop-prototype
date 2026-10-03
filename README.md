@@ -1,63 +1,29 @@
-# Mellow Bean · 放置咖啡店浏览器原型
+# Mellow Bean · 轻量 3D 咖啡店
 
-这是一个参考放置经营类咖啡店玩法、但使用原创名称与视觉设计的纯前端原型。
-
-## 文档与协作
-
-- [文档导航](docs/README.md)：产品目标、里程碑、开发说明和测试体系。
-- [协作约定](AGENTS.md)：按验收规格开发及文档维护要求。
-- [分阶段迁移清单](docs/development/migration-plan.md)：当前迁移边界、阶段门槛和未验证项。
-- [测试文档规范](docs/testing/standards.md)：以最终产品行为定义可复用用例，通过里程碑选择本轮范围。
+原创低多边形放置咖啡店的简易方向预览。两个柜台、浓缩/拿铁、一名收钱经理，先闭合可见经营链，正式平衡仍在调参。
 
 ## 运行
 
-当前唯一支持的运行方式是 Vite：
+Node 24 推荐。npm install 后 npm run dev，打开输出的本地地址。遇到环境禁止枚举网卡时可用 npm run dev -- --host 127.0.0.1。
 
-    npm install
-    npm run dev
+提交前：node --check app.js、npm run typecheck、npm test、npm run build。npm run preview 检查生产包。默认 index.html 已是新版；旧版仅保留在 Git 历史，不承担旧存档兼容。
 
-然后访问 Vite 输出的本地地址。提交前执行：
+## 玩法
 
-    node --check app.js
-    npm run typecheck
-    npm run build
+客人自动进入、排队、等候出杯、取杯离店。钱先留在台面，经理沿柜台后通道收走并送回左侧金库；到账后才能购买升级。
 
-也可以使用 `npm run preview` 检查生产构建。项目保持纯前端浏览器原型范围。
+- 点入口招客、柜台等级牌升级、后墙菜单切换配方；底部同样提供触控按钮。
+- 浓缩速度快、拿铁售价高；两个柜台有不同擅长，制作中切换不会追改当前杯子。
+- 手机横向滑动店面，经营卡片与存档控制可直接触控。
+- 独立版本化本地档自动保存；暂停、恢复、有限离线收益、坏档保护和导出备份。
 
-## GitHub Pages
+iCloud/CloudKit 只预留 AuthProvider / SaveRepository 边界，真实容器/账户尚未配置。当前只在本浏览器保存，不声称跨设备同步或已具备原生 App/PWA。
 
-`.github/workflows/pages.yml` 在 `main` 推送或手动触发时使用 Node 24、`npm ci`、语法检查和类型检查，再运行 `npm run build -- --base=/idle-coffee-shop-prototype/`，仅上传和发布 `dist/`。本地 `npm run dev` 与普通构建继续使用默认根路径，不需修改日常启动方式。
+## 项目说明
 
-首次启用此工作流，需要在仓库 Settings → Pages → Build and deployment 中将 Source 从 **Deploy from a branch** 改为 **GitHub Actions**，避免继续把未编译源文件当作站点。工作流不创建凭证；只使用 GitHub 的临时部署令牌，部署权限仅限 deploy job。
+- [文档导航](docs/README.md)
+- [行为规格与调参边界](docs/product/specs/light-3d-slice.md)
+- [实现与 CloudKit 目标边界](docs/development/light-3d-preview.md)
+- [测试计划](docs/testing/plans/light-3d-slice.md)
 
-发布目标为 `https://f-86.github.io/idle-coffee-shop-prototype/`。构建/部署任务成功后，还需实际打开站点，确认入口 JS/CSS 与素材成功加载、页面和交互正常；不能仅以绿色工作流代替运行验收。配置依据：[Vite 官方部署说明](https://vite.dev/guide/static-deploy#github-pages)。
-
-## 当前已实现
-
-- 咖啡师在已解锁柜台自动制作咖啡并产生待收现金。
-- 每杯完成后按“同柜台队首取杯 → 一次待收 → 经理收走 → 回金库入账”结算。
-- Phaser 场景层承载柜台、咖啡师、顾客、经理和取杯/现金反馈；React 接管 HUD、控制、升级、订单和弹窗。
-- 核心状态、经济、生产、队列、经理运输、订单、存档和事件由纯 TypeScript 管理；React 与 Phaser 共享同一份 `GameView`，不各自维护金币或生产循环。
-- 单一 `requestAnimationFrame` 时间入口，支持营业暂停、刷新恢复和一次性离线收益。
-- 顾客按柜台实际产能进入、等待、取杯、带杯离店，新顾客自动补位。
-- 手机横屏优先的场景布局，竖屏支持横向滑动；桌面、横屏和竖屏共用响应式界面。
-- 手作订单、咖啡墙、柜台/员工/经营升级、目标、地点、设置、重置和本地存档。
-- 关闭页面后的离线收益；旧 `mellow-bean-idle-v1` 存档会在核心边界归一化，坏档与未来版本受保护。
-
-## 文件结构
-
-- `index.html`：最小 Vite HTML 入口，仅提供 React 挂载点和样式入口。
-- `app.js`：应用启动、存档接入、唯一时间循环、React/Phaser 桥接和只读测试适配器。
-- `src/core/config.ts`：业务配置、稳定 key 和公式所需配置。
-- `src/core/types.ts`：`GameState`、`SaveData`、动作、视图和事件类型。
-- `src/core/state.ts`：默认状态、旧存档迁移和字段归一化。
-- `src/core/engine.ts`：纯经济、逐杯生产、队列、经理运输、订单与交易。
-- `src/core/store.ts`：不依赖 Redux/Zustand 的轻量 action/event 边界。
-- `src/core/storage.ts`：本地存档读写、坏档保护和版本保护。
-- `src/game/ShopScene.ts`：只负责 Phaser 节点、动画和场景绘制，不推进业务时间。
-- `src/ui/react-app.tsx` / `src/ui/react-app.css`：React 页面、HUD、控件、弹窗和 UI 样式。
-- `styles.css` / `scene-layout.css`：既有视觉语言、场景背景和响应式布局。
-- `assets/`：场景、角色、柜台、咖啡杯、现金等视觉素材；Phaser 运行时通过 npm 依赖提供。
-- `package.json`、`vite.config.ts`、`tsconfig.json`：Vite、React、TypeScript strict 和 Phaser 工程配置。
-
-迁移顺序、阶段门槛和未决策项见 [分阶段迁移清单](docs/development/migration-plan.md)，迁移验证见 [迁移验收报告](docs/testing/runs/2026-09-19-1030-vite-react-migration/test-run.md)。2026-10-02 的 HUD 对齐与候客层命中修复、实际验证和未覆盖范围见 [目标回归报告](docs/testing/runs/2026-10-02-hud-queue-hit/report.md)。
+使用 @babylonjs/core 9.29.0（Apache-2.0）。几何、材质、角色由代码原创生成，无外部贴图或游戏原作素材。既有 GitHub Pages 工作流与发布目标保持不变；本轮先推任务分支评审，不修改默认分支或部署设置。
