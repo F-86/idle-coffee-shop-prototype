@@ -1,0 +1,69 @@
+
+> idle-coffee-shop-prototype@0.2.0 test
+> node --test tests/*.test.mjs
+
+BJS - [15:25:19]: Babylon.js v9.29.0 - Null engine
+BJS - [15:25:20]: Babylon.js v9.29.0 - Null engine
+BJS - [15:25:20]: Babylon.js v9.29.0 - Null engine
+BJS - [15:25:21]: Babylon.js v9.29.0 - Null engine
+BJS - [15:25:21]: Babylon.js v9.29.0 - Null engine
+BJS - [15:25:22]: Babylon.js v9.29.0 - Null engine
+BJS - [15:25:22]: Babylon.js v9.29.0 - Null engine
+BJS - [15:25:23]: Babylon.js v9.29.0 - Null engine
+BJS - [15:25:23]: Babylon.js v9.29.0 - Null engine
+BJS - [15:25:23]: Babylon.js v9.29.0 - Null engine
+BJS - [15:25:24]: Babylon.js v9.29.0 - Null engine
+BJS - [15:25:24]: Babylon.js v9.29.0 - Null engine
+BJS - [15:25:24]: Babylon.js v9.29.0 - Null engine
+BJS - [15:25:25]: Babylon.js v9.29.0 - Null engine
+BJS - [15:25:25]: Babylon.js v9.29.0 - Null engine
+BJS - [15:25:25]: Babylon.js v9.29.0 - Null engine
+BJS - [15:25:26]: Babylon.js v9.29.0 - Null engine
+✔ TC-3D-006 original reusable geometry presents snapshots without changing business state (993.01948ms)
+✔ TC-3D-006 all physical room controls dispatch detail actions without mutating economy (442.143041ms)
+✔ TC-3D-006 panning, long holds, cancelled and secondary pointers cannot become taps (487.477094ms)
+✔ TC-3D-001 cups, brew progress, table money, manager cart and machine upgrades are state-driven (572.747124ms)
+✔ TC-3D-006 pause freezes animation, disposal removes listeners and late input is harmless (465.603731ms)
+✔ TC-3D-006 physical 1280×900 at DPR 1: close room, shared anchors and reachable controls (projection only) (380.126769ms)
+✔ TC-3D-006 physical 1280×900 at DPR 1.75: close room, shared anchors and reachable controls (projection only) (320.641333ms)
+✔ TC-3D-006 captured drag is bounded and scene surfaces fill 1280×900 (ray coverage only) (358.89783ms)
+✔ TC-3D-006 physical 390×844 at DPR 1: close room, shared anchors and reachable controls (projection only) (330.701687ms)
+✔ TC-3D-006 physical 390×844 at DPR 1.75: close room, shared anchors and reachable controls (projection only) (309.601225ms)
+✔ TC-3D-006 captured drag is bounded and scene surfaces fill 390×844 (ray coverage only) (308.454821ms)
+✔ TC-3D-006 physical 844×390 at DPR 1: close room, shared anchors and reachable controls (projection only) (338.628013ms)
+✔ TC-3D-006 physical 844×390 at DPR 1.75: close room, shared anchors and reachable controls (projection only) (334.264184ms)
+✔ TC-3D-006 captured drag is bounded and scene surfaces fill 844×390 (ray coverage only) (367.134008ms)
+✔ TC-3D-006 cancellation, capture loss and unrelated pointers preserve one drag owner (370.539289ms)
+✔ TC-3D-006 wall menus remain global recipe boards while each counter selector follows its recipe (436.790152ms)
+✔ TC-3D-006 projected DOM hit areas share captured drag, hold, cancel and single-action guards (367.667258ms)
+(node:71) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ TC-3D-007 REQ-3D-009 full-viewport scene has no webpage frame or page scroll (static contract) (14.899361ms)
+✔ TC-3D-007 REQ-3D-009 permanent HUD contains only balance/status and two small actions (static contract) (0.501408ms)
+✔ TC-3D-007 REQ-3D-010 all nine accessible controls are tied to room anchors (static contract) (0.696281ms)
+✔ TC-3D-007 REQ-3D-012 operating panels exist only inside a closed native dialog (static contract) (0.955065ms)
+✔ TC-3D-007 REQ-3D-012 controls maintain 44px targets, safe-area and dynamic viewport hooks (static contract) (2.260939ms)
+✔ TC-3D-007 REQ-3D-012 delegated clicks reject pointer activation but preserve keyboard actions (handler seam) (5.618629ms)
+✔ TC-3D-001 cash stays conserved through visible customer and manager phases (18.220587ms)
+✔ TC-3D-003 fixed-step advance is independent of frame partition and save round trips (24.362496ms)
+✔ TC-3D-002 recipes and upgrades affect the next brew only (0.922507ms)
+✔ TC-3D-002 original counter affinities create a meaningful recipe tradeoff (18.198735ms)
+✔ TC-3D-003 repeated input is bounded by cooldown, capacity, cost and maximum level (107.905901ms)
+✔ TC-3D-003 paused time and invalid deltas cannot create progress (0.449002ms)
+✔ TC-3D-004 corrupt and future saves preserve original bytes and reject autosave (1.985201ms)
+✔ TC-3D-004 strict validation catches enums, non-finite values, bounds and broken ledgers (1.495829ms)
+✔ TC-3D-004 offline close-loop income is bounded and claimed only once (153.633585ms)
+✔ TC-3D-004 paused offline, storage errors and another client cannot overwrite valid progress (0.514574ms)
+✔ TC-3D-004 overlapping reload endpoints and backwards clocks never reclaim the same interval (2.170348ms)
+✔ TC-3D-004 failed offline anchor writes grant no income and remain retryable (3.111858ms)
+✔ TC-3D-004 save validator accepts every live phase under mixed deterministic actions (135.606419ms)
+✔ TC-3D-001 capped production exposes a real transport bottleneck removable by manager upgrades (34.203729ms)
+✔ TC-3D-005 opaque CAS tags, idempotent retry and offline two-client conflict (2.938532ms)
+ℹ tests 38
+ℹ suites 0
+ℹ pass 38
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7732.351512

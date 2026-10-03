@@ -10,3 +10,7 @@
 | REQ-3D-001/005 | [TC-3D-006](cases/slice/TC-3D-006.md) | NullEngine结构与资源 + 桌面/触控UI |
 
 实际结果见 runs/2026-10-03-light-3d-slice/report.md。精确商业平衡仍为draft，不以源码生成预期证明自己的公式正确。
+
+## 用户反馈后的全屏世界
+
+REQ-3D-009/010/011/012 → [TC-3D-007](cases/slice/TC-3D-007.md)，[计划](plans/fullscreen-world.md)。几何/输入/源代码契约与实际Mac scene-fill截图分别记录，不混作通过。

@@ -14,3 +14,9 @@
 CloudKit 仅作同步存储，不执行经济逻辑。该方案不提供服务端权威、防作弊或真实跨设备同步。serverModifiedAt 是记录保存时间，不能冒充读取时服务器时间。账户切换后本地待同步副本必须隔离。Development 与 Production 记录分开，发布 schema 不迁移玩家档。参见 Apple [CloudKit JS](https://developer.apple.com/documentation/cloudkitjs)、[recordChangeTag](https://developer.apple.com/documentation/cloudkitjs/cloudkit.record/recordchangetag)、[修改记录协议](https://developer.apple.com/library/archive/documentation/DataManagement/Conceptual/CloudKitWebServicesReference/ModifyRecords.html)。
 
 新预览未加入原生包装或安装式 PWA、广告、八柜台与付费服务；先验证方向和闭环。
+
+## 全屏世界修订
+
+canvas为真实viewport尺寸，100dvh与safe-area保护HUD/窗口；没有窄屏中的930px横向DOM画布或下方常驻经营卡片。镜头受限平移，墙体/地面延伸，竖屏局部逛店而非缩完整店面。
+
+CoffeeSceneAction只打开对应操作或入口招客；升级/选配方由窗口按钮执行。projectAnchor和focusAnchor从物件同一world点计算CSS坐标，DOM触控按钮和3D拾取保持DPR一致。窗内只显示当前panel，关闭/背景/Escape回店；源代码和NullEngine不证明真实像素填充。

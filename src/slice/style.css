@@ -9,703 +9,640 @@
     "Microsoft YaHei",
     sans-serif;
   color: #24443c;
-  background: #f4eee3;
+  background: #e7ddc8;
   font-synthesis: none;
-  font-weight: 450;
   -webkit-tap-highlight-color: transparent;
 }
 * {
   box-sizing: border-box;
 }
-body {
+html,
+body,
+#slice-root {
   margin: 0;
-}
-button,
-a {
-  touch-action: manipulation;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 button {
   font: inherit;
-  cursor: pointer;
-  border: 0;
   color: inherit;
+  border: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
 }
 button:disabled {
+  opacity: 0.5;
   cursor: default;
-  opacity: 0.48;
 }
 button:focus-visible,
-a:focus-visible {
-  outline: 3px solid #de9265;
-  outline-offset: 4px;
+summary:focus-visible {
+  outline: 3px solid #f2d86b;
+  outline-offset: 3px;
 }
 button {
   transition:
     background 0.15s,
-    transform 0.15s;
+    box-shadow 0.15s;
 }
 button:active:not(:disabled) {
-  transform: translateY(1px);
+  filter: brightness(0.96);
 }
-a {
-  color: inherit;
+[hidden] {
+  display: none !important;
 }
-.coffee-app {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 22px 32px 18px;
-}
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 22px;
-  margin-bottom: 18px;
-}
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  text-decoration: none;
-  font-weight: 800;
-  letter-spacing: 1.4px;
-  font-size: 15px;
-}
-.brand small {
-  display: block;
-  font-size: 11px;
-  letter-spacing: 1px;
-  margin-top: 5px;
-  color: #7c897a;
-  font-weight: 450;
-}
-.bean-logo {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 50% 50% 42% 45%;
-  background: #285c4f;
-  color: #ffdf9d;
-  font-family: Georgia, serif;
-  font-weight: 500;
-  font-size: 37px;
-  line-height: 1;
-  transform: rotate(-12deg);
-}
-.wallet {
-  display: grid;
-  grid-template-columns: auto auto;
-  align-items: baseline;
-  column-gap: 10px;
-}
-.wallet > span {
-  font-size: 11px;
-  color: #839182;
-  grid-column: 1/-1;
-  text-align: center;
-  margin-bottom: 2px;
-}
-.wallet strong {
-  font-variant-numeric: tabular-nums;
-  font-size: 29px;
-  letter-spacing: -1px;
-}
-.wallet small {
-  font-size: 11px;
-  color: #748476;
-}
-.top-actions {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-.local-badge {
-  font-size: 11px;
-  white-space: nowrap;
-  background: #e5eadb;
-  padding: 7px 10px;
-  border-radius: 20px;
-  color: #698065;
-}
-.icon-button {
-  background: #fffaf0;
-  width: 42px;
-  height: 42px;
-  border: 1px solid #dfdecd;
-  border-radius: 13px;
-  font-weight: 750;
-}
-.shop-shell {
-  position: relative;
-  border-radius: 23px;
-  background: #dedace;
+.coffee-world {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
-  border: 1px solid #d2d6c4;
-  box-shadow: 0 8px 32px #2b443a0c;
+  background: #e7ddc8;
 }
-.scene-caption {
-  position: absolute;
-  z-index: 2;
-  top: 18px;
-  left: 20px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 11px;
-  background: #fdf8e7ed;
-  border-radius: 25px;
-  padding: 9px 13px;
-  pointer-events: none;
-}
-.open-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #598c59;
-}
-.scene-pan-hint {
-  display: none;
-  color: #728677;
-}
-.world-scroll {
-  overflow-x: auto;
-  overflow-y: hidden;
-  touch-action: pan-x pan-y;
-  scrollbar-width: thin;
-  scrollbar-color: #b0bdad #e2e5d6;
-}
-.world-scroll canvas {
+#coffee-canvas {
   display: block;
   width: 100%;
-  min-width: 960px;
-  height: 520px;
+  height: 100%;
+  touch-action: none;
   outline: none;
-  touch-action: pan-x pan-y;
+  cursor: grab;
 }
-.scene-bottom {
+#coffee-canvas:active {
+  cursor: grabbing;
+}
+.hud {
   position: absolute;
-  bottom: 18px;
-  left: 20px;
-  right: 20px;
+  left: calc(16px + env(safe-area-inset-left, 0px));
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  top: calc(14px + env(safe-area-inset-top, 0px));
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  z-index: 3;
   pointer-events: none;
 }
-.scene-bottom > span {
-  font-size: 11px;
-  background: #fff9e8e6;
-  padding: 10px 14px;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px #24443c10;
-}
-.invite-button {
+.wallet-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fff9e9f2;
+  border: 1px solid #e6d9b9;
+  border-radius: 17px;
+  padding: 10px 16px 10px 11px;
+  box-shadow: 0 3px 12px #344a2e12;
+  min-width: 130px;
   pointer-events: auto;
-  color: #fff8e3;
-  background: #285e50;
-  border-radius: 14px;
-  font-size: 12px;
-  font-weight: 650;
-  padding: 11px 17px;
-  box-shadow: 0 5px 0 #1c433a;
+  backdrop-filter: blur(8px);
 }
-.invite-button span {
+.coin-mark {
+  width: 33px;
+  height: 33px;
+  display: grid;
+  place-items: center;
+  background: #e7be65;
+  border: 3px solid #f3d591;
+  border-radius: 50%;
+  color: #805b2a;
+  font-family: Georgia, serif;
+  font-size: 24px;
+}
+.wallet-chip strong {
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 780;
+  line-height: 1.1;
+  letter-spacing: -0.7px;
   display: block;
+}
+.wallet-chip small {
   font-size: 9px;
-  font-weight: 400;
-  opacity: 0.7;
+  color: #839276;
+  display: block;
   margin-top: 4px;
+}
+.hud-actions {
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+.hud-button {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: #fff8e8f2;
+  border: 1px solid #e6d9b9;
+  font-size: 21px;
+  font-weight: 650;
+  box-shadow: 0 3px 12px #344a2e12;
+  backdrop-filter: blur(8px);
+}
+.world-controls {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  overflow: hidden;
+}
+.world-button {
+  position: absolute;
+  left: 0;
+  top: 0;
+  min-height: 44px;
+  pointer-events: auto;
+  white-space: nowrap;
+  backface-visibility: hidden;
+  will-change: transform;
+  font-size: 11px;
+  border-radius: 10px;
+  padding: 7px 12px;
+  box-shadow:
+    0 3px 0 #2d372830,
+    0 2px 12px #29443814;
+  border: 1px solid #ffffff50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-shadow: 0 1px #ffffff2b;
+}
+.world-button span {
+  font-weight: 700;
+}
+.world-button small {
+  font-size: 9px;
+  font-weight: 500;
+}
+.coffee-board {
+  flex-direction: column;
+  gap: 2px;
+  min-width: 102px;
+  background: #254f44ef;
+  color: #ffedbd;
+  border: 2px solid #b77f4d;
+  border-radius: 6px;
+  padding: 7px 13px;
+}
+.coffee-board small {
+  color: #c4d3a6;
+  font-size: 8px;
+}
+.vault-label {
+  background: #fff1bddf;
+  color: #496453;
+  min-width: 78px;
+  flex-direction: column;
+  border-color: #a3bda0;
+  border-radius: 7px;
+}
+.recipe-tag {
+  background: #f9f0dbe8;
+  color: #365c4c;
+  min-width: 78px;
+  border-color: #d9c8a3;
+  border-radius: 8px;
+}
+.upgrade-tag {
+  background: #e6b95deb;
+  color: #77502b;
+  min-width: 88px;
+  border: 2px solid #c18b47;
+  border-radius: 7px;
+  gap: 7px;
+}
+.upgrade-tag small {
+  font-weight: 650;
+}
+.invite-tag {
+  background: #d7a74af2;
+  color: #fff8df;
+  min-width: 106px;
+  border: 2px solid #ad853e;
+  font-weight: 750;
+  border-radius: 7px;
+}
+.manager-tag {
+  background: #fcf2d7e8;
+  color: #60775b;
+  min-width: 70px;
+  gap: 5px;
+  padding: 7px 9px;
+  transform-origin: center;
+}
+.pan-hint {
+  position: absolute;
+  left: 50%;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  margin: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: #fff7e4d9;
+  border: 1px solid #d9cbb1;
+  color: #70836b;
+  padding: 10px 16px;
+  border-radius: 20px;
+  font-size: 11px;
+  white-space: nowrap;
+  transition: opacity 0.3s;
+}
+.pan-hint.dismissed {
+  opacity: 0;
 }
 .render-error {
   position: absolute;
-  inset: 80px 20px auto;
-  background: #fcf6e8;
-  padding: 30px;
-  text-align: center;
-  border-radius: 16px;
-}
-.store-metrics {
-  display: flex;
-  align-items: center;
-  gap: 27px;
-  padding: 15px 6px 17px;
-  font-size: 11px;
-  color: #82907e;
-}
-.store-metrics strong {
-  color: #426253;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-.metric-note {
-  margin-left: auto;
-  color: #7d8d7a;
-}
-.counter-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-.counter-card {
-  background: #fffaf0;
-  border: 1px solid #e2ddcf;
-  border-radius: 19px;
-  padding: 18px 20px;
-  box-shadow: 0 4px 15px #35453903;
-}
-.counter-card.selected {
-  border-color: #c4ccab;
-}
-.card-heading {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.counter-number {
-  font-size: 11px;
-  color: #97a17e;
-  align-self: flex-start;
-  padding-top: 4px;
-}
-.card-heading h2 {
-  margin: 0;
+  top: 30%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  background: #fff8e7;
+  padding: 25px;
+  border-radius: 18px;
+  width: min(400px, calc(100vw - 32px));
   font-size: 14px;
-  letter-spacing: 0.5px;
+  line-height: 1.8;
+  text-align: center;
 }
-.card-heading p {
-  font-size: 10px;
-  color: #8b967f;
-  margin: 4px 0 0;
+.operation-dialog {
+  border: 1px solid #e7d6b8;
+  background: #fffaee;
+  color: #36584b;
+  padding: 25px;
+  border-radius: 23px;
+  width: min(390px, calc(100vw - 28px));
+  max-height: calc(
+    100dvh - 40px - env(safe-area-inset-top, 0px) -
+      env(safe-area-inset-bottom, 0px)
+  );
+  overflow: auto;
+  overscroll-behavior: contain;
+  box-shadow: 0 16px 65px #213b362b;
+  margin: auto;
+  scrollbar-width: thin;
 }
-.recipe-symbol {
-  margin-left: auto;
-  border-radius: 12px;
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  background: #e8d8bd;
-  font-size: 19px;
+.operation-dialog::backdrop {
+  background: #203e3538;
+  backdrop-filter: blur(1px);
 }
-.recipe-choice {
-  display: flex;
-  gap: 6px;
-  margin: 14px 0 10px;
-  background: #eeeadd;
-  border-radius: 10px;
-  padding: 4px;
-}
-.recipe-choice button {
-  flex: 1;
+.dialog-close {
+  position: absolute;
+  right: 11px;
+  top: 10px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
   background: transparent;
-  color: #829079;
+  font-size: 24px;
+  color: #87937a;
+}
+.dialog-heading {
+  padding-right: 32px;
+}
+.dialog-eyebrow {
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: #899c7b;
+}
+.dialog-heading h1 {
+  font-size: 22px;
+  letter-spacing: 0.4px;
+  margin: 9px 0 8px;
+}
+.dialog-heading p {
+  margin: 0 0 17px;
   font-size: 11px;
-  padding: 8px 12px;
-  border-radius: 8px;
+  line-height: 1.65;
+  color: #83927c;
 }
-.recipe-choice button.active {
-  background: #fffdf5;
-  color: #3b6451;
-  box-shadow: 0 2px 5px #273d2910;
-  font-weight: 650;
+.operation-panel {
+  font-size: 12px;
+  line-height: 1.7;
 }
-.recipe-detail {
-  font-size: 10px;
-  color: #879381;
-  margin: 10px 0 15px;
-  min-height: 15px;
-}
-.upgrade-row {
+.recipe-picker {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
 }
-.upgrade-row strong {
-  font-size: 11px;
-  display: block;
-  font-weight: 650;
+.recipe-picker button {
+  min-height: 58px;
+  flex: 1;
+  background: #ede9d9;
+  border: 1px solid #e1dac4;
+  border-radius: 12px;
+  font-size: 12px;
+  color: #7f8e75;
 }
-.upgrade-row small {
+.recipe-picker button small {
   display: block;
   font-size: 9px;
-  color: #9a9f89;
-  margin-top: 5px;
+  margin-top: 2px;
 }
-.upgrade-button {
-  font-size: 11px;
+.recipe-picker button.active {
+  background: #355e4f;
+  color: #fff4d6;
+  border-color: #355e4f;
+}
+.detail-note {
+  font-size: 10px;
+  color: #8b957c;
+  line-height: 1.85;
+  margin: 12px 0;
+}
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 16px 0;
+}
+.detail-grid > span {
+  background: #f0ebdb;
+  border: 1px solid #e5decb;
   border-radius: 11px;
-  background: #e8c183;
-  color: #664b26;
-  padding: 10px 14px;
-  white-space: nowrap;
-  font-weight: 650;
+  padding: 11px 13px;
+  font-size: 10px;
+  color: #8e987d;
 }
-.upgrade-button span {
-  margin-left: 5px;
+.detail-grid strong {
+  display: block;
+  font-size: 17px;
+  color: #486851;
+  line-height: 1.4;
+  margin-top: 4px;
   font-variant-numeric: tabular-nums;
 }
-.store-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 18px 2px 0;
+.upgrade-preview {
+  margin: 13px 0;
+  font-size: 11px;
+  font-weight: 600;
 }
-.manager-upgrade {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
+.upgrade-preview small {
+  font-size: 9px;
+  display: block;
+  font-weight: 400;
+  color: #95a184;
+  margin-top: 4px;
 }
-.manager-icon {
+.primary-button {
+  min-height: 46px;
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: #d7ad65;
+  color: #705229;
+  font-size: 12px;
+  font-weight: 700;
+  width: 100%;
+}
+.secondary-button {
+  min-height: 44px;
+  padding: 11px 14px;
+  border: 1px solid #dddbc3;
+  border-radius: 11px;
+  background: #e7ebd7;
+  font-size: 11px;
+  width: 100%;
+  color: #6f855f;
+}
+.coffee-medallion {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
   display: grid;
   place-items: center;
-  width: 33px;
-  height: 33px;
-  background: #e5e7d8;
+  margin: 20px auto;
+  font-size: 39px;
+  box-shadow: inset 0 0 0 5px #ffffff60;
+}
+.assign-buttons {
+  display: flex;
+  gap: 8px;
+}
+.assign-buttons button {
+  min-height: 44px;
+  background: #e6ead8;
   border-radius: 11px;
-  font-size: 21px;
-  color: #6c8370;
-}
-.manager-upgrade strong {
+  color: #60795a;
+  flex: 1;
   font-size: 11px;
-  display: block;
 }
-.manager-upgrade small {
-  font-size: 9px;
-  color: #8b9581;
-  display: block;
-  margin-top: 3px;
+.vault-total {
+  text-align: center;
+  margin: 19px 0;
 }
-.manager-upgrade button {
-  background: #e6e8d8;
-  border-radius: 9px;
+.vault-total span {
+  display: block;
+  color: #95a181;
   font-size: 10px;
-  padding: 9px 12px;
-  margin-left: 5px;
+}
+.vault-total strong {
+  display: block;
+  font-size: 32px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  color: #41674f;
+}
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.settings-grid button,
+.jump-grid button {
+  min-height: 44px;
+  border: 1px solid #e0ddc7;
+  background: #ecefdf;
+  border-radius: 10px;
+  font-size: 11px;
+  color: #6a7d5c;
+}
+.save-status {
+  font-size: 11px;
+  color: #648052;
+}
+.settings-label {
+  font-size: 10px;
+  color: #8f9e7d;
+  margin: 21px 0 9px;
+}
+.jump-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.jump-grid button {
+  padding: 9px 13px;
+  flex: 1;
   white-space: nowrap;
 }
-.save-controls {
+details {
+  font-size: 10px;
+  line-height: 1.9;
+  color: #8b987d;
+  margin-top: 18px;
+}
+summary {
+  cursor: pointer;
+  min-height: 44px;
   display: flex;
   align-items: center;
-  gap: 11px;
-  color: #8e9783;
-  font-size: 9px;
+  color: #6d865d;
 }
-.save-controls button {
-  font-size: 10px;
-  background: transparent;
-  padding: 7px 2px;
-}
-.save-controls a {
-  font-size: 10px;
+details p {
+  margin: 5px 0 12px;
 }
 .toast {
   position: fixed;
-  bottom: 24px;
+  z-index: 20;
   left: 50%;
-  transform: translate(-50%, 15px);
-  background: #224e43;
-  color: #fff9e9;
-  z-index: 10;
-  padding: 12px 20px;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  transform: translate(-50%, 14px);
+  color: #fff6df;
+  background: #244f43ef;
+  box-shadow: 0 5px 25px #26462d20;
+  border: 1px solid #7c987664;
   border-radius: 14px;
+  padding: 12px 18px;
   font-size: 12px;
+  line-height: 1.6;
   opacity: 0;
-  transition: 0.2s;
   pointer-events: none;
-  box-shadow: 0 8px 30px #1c3c3220;
-  max-width: 90vw;
+  transition: 0.2s;
+  max-width: calc(100vw - 30px);
   text-align: center;
+  width: max-content;
 }
 .toast.visible {
   opacity: 1;
   transform: translate(-50%, 0);
 }
-dialog {
-  border: 0;
-  border-radius: 24px;
-  background: #fffaf0;
-  color: #36564a;
-  padding: 30px;
-  max-width: 440px;
-  box-shadow: 0 20px 100px #173a3a30;
-}
-dialog::backdrop {
-  background: #203e3566;
-  backdrop-filter: blur(3px);
-}
-dialog h2 {
-  font-size: 23px;
-  margin: 10px 0 18px;
-}
-dialog p {
-  font-size: 12px;
-  line-height: 1.9;
-  color: #6d8070;
-}
-.eyebrow {
-  font-size: 10px !important;
-  letter-spacing: 1.5px;
-}
-.dialog-close:not(.primary-button) {
-  position: absolute;
-  right: 16px;
-  top: 12px;
-  background: transparent;
-  font-size: 24px;
-}
-.primary-button {
-  padding: 13px 20px;
-  border-radius: 12px;
-  background: #285e50;
-  color: #fff7e6;
-  font-size: 12px;
-  width: 100%;
-  margin-top: 12px;
-}
-@media (min-width: 1450px) {
-  .coffee-app {
-    padding-top: 30px;
-  }
-}
-@media (max-width: 1000px) {
-  .coffee-app {
-    padding: 16px 20px;
-  }
-  .world-scroll canvas {
-    height: 490px;
-  }
-  .metric-note {
-    display: none;
-  }
-  .store-footer {
-    flex-wrap: wrap;
-  }
-  .save-controls {
-    margin-left: auto;
-  }
-}
 @media (max-width: 680px) {
-  .coffee-app {
-    padding: 14px 12px 20px;
+  .hud {
+    left: calc(10px + env(safe-area-inset-left, 0px));
+    right: calc(10px + env(safe-area-inset-right, 0px));
+    top: calc(10px + env(safe-area-inset-top, 0px));
   }
-  .topbar {
-    gap: 8px;
-    margin-bottom: 13px;
-  }
-  .brand {
-    font-size: 10px;
-    letter-spacing: 0.8px;
+  .wallet-chip {
+    padding: 9px 12px 9px 9px;
+    min-width: 112px;
     gap: 7px;
+    border-radius: 14px;
   }
-  .brand small {
-    font-size: 8px;
-    letter-spacing: 0;
-  }
-  .bean-logo {
-    width: 33px;
-    height: 33px;
-    font-size: 28px;
-  }
-  .wallet {
-    gap: 4px;
-  }
-  .wallet > span {
-    font-size: 9px;
-  }
-  .wallet strong {
-    font-size: 22px;
-  }
-  .wallet small {
-    display: none;
-  }
-  .top-actions {
-    gap: 7px;
-  }
-  .local-badge {
-    font-size: 8px;
-    padding: 5px 7px;
-  }
-  .icon-button {
-    width: 35px;
-    height: 35px;
-    border-radius: 10px;
-  }
-  .shop-shell {
-    border-radius: 19px;
-  }
-  .scene-caption {
-    top: 13px;
-    left: 12px;
-    font-size: 9px;
-    padding: 7px 10px;
-  }
-  .scene-pan-hint {
-    display: inline;
-    margin-left: 6px;
-    font-size: 8px;
-  }
-  .world-scroll canvas {
-    min-width: 930px;
-    height: 460px;
-  }
-  .scene-bottom {
-    left: 12px;
-    right: 12px;
-    bottom: 15px;
-    align-items: flex-end;
-  }
-  .scene-bottom > span {
-    font-size: 9px;
-    line-height: 1.6;
-    max-width: 190px;
-    padding: 8px 10px;
-  }
-  .invite-button {
-    font-size: 10px;
-    padding: 9px 12px;
-  }
-  .invite-button span {
-    font-size: 8px;
-  }
-  .store-metrics {
-    gap: 12px;
-    justify-content: space-between;
-    padding: 13px 3px 15px;
-    font-size: 9px;
-  }
-  .counter-grid {
-    gap: 10px;
-  }
-  .counter-card {
-    padding: 14px 12px;
-    border-radius: 16px;
-  }
-  .counter-number {
-    font-size: 9px;
-  }
-  .card-heading {
-    gap: 7px;
-  }
-  .card-heading h2 {
-    font-size: 11px;
-  }
-  .card-heading p {
-    font-size: 8px;
-  }
-  .recipe-symbol {
+  .coin-mark {
     width: 28px;
     height: 28px;
-    font-size: 15px;
-    border-radius: 9px;
+    font-size: 21px;
   }
-  .recipe-choice {
-    margin-top: 12px;
-    gap: 2px;
-    padding: 3px;
+  .wallet-chip strong {
+    font-size: 22px;
   }
-  .recipe-choice button {
-    font-size: 9px;
-    padding: 9px 4px;
-    min-height: 35px;
-  }
-  .recipe-detail {
-    font-size: 8px;
-    line-height: 1.7;
-    min-height: 28px;
-    margin: 9px 0;
-  }
-  .upgrade-row {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 9px;
-  }
-  .upgrade-row strong {
-    font-size: 9px;
-  }
-  .upgrade-row small {
+  .wallet-chip small {
     font-size: 8px;
   }
-  .upgrade-button {
+  .hud-button {
+    width: 44px;
+    height: 44px;
+    border-radius: 13px;
+    font-size: 20px;
+  }
+  .hud-actions {
+    gap: 6px;
+  }
+  .world-button {
     font-size: 10px;
-    padding: 10px;
-    min-height: 37px;
+    padding: 7px 9px;
   }
-  .store-footer {
-    padding-top: 16px;
-    gap: 13px;
-  }
-  .manager-upgrade {
-    width: 100%;
-  }
-  .manager-upgrade button {
-    margin-left: auto;
-    font-size: 9px;
-  }
-  .save-controls {
-    width: 100%;
-    justify-content: space-between;
-    gap: 8px;
-  }
-  .save-controls button {
-    min-height: 36px;
+  .coffee-board {
+    min-width: 90px;
     font-size: 10px;
   }
-  .save-controls span {
+  .coffee-board small {
+    font-size: 7px;
+  }
+  .recipe-tag {
+    min-width: 72px;
+  }
+  .upgrade-tag {
+    min-width: 78px;
+    gap: 5px;
+  }
+  .upgrade-tag small {
     font-size: 8px;
+  }
+  .vault-label {
+    min-width: 69px;
+  }
+  .manager-tag {
+    min-width: 62px;
+    font-size: 9px;
+  }
+  .operation-dialog {
+    padding: 23px 20px;
+    border-radius: 20px;
+    max-height: calc(74dvh - env(safe-area-inset-bottom, 0px));
+    width: calc(100vw - 28px);
+  }
+  .dialog-heading h1 {
+    font-size: 21px;
+  }
+  .pan-hint {
+    font-size: 10px;
+    padding: 9px 14px;
+    bottom: calc(13px + env(safe-area-inset-bottom, 0px));
   }
   .toast {
     font-size: 11px;
-    padding: 11px 15px;
-    bottom: 18px;
   }
-  dialog {
-    padding: 24px;
-    margin: auto 18px;
-    max-width: calc(100vw - 36px);
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .hud {
+    top: calc(8px + env(safe-area-inset-top, 0px));
+  }
+  .wallet-chip {
+    padding: 7px 12px 7px 8px;
+  }
+  .wallet-chip strong {
+    font-size: 20px;
+  }
+  .wallet-chip small {
+    font-size: 8px;
+  }
+  .coin-mark {
+    width: 27px;
+    height: 27px;
+    font-size: 20px;
+  }
+  .hud-button {
+    width: 44px;
+    height: 44px;
+  }
+  .operation-dialog {
+    width: 360px;
+    max-height: calc(
+      100dvh - 20px - env(safe-area-inset-top, 0px) -
+        env(safe-area-inset-bottom, 0px)
+    );
+    padding: 20px;
+  }
+  .dialog-heading p {
+    margin-bottom: 12px;
+  }
+  .detail-grid {
+    margin: 12px 0;
+  }
+  .pan-hint {
+    bottom: 10px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
   button,
-  .toast {
+  .toast,
+  .pan-hint {
     transition: none;
   }
-  html {
-    scroll-behavior: auto;
-  }
 }
 
-.affinity {
-  font-size: 9px;
-  color: #7b8d70;
-  margin: 11px 0 -4px;
-}
-.save-controls [hidden] {
-  display: none !important;
-}
-@media (max-width: 680px) {
-  .affinity {
-    font-size: 8px;
-  }
-}
-
-@media (max-width: 680px) {
-  .icon-button {
-    min-width: 44px;
-    min-height: 44px;
-  }
-  .recipe-choice button,
-  .upgrade-button,
-  .manager-upgrade button,
-  .save-controls button,
-  .invite-button {
-    min-height: 44px;
-  }
-  .recipe-choice button {
-    font-size: 10px;
-  }
+.world-button {
+  touch-action: none;
 }
