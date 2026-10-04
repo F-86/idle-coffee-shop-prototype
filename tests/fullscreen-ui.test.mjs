@@ -16,6 +16,7 @@ const { RenderBudget, readRenderMode, isRenderMode, RENDER_MODE_KEY } = await im
 const { FrameInterpolator } = await import('../src/slice/render/FrameInterpolator.ts');
 const { RouteDiagnostics, isRouteQA } = await import('../src/slice/qa/RouteDiagnostics.ts');
 const { RouteQAPanel } = await import('../src/slice/qa/RouteQAPanel.ts');
+const { PerformanceQAPanel } = await import('../src/slice/qa/PerformanceQAPanel.ts');
 const { createEngine, createInitialState, recipeById, managerSpeed } = await import('../src/slice/core/engine.ts');
 const { LocalSaveRepository, SAVE_KEY, createMemoryStorage } = await import('../src/slice/core/persistence.ts');
 
@@ -102,6 +103,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   document._nodes = nodes;
   document.activeElement = null;
   document.hidden = false;
+  document.hasFocus = () => true;
   const root = new FakeElement('div', document);
   root.setAttribute('id', 'slice-root');
   root.querySelector = selector => nodes.find(node => node.matches(selector)) ?? null;
@@ -148,11 +150,13 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   const frames = new Map(), timers = new Map();
   let nextId = 0, renderer, observer, hmrCleanup;
   class FakeScene {
+    statsReads = 0; poseReads = 0;
     updates = []; focusCalls = []; selection = []; interactionCalls = []; interactionEnabled = true; panCalls = []; focused = null; activationCalls = 0; disposed = false; resizeCalls = 0;
     constructor(canvas, action, options) { if (renderUnavailable) throw Error('WebGL unavailable in test fixture'); this.canvas = canvas; this.action = action; this.renderMode = options.renderMode; renderer = this; }
     setRenderMode(mode) { this.renderMode = mode; this.resize(); }
     update(state, dt) { this.updates.push({ state: structuredClone(state), dt }); }
-    readCustomerPose(id) { const customer = this.updates.at(-1)?.state.customers.find(customer => customer.id === id); return customer ? { x: customer.x, z: customer.z, screenX: 200, screenY: 250, inViewport: true } : null; }
+    readRenderStats() { this.statsReads++; return { targetFps: this.renderMode === 'smooth' ? null : this.renderMode === 'balanced' ? 60 : 30, renderWidth: 800, renderHeight: 1100, meshCount: 200, renderedFrames: this.updates.length }; }
+    readCustomerPose(id) { this.poseReads++; const customer = this.updates.at(-1)?.state.customers.find(customer => customer.id === id); return customer ? { x: customer.x, z: customer.z, screenX: 200, screenY: 250, inViewport: true } : null; }
     selectedCounter(id) { this.selection.push(id); }
     resize() { this.resizeCalls++; }
     focusAnchor(key) { if (!this.interactionEnabled || !['counter-a-recipe', 'counter-a-upgrade', 'counter-b-recipe', 'counter-b-upgrade', 'menu-espresso', 'menu-latte', 'vault', 'invite'].includes(key)) return; this.focusCalls.push(key); this.focused = key; }
@@ -182,7 +186,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   }
   class FakeDate extends Date { constructor(...args) { super(...(args.length ? args : [clock.now])); } static now() { return clock.now; } }
   const source = main.replace(/^import\s[\s\S]*?;\n/gm, '').replace(/if \(import\.meta\.hot\) import\.meta\.hot\.dispose\(\(\) => cleanup\(\)\);/, 'captureCleanup(() => cleanup());');
-  const context = { document, window, location: { search: query }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, RouteDiagnostics, isRouteQA, RouteQAPanel, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, createEngine, recipeById, managerSpeed, LocalSaveRepository, SAVE_KEY, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL() {} }, Blob, console, setTimeout: callback => { const id = ++nextId; timers.set(id, callback); return id; }, clearTimeout: id => timers.delete(id), requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
+  const context = { document, window, location: { search: query }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, RouteDiagnostics, isRouteQA, RouteQAPanel, PerformanceQAPanel, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, createEngine, recipeById, managerSpeed, LocalSaveRepository, SAVE_KEY, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL() {} }, Blob, console, setTimeout: callback => { const id = ++nextId; timers.set(id, callback); return id; }, clearTimeout: id => timers.delete(id), requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
   runInNewContext(stripTypeScriptTypes(source), context, { timeout: 1500 });
   const debug = window.__coffeeSliceDebug;
   const state = () => structuredClone(debug.readState());
@@ -990,6 +994,7 @@ test('TC-3D-014 QA panel/debug are absent by default and explicit opt-in leaves 
     const f = fixture({ query });
     try {
       assert.equal(f.element('.route-qa'), null); assert.equal(f.element('.route-qa-marker'), null);
+      assert.equal(f.element('.performance-qa'), null);
       assert.equal(f.window.__coffeeSliceDebug, undefined);
       f.tick(20); f.click('#settings'); f.click('#save');
       const expected = createEngine(); expected.advance(20);
@@ -1064,5 +1069,137 @@ test('TC-3D-014 legacy-route actors are visibly marked rather than misreported a
     f.tick(.3);
     assert.match(text.textContent, /terminal.*despawn.*LEGACY route/);
     assert.equal(f.window.__coffeeSliceDebug.readRoutes().terminal.x, -8);
+  } finally { f.dispose(); }
+});
+
+function openPerformance(f) {
+  const panel = f.element('.performance-qa'); panel.open = true; panel.emit('toggle');
+  return { panel, text: panel.children.find(child => child.tagName === 'PRE'),
+    restart: panel.children.find(child => child.textContent === '重新开始计时'),
+    freeze: panel.children.find(child => child.textContent === '冻结读数') };
+}
+
+test('TC-3D-015 performance panel is idle while closed, 1Hz when open, and leaves business state/save unchanged', () => {
+  const f = fixture(), reference = fixture({ query: '' });
+  try {
+    assert.equal(f.element('.performance-qa').open, false);
+    for (let i = 0; i < 100; i++) { f.tick(.01); reference.tick(.01); }
+    assert.equal(f.renderer.statsReads, 0); assert.equal(f.window.__coffeeSliceDebug.readPerformance().totalIntervals, 0);
+    const p = openPerformance(f);
+    let writes = 0, value = p.text.textContent;
+    Object.defineProperty(p.text, 'textContent', { get: () => value, set: next => { writes++; value = next; } });
+    for (let i = 0; i < 601; i++) { f.tick(.01); reference.tick(.01); }
+    const stats = f.window.__coffeeSliceDebug.readPerformance();
+    assert.equal(stats.totalIntervals, 600); assert.equal(stats.totalMs, 6000); assert.equal(stats.fps, 100);
+    assert.equal(f.renderer.statsReads, 7); assert.equal(writes, 7);
+    assert.match(value, /p50 10.00ms · p95 10.00ms/); assert.match(value, /mode smooth/);
+    assert.match(value, /viewport 400×550 CSS/); assert.match(value, /buffer 800×1100/);
+    assert.match(value, /customers.*manager Lv1/); assert.match(value, /不是模拟时间、GPU耗时、上屏帧或温度/);
+    f.click('#settings'); f.click('#save'); reference.click('#settings'); reference.click('#save');
+    assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, JSON.parse(reference.memory.getItem(SAVE_KEY)).state);
+    assert.doesNotMatch(f.memory.getItem(SAVE_KEY), /totalIntervals|p95Ms|capacityLimited/);
+    assert.equal(f.frames.size, 1); assert.equal(f.timers.size, reference.timers.size);
+    p.panel.open = false; p.panel.emit('toggle');
+    const reads = f.renderer.statsReads;
+    for (let i = 0; i < 120; i++) f.tick(1 / 60);
+    assert.equal(f.renderer.statsReads, reads); assert.equal(writes, 7);
+    assert.equal(f.window.__coffeeSliceDebug.readPerformance().totalIntervals, 0);
+  } finally { f.dispose(); reference.dispose(); }
+  assert.equal(f.element('.performance-qa'), null);
+});
+
+test('TC-3D-015 counts rendered frames only, with no hidden/BFCache/mode/resize/reload cross-segment gap', () => {
+  const f = fixture({ renderMode: 'low-power' });
+  try {
+    openPerformance(f);
+    for (let i = 0; i < 120; i++) f.tick(1 / 120);
+    const s = f.window.__coffeeSliceDebug.readPerformance();
+    assert.equal(s.totalIntervals, f.renderer.updates.length - 1);
+    assert.ok(Math.abs(s.fps - 30) < 1e-8); assert.ok(Math.abs(s.p50Ms - 1000 / 30) < 1e-8);
+    f.document.hidden = true; f.document.emit('visibilitychange');
+    assert.equal(f.frames.size, 0); assert.equal(f.window.__coffeeSliceDebug.readPerformance().totalIntervals, 0);
+    f.clock.now += 60_000; f.clock.performance += 60_000;
+    f.document.hidden = false; f.document.emit('visibilitychange');
+    for (let i = 0; i < 8; i++) f.tick(1 / 120);
+    assert.equal(f.window.__coffeeSliceDebug.readPerformance().totalOver50, 0);
+    const resets = [
+      () => { const smooth = f.nodes.find(node => node.dataset.renderMode === 'smooth'); f.root.emit('click', { target: smooth }); },
+      () => f.observer.callback(), () => f.window.emit('resize'), () => f.window.visualViewport.emit('resize'),
+      () => { f.window.emit('pagehide', { persisted: true }); f.clock.performance += 3000; f.clock.now += 3000; f.window.emit('pageshow', { persisted: true }); },
+      () => { f.click('#settings'); f.click('#reload'); },
+    ];
+    for (const reset of resets) {
+      reset(); assert.equal(f.window.__coffeeSliceDebug.readPerformance().totalIntervals, 0);
+      f.tick(.01); f.tick(.01);
+      assert.equal(f.window.__coffeeSliceDebug.readPerformance().p95Ms, 10);
+      assert.equal(f.frames.size, 1);
+    }
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-015 frozen results are stable and restart clears only diagnostics', () => {
+  const f = fixture();
+  try {
+    const p = openPerformance(f); f.tick(.01); f.tick(.01); f.tick(1);
+    const state = f.state(); p.freeze.emit('click'); assert.deepEqual(f.state(), state);
+    const text = p.text.textContent, stats = f.window.__coffeeSliceDebug.readPerformance(), reads = f.renderer.statsReads;
+    for (let i = 0; i < 100; i++) f.tick(.01);
+    p.freeze.emit('click'); assert.equal(p.text.textContent, text);
+    assert.deepEqual(f.window.__coffeeSliceDebug.readPerformance(), stats); assert.equal(f.renderer.statsReads, reads);
+    assert.match(text, /^FROZEN/);
+    const current = f.state(); p.restart.emit('click'); assert.deepEqual(f.state(), current);
+    assert.equal(f.window.__coffeeSliceDebug.readPerformance().totalIntervals, 0);
+    f.tick(.01); f.tick(.01); assert.equal(f.window.__coffeeSliceDebug.readPerformance().p95Ms, 10);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-015 visible-but-unfocused pages cannot contaminate foreground timing', () => {
+  const f = fixture();
+  try {
+    const p = openPerformance(f); f.tick(.01); f.tick(.01);
+    assert.equal(f.window.__coffeeSliceDebug.readPerformance().totalIntervals, 1);
+    f.document.hasFocus = () => false; f.window.emit('blur');
+    f.tick(1); f.tick(1);
+    assert.equal(f.window.__coffeeSliceDebug.readPerformance().totalIntervals, 0);
+    assert.match(p.text.textContent, /PAUSED · page unfocused/);
+    f.document.hasFocus = () => true; f.window.emit('focus'); f.tick(.01); f.tick(.01);
+    assert.equal(f.window.__coffeeSliceDebug.readPerformance().p95Ms, 10);
+    assert.equal(f.window.__coffeeSliceDebug.readPerformance().totalOver50, 0);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-015 context loss invalidates measurements even when the scene object survives', () => {
+  const f = fixture();
+  try {
+    const p = openPerformance(f); f.tick(.01); f.tick(.01);
+    f.element('#coffee-canvas').emit('webglcontextlost'); f.tick(1); f.tick(1);
+    assert.equal(f.window.__coffeeSliceDebug.readPerformance().totalIntervals, 0);
+    assert.match(p.text.textContent, /BLOCKED.*WebGL context lost/);
+    f.element('#coffee-canvas').emit('webglcontextrestored'); f.tick(.01); f.tick(.01);
+    assert.equal(f.window.__coffeeSliceDebug.readPerformance().p95Ms, 10);
+    assert.equal(f.window.__coffeeSliceDebug.readPerformance().totalOver50, 0);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-015 unavailable renderer never reports fake FPS; collapsed route panel skips pose/DOM capture', () => {
+  const unavailable = fixture({ renderUnavailable: true });
+  try {
+    const p = openPerformance(unavailable); unavailable.tick(1); unavailable.tick(1);
+    const stats = unavailable.window.__coffeeSliceDebug.readPerformance();
+    assert.equal(stats.fps, null); assert.equal(stats.totalIntervals, 0);
+    assert.match(p.text.textContent, /BLOCKED · renderer unavailable/); assert.match(p.text.textContent, /FPS —/);
+  } finally { unavailable.dispose(); }
+  const f = fixture();
+  try {
+    f.tick(10);
+    const panel = f.element('.route-qa'), text = panel.children.find(child => child.tagName === 'PRE');
+    const oldText = text.textContent, oldReads = f.renderer.poseReads;
+    panel.open = false; panel.emit('toggle');
+    assert.equal(f.element('.route-qa-marker').hidden, true);
+    for (let i = 0; i < 60; i++) f.tick(1 / 60);
+    assert.equal(f.renderer.poseReads, oldReads); assert.equal(text.textContent, oldText);
+    panel.open = true; panel.emit('toggle'); f.tick(.1);
+    assert.equal(f.renderer.poseReads, oldReads + 1); assert.notEqual(text.textContent, oldText);
+    assert.ok(f.window.__coffeeSliceDebug.readRoutes().records.length);
   } finally { f.dispose(); }
 });

@@ -15,6 +15,7 @@ import { RenderBudget, readRenderMode, isRenderMode, RENDER_MODE_KEY, type Rende
 import { FrameInterpolator } from "./render/FrameInterpolator";
 import { RouteDiagnostics, isRouteQA } from "./qa/RouteDiagnostics";
 import { RouteQAPanel } from "./qa/RouteQAPanel";
+import { PerformanceQAPanel } from "./qa/PerformanceQAPanel";
 import "./style.css";
 
 const root = document.querySelector<HTMLDivElement>("#slice-root")!;
@@ -109,6 +110,7 @@ let panel: "counter" | "coffee" | "vault" | "settings" | null =
     null,
   viewedRecipe: RecipeId = "espresso";
 let scene: CoffeeScene | null = null;
+let qaContextLost = false;
 let sceneInteractive = true;
 let returnFocus: HTMLElement | null = null;
 function toast(message: string) {
@@ -202,6 +204,18 @@ try {
     "此浏览器无法开启 3D。请用支持 WebGL 的 Safari、Chrome 或 Edge 打开。";
   console.error(err);
 }
+const performancePanel = routeDiagnostics ? new PerformanceQAPanel(root, () => {
+  const stats = scene?.readRenderStats();
+  const rect = canvas.getBoundingClientRect();
+  const counts = { entering: 0, queue: 0, serving: 0, receiving: 0, leaving: 0 };
+  for (const customer of engine.state.customers) counts[customer.phase]++;
+  return [
+    `mode ${renderMode} · target ${stats ? stats.targetFps ?? "display RAF" : "unavailable"} · visible=${!document.hidden} · focus=${document.hasFocus()}`,
+    `viewport ${rect.width}×${rect.height} CSS · device DPR ${window.devicePixelRatio || 1} · buffer ${stats?.renderWidth ?? 0}×${stats?.renderHeight ?? 0} · effective DPR ${stats && rect.width ? (stats.renderWidth / rect.width).toFixed(2) : "—"}`,
+    `customers ${engine.state.customers.length} ${JSON.stringify(counts)} · ${engine.state.counters.map(c => `${c.id} Lv${c.level}/${c.recipe}`).join(" · ")} · manager Lv${engine.state.manager.level}`,
+    `scene meshes ${stats?.meshCount ?? 0} · submissions ${stats?.renderedFrames ?? 0} · core ${engine.state.elapsed.toFixed(2)}s · paused=${engine.state.paused} · dialog=${panel ?? "none"} · routePanel=${routePanel?.active}`,
+  ].join("\n");
+}) : null;
 function invite() {
   if (engine.invite()) toast("欢迎光临！客人正走进小店");
   else
@@ -251,6 +265,7 @@ on(root, "click", (event) => {
     renderMode = mode;
     renderBudget.setMode(mode, performance.now());
     scene?.setRenderMode(mode);
+    performancePanel?.reset("render mode changed");
     try { browserStorage.setItem(RENDER_MODE_KEY, mode); }
     catch { toast("本次画面设置已生效，但浏览器未允许保存偏好"); }
     updateRenderModeUI();
@@ -391,6 +406,7 @@ on($("#reload"), "click", () => {
     return;
   const recovered = repository.load(Date.now());
   routeDiagnostics?.reset("save reload");
+  performancePanel?.reset("save reload");
   engine = createEngine(recovered.state, routeDiagnostics?.observe);
   saveBlocked =
     recovered.protectedRaw ||
@@ -423,6 +439,7 @@ on($("#new-shop"), "click", () => {
     return;
   }
   routeDiagnostics?.reset("new shop");
+  performancePanel?.reset("new shop");
   engine = createEngine(undefined, routeDiagnostics?.observe);
   saveBlocked = false;
   conflictBlocked = false;
@@ -541,7 +558,8 @@ function tick(now: number) {
   const dt = Math.min(elapsed, 7200);
   const view = presentation.advance(engine, Math.max(0, dt));
   scene?.update(view, dt);
-  if (routeDiagnostics && routePanel) {
+  if (performancePanel?.active) performancePanel.update(now, !!scene && !qaContextLost, document.hasFocus());
+  if (routeDiagnostics && routePanel?.active) {
     // Choose a loaded customer before asking the scene for its same-ID mesh.
     if (routeDiagnostics.trackedId === null) routeDiagnostics.selectNext(engine.state);
     routePanel.update(engine.state, view, !!scene, scene?.readCustomerPose(routeDiagnostics.trackedId) ?? null, dt);
@@ -572,6 +590,7 @@ function resumeVisible() {
   // Hidden/offline/reloaded state is a discontinuity, never blend across its old path.
   presentation.reset(engine.state);
   routeDiagnostics?.reset("visibility / offline discontinuity");
+  performancePanel?.reset("visible / offline discontinuity");
   scene?.resize();
   frame = requestAnimationFrame(tick);
 }
@@ -582,12 +601,14 @@ function settleVisibleTail() {
 function onVisibility() {
   cancelAnimationFrame(frame);
   if (document.hidden) {
+    performancePanel?.reset("hidden; sampling stopped");
     settleVisibleTail();
     hiddenAt ??= Date.now();
     save(false, hiddenAt);
   } else resumeVisible();
 }
 function onPageHide(event: Event) {
+  performancePanel?.reset("pagehide; sampling stopped");
   cancelAnimationFrame(frame);
   settleVisibleTail();
   hiddenAt ??= Date.now();
@@ -598,16 +619,19 @@ const sizeObserver =
   typeof ResizeObserver !== "undefined"
     ? new ResizeObserver(() => {
         scene?.resize();
+        performancePanel?.reset("canvas resized");
       })
     : null;
 sizeObserver?.observe($("#coffee-canvas"));
 on(window, "resize", () => {
   scene?.resize();
+  performancePanel?.reset("window resized");
 });
 const visualViewport = window.visualViewport;
 if (visualViewport)
   on(visualViewport, "resize", () => {
     scene?.resize();
+    performancePanel?.reset("visual viewport resized");
   });
 function cleanup(persist = true) {
   if (stopped) return;
@@ -618,10 +642,17 @@ function cleanup(persist = true) {
   listeners.abort();
   sizeObserver?.disconnect();
   routePanel?.dispose();
+  performancePanel?.dispose();
   if (routeDiagnostics) Reflect.deleteProperty(window, "__coffeeSliceDebug");
   scene?.dispose();
 }
 on(document, "visibilitychange", onVisibility);
+if (performancePanel) {
+  on(window, "blur", () => performancePanel.reset("page unfocused; sampling stopped"));
+  on(window, "focus", () => performancePanel.reset("page focused"));
+  on(canvas, "webglcontextlost", () => { qaContextLost = true; performancePanel.reset("WebGL context lost"); });
+  on(canvas, "webglcontextrestored", () => { qaContextLost = false; performancePanel.reset("WebGL context restored"); });
+}
 on(window, "pagehide", onPageHide);
 on(window, "pageshow", (event) => {
   if ((event as PageTransitionEvent).persisted) resumeVisible();
@@ -634,6 +665,7 @@ if (routeDiagnostics)
       selected: () => selected,
       focusedObject: () => scene?.getFocus(),
       readRenderStats: () => scene?.readRenderStats(),
+      readPerformance: () => performancePanel?.read(),
       readFootprints: () => Object.fromEntries(sceneAnchors.map((key) => [key, scene?.getAnchorFootprint(key)])),
       readAnchors: () =>
         Object.fromEntries(

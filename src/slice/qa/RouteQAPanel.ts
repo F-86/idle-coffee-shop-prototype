@@ -39,9 +39,14 @@ export class RouteQAPanel {
     this.marker = document.createElement('span'); this.marker.className = 'route-qa-marker'; this.marker.hidden = true;
     this.marker.setAttribute('aria-hidden', 'true');
     host.append(this.panel, this.marker);
+    this.panel.addEventListener('toggle', () => {
+      if (!this.panel.open) this.marker.hidden = true;
+      this.elapsed = Infinity;
+    }, { signal: this.listeners.signal });
   }
+  get active(): boolean { return !this.disposed && this.panel.open; }
   update(authority: Readonly<SliceState>, presented: Readonly<SliceState>, rendererAvailable: boolean, pose: SceneCustomerPose | null, dt: number): void {
-    if (this.disposed) return;
+    if (!this.active) return;
     this.diagnostics.capture(authority, presented, rendererAvailable, pose);
     this.marker.hidden = !pose?.inViewport;
     if (pose?.inViewport) {

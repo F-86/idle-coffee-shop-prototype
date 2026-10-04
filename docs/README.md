@@ -21,3 +21,5 @@
 当前顾客离店延伸：[计划](testing/plans/customer-boundary-exit.md)、[TC-3D-013](testing/cases/slice/TC-3D-013.md)。独立平行返程路走到入口侧边界，有限路口让行，删除地毯端箭头；连续路线、间距、满队活性与在途档原位迁移分别验证。
 
 路线验收辅助：[计划](testing/plans/route-observability.md)、[TC-3D-014](testing/cases/slice/TC-3D-014.md)。明确 `?qa=1` 开启可折叠诊断与顾客 ID 标记；真实 core 事件/实际 mesh 位置/插值延迟分列。默认HUD及存档不变，诊断不是像素验收。
+
+真实帧节奏诊断：[计划](testing/plans/performance-measurement.md)、[TC-3D-015](testing/cases/slice/TC-3D-015.md)。`?qa=1`可展开Performance QA，记录真实RAF提交节奏和现场负载；默认折叠无采样，FPS不冒充GPU完成帧或温度。

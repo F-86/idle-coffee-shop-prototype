@@ -44,3 +44,7 @@ REQ-3D-025 → [TC-3D-013](cases/slice/TC-3D-013.md)、[计划](plans/customer-b
 ## 路线验收身份与事实诊断
 
 REQ-3D-020/025 辅助 → [TC-3D-014](cases/slice/TC-3D-014.md)、[计划](plans/route-observability.md)。严格opt-in、完整固定步事件、实际模型ID投影、收款/路过区别、有限内存、状态/保存不变和生命周期；真机视觉结果另外记录。
+
+## 真实浏览器帧节奏测量辅助
+
+REQ-3D-024 辅助 → [TC-3D-015](cases/slice/TC-3D-015.md)、[计划](plans/performance-measurement.md)。有界单调RAF间隔、滚动分位/长间隔、1Hz UI、前台/焦点/上下文丢失/尺寸/模式分段、冻结、默认零采样与经济/保存不变。真机采样和温度结论另记，不以自动时钟测试代替。

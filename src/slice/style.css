@@ -498,3 +498,9 @@ details p {
 .route-qa pre { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 .route-qa-marker { position: fixed; z-index: 39; transform: translate(-50%, -100%); pointer-events: none; padding: 2px 5px; border-radius: 4px; color: #fff; background: #163a32; font: bold 12px monospace; }
 .route-qa-marker[hidden] { display: none; }
+
+/* Opt-in, initially collapsed; the normal HUD is unchanged. */
+.performance-qa { position: fixed; z-index: 40; left: 10px; top: 64px; width: min(510px, calc(100vw - 20px)); max-height: 38vh; overflow: auto; padding: 8px; border: 1px solid #738c86; border-radius: 8px; background: #fcfff4ed; color: #163a32; font: 11px/1.35 monospace; box-sizing: border-box; }
+.performance-qa summary { cursor: pointer; font-weight: 700; }
+.performance-qa button { margin: 6px 6px 0 0; min-height: 44px; padding: 4px 8px; font: inherit; }
+.performance-qa pre { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
