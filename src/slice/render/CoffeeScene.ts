@@ -26,15 +26,12 @@ export type CoffeeSceneAction =
   | { type: 'counter'; id: CounterId }
   | { type: 'recipe'; id: CounterId }
   | { type: 'menu'; recipe: RecipeId }
-  | { type: 'vault' }
-  | { type: 'manager' }
-  | { type: 'settings' }
-  | { type: 'pause' };
+  | { type: 'vault' };
 
 export type CoffeeSceneAnchor =
   | 'invite' | 'counter-a-upgrade' | 'counter-b-upgrade'
   | 'counter-a-recipe' | 'counter-b-recipe'
-  | 'menu-espresso' | 'menu-latte' | 'vault' | 'manager' | 'settings' | 'pause';
+  | 'menu-espresso' | 'menu-latte' | 'vault';
 export interface AnchorProjection { x: number; y: number; visible: boolean }
 
 /** The optional engine is a QA seam; normal callers only supply canvas and action callback. */
@@ -62,6 +59,7 @@ type Station = {
   plaque: Label;
   selector: Label;
   cashLabel: Label;
+  cashRoot: TransformNode;
   cash: TransformNode[];
   machineExtras: TransformNode[];
   readyCup: TransformNode;
@@ -82,6 +80,14 @@ const SHIRTS = ['#c86e5d', '#5c9ca6', '#d3ac50', '#8b84ae', '#779f74', '#c28798'
 const HAIR = ['#3d3531', '#6c4531', '#d5b677', '#493b49', '#aba99d'];
 const TAU = Math.PI * 2;
 const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
+// World X runs right-to-left in this fixed camera. This location is left of both wall menus.
+const VISUAL_VAULT_X = 8.8;
+/** Presentation route only: the logical economy keeps its original -8 → 0 → 5 → -8 loop. */
+export function managerPresentationX(manager: Readonly<SliceState['manager']>): number {
+  if (manager.target === 0) return VISUAL_VAULT_X * (1 - clamp((manager.x + 8) / 8));
+  if (manager.target === 1) return clamp(manager.x, 0, 5);
+  return 5 + (VISUAL_VAULT_X - 5) * (1 - clamp((manager.x + 8) / 13));
+}
 const cashText = (cents: number) => `¥ ${(cents / 100).toFixed(2)}`;
 
 /**
@@ -110,7 +116,7 @@ export class CoffeeScene {
   private readonly stations = new Map<CounterId, Station>();
   private readonly labels: Label[] = [];
   private readonly manager: Person;
-  private readonly managerLabel: Label;
+  private readonly vaultLabel: Label;
   private managerCart!: TransformNode;
   private readonly cartCash: TransformNode[] = [];
   private readonly invite: Label;
@@ -123,7 +129,6 @@ export class CoffeeScene {
   private selected: CounterId | null = null;
   private focused: CoffeeSceneAnchor | null = null;
   private readonly focusMaterials = new Map<Mesh, StandardMaterial>();
-  private readonly pauseLabel: Label;
   private down: PointerGesture | null = null;
 
   constructor(
@@ -175,13 +180,16 @@ export class CoffeeScene {
     this.stations.set('counter-b', this.makeStation('counter-b', 5, COLORS.rose, COLORS.roseDark, 'B'));
     this.makeMenu('espresso', 0);
     this.makeMenu('latte', 5);
-    this.pauseLabel = this.makeServicePanel();
     this.invite = this.makeEntrance();
-    this.vaultLamp = this.makeVault();
+    const vault = this.makeVault();
+    this.vaultLamp = vault.lamp;
+    this.vaultLabel = vault.label;
     this.manager = this.makePerson('manager', 1, '#e0ad52', false, true);
-    this.manager.root.position.set(-8, 0, -1.7);
+    this.manager.root.position.set(VISUAL_VAULT_X, 0, -1.7);
+    this.manager.previousX = VISUAL_VAULT_X;
+    this.manager.previousZ = -1.7;
     this.manager.root.scaling.setAll(0.97);
-    this.managerLabel = this.makeCart(this.manager.root);
+    this.makeCart(this.manager.root);
     canvas.addEventListener('pointerdown', this.handleDown);
     canvas.addEventListener('pointermove', this.handleMove);
     canvas.addEventListener('pointerup', this.handleUp);
@@ -232,11 +240,6 @@ export class CoffeeScene {
       });
       this.lastInviteKey = inviteKey;
     }
-    this.paintLabel(this.pauseLabel, state.paused ? 'paused' : 'running', (ctx, w, h) => {
-      this.roundRect(ctx, 0, 0, w, h, 12, '#efe4c5');
-      this.text(ctx, state.paused ? '▶' : 'Ⅱ', w / 2, h * .38, 100, '#315d54');
-      this.text(ctx, state.paused ? '继续' : '暂停', w / 2, h * .78, 85, '#315d54');
-    });
     this.vaultLamp.material = this.material(state.manager.phase === 'depositing' && state.manager.carrying > 0 ? '#f6dc79' : '#92bfa3', true);
     if (this.down?.target && this.down.targetPoint) {
       const point = this.projectWorld(this.anchorWorld(this.down.target));
@@ -554,8 +557,8 @@ export class CoffeeScene {
       this.cylinder(`pendant-glow-${x}`, .58, .035, x, 3.68, -.8, '#fff3bd', undefined, false).material = this.material('#fff3bd', true);
     }
     // The back-of-house route visually separates the cash manager from customer queues.
-    this.box('manager-route', 16.5, 0.018, 0.86, -1.65, 0.027, -1.7, '#d4d2b8', undefined, false);
-    for (let x = -8.5; x < 7; x += 1.1) this.box(`route-dash-${x}`, 0.4, 0.022, 0.055, x, 0.041, -1.75, '#f7f1dc', undefined, false);
+    this.box('manager-route', 10.4, 0.018, 0.86, 4.4, 0.027, -1.7, '#d4d2b8', undefined, false);
+    for (let x = -.5; x < 9.5; x += 1.1) this.box(`route-dash-${x}`, 0.4, 0.022, 0.055, x, 0.041, -1.75, '#f7f1dc', undefined, false);
     const brand = this.makeLabel('brand-sign', 3.9, 0.72, new Vector3(-6.45, 2.92, -3.42));
     this.paintLabel(brand, 'brand', (ctx, w, h) => {
       this.roundRect(ctx, 8, 8, w - 16, h - 16, 20, '#315d54');
@@ -563,7 +566,7 @@ export class CoffeeScene {
       this.text(ctx, 'a little coffee, a lot of care', w / 2, h / 2 + 42, 23, '#b9d0b6');
     });
     this.makePlant('tall-plant-left', -9.08, -2.65, 1.12);
-    this.makePlant('plant-right', 8.0, -2.55, 0.85);
+    this.makePlant('plant-right', 11.3, -2.55, 0.85);
     this.makePlant('entrance-plant', -9.0, 2.55, 0.7);
     this.makeBench();
     for (const [x, shade] of [[0, COLORS.teal], [5, COLORS.rose]] as const) {
@@ -593,15 +596,16 @@ export class CoffeeScene {
     this.box(`${id}-countertop`, 3.65, 0.16, 1.58, 0, 1.13, 0, COLORS.metal, root);
     this.box(`${id}-top-inset`, 3.38, 0.025, 1.33, 0, 1.222, 0, '#d5d6c9', root, false);
     this.box(`${id}-front-accent`, 3.48, 0.08, 0.08, 0, 0.94, 0.716, deep, root, false);
-    const plaque = this.makeLabel(`${id}-upgrade-plaque`, 1.36, 1.03, new Vector3(-1.02, 0.57, 0.765), root, { type: 'counter', id }, 512, 288);
+    const plaque = this.makeLabel(`${id}-upgrade-plaque`, 1.32, 1.04, new Vector3(-1.01, 0.55, 0.765), root, { type: 'counter', id }, 512, 448, 0);
+    plaque.mesh.metadata = { ...plaque.mesh.metadata, coffeeSurface: 'counter-front' };
     this.registerAnchor(`${id}-upgrade`, plaque.mesh);
     const selection = this.box(`${id}-selected`, 3.83, 0.022, 1.77, 0, 0.038, 0, '#e9c96e', root, false);
     selection.material = this.material('#e9c96e', true, 0.83);
     selection.isPickable = false;
     selection.setEnabled(false);
-    this.box(`${id}-selector-stand`, .11, .45, .10, 1.20, 1.45, .52, deep, root);
-    this.box(`${id}-selector-frame`, 1.32, 1.13, .08, 1.20, 1.79, .56, deep, root);
-    const selector = this.makeLabel(`${id}-recipe-selector`, 1.18, 1.03, new Vector3(1.20, 1.79, .618), root, { type: 'recipe', id }, 512, 448);
+    // Both independent controls are pasted onto the counter's front, within its body height.
+    const selector = this.makeLabel(`${id}-recipe-selector`, 1.32, 1.04, new Vector3(1.01, .55, .765), root, { type: 'recipe', id }, 512, 448, 0);
+    selector.mesh.metadata = { ...selector.mesh.metadata, coffeeSurface: 'counter-front' };
     this.registerAnchor(`${id}-recipe`, selector.mesh);
     const barista = this.makePerson(`${id}-barista`, id === 'counter-a' ? 2 : 3, accent, false);
     barista.root.position.set(x - 0.5, 0, -0.89);
@@ -651,18 +655,28 @@ export class CoffeeScene {
       stacked.scaling.setAll(0.82);
     }
     this.box(`${id}-napkins`, 0.32, 0.075, 0.29, 1.26, 1.258, 0.26, '#fbf8ec', root);
+    // Notes and their amount tag share one counter-mounted cash location. The tag lies flat
+    // immediately beside the real notes, rather than becoming an above-counter register.
+    const cashRoot = new TransformNode(`${id}-cash-cluster`, this.scene);
+    cashRoot.parent = root;
+    cashRoot.position.set(-1.08, 1.25, .04);
     const cash: TransformNode[] = [];
     for (let pile = 0; pile < 6; pile++) {
-      const stack = this.makeCashStack(`${id}-cash-${pile}`, root);
-      stack.position.set(-1.16 + (pile % 2) * 0.4, 1.25 + Math.floor(pile / 2) * 0.095, 0.02 - (pile % 2) * 0.2);
+      const stack = this.makeCashStack(`${id}-cash-${pile}`, cashRoot);
+      stack.position.set(-.20 + (pile % 2) * .40, Math.floor(pile / 2) * .095, -.08 + (pile % 2) * .16);
       stack.setEnabled(false);
       cash.push(stack);
     }
-    const cashLabel = this.makeLabel(`${id}-cash-total`, .90, .42, new Vector3(.15, 1.49, .70), root, undefined, 512, 224);
-    cashLabel.mesh.metadata = { ...cashLabel.mesh.metadata, coffeeDisplay: 'pending-cash' };
-    // A counter-mounted register shows cash beside the actual banknote stacks.
-    this.box(`${id}-register-foot`, .12, .28, .12, .15, 1.35, .65, deep, root, false);
-    cashLabel.mesh.setEnabled(false);
+    const cashTag = new TransformNode(`${id}-cash-tag`, this.scene);
+    cashTag.parent = cashRoot;
+    cashTag.position.set(0, .012, .40);
+    cashTag.rotation.x = -Math.PI / 2;
+    const cashLabel = this.makeLabel(`${id}-cash-total`, 1.4, .64, new Vector3(0, 0, .012), cashTag, undefined, 512, 192, .025);
+    cashLabel.mesh.metadata = {
+      ...cashLabel.mesh.metadata, coffeeDisplay: 'pending-cash', coffeeCashRoot: cashRoot.name,
+      coffeeGlyphHeight: .64 * 124 / 192, coffeeGlyphCenter: .60,
+    };
+    cashRoot.setEnabled(false);
     // The meter is a physical inset on the espresso machine front, not a floating bar.
     const progressRoot = CreateBox(`${id}-progress`, { width: .98, height: .13, depth: .018 }, this.scene);
     progressRoot.parent = machine;
@@ -674,7 +688,7 @@ export class CoffeeScene {
     progressRoot.setEnabled(false);
     const body = this.scene.getMeshByName(`${id}-body`)!;
     body.metadata = { coffeeAction: { type: 'counter', id } };
-    const station: Station = { root, barista, progressRoot, progressFill, plaque, selector, cashLabel, cash, machineExtras: extras, readyCup, selection, level: -1, recipe: '' };
+    const station: Station = { root, barista, progressRoot, progressFill, plaque, selector, cashLabel, cashRoot, cash, machineExtras: extras, readyCup, selection, level: -1, recipe: '' };
     // Build the initial labels even before the first simulation frame arrives.
     this.updateStation(station, { id, x, level: 1, recipe: letter === 'A' ? 'espresso' : 'latte', pendingCash: 0, brewed: 0, brew: null }, false);
     return station;
@@ -723,10 +737,13 @@ export class CoffeeScene {
     }
     const piles = counter.pendingCash > 0 ? Math.min(6, Math.max(1, Math.ceil(counter.pendingCash / 450))) : 0;
     station.cash.forEach((stack, i) => stack.setEnabled(i < piles));
-    station.cashLabel.mesh.setEnabled(counter.pendingCash > 0);
+    station.cashRoot.setEnabled(counter.pendingCash > 0);
+    station.cashLabel.mesh.metadata = { ...station.cashLabel.mesh.metadata, coffeeAmount: counter.pendingCash };
     if (counter.pendingCash > 0) this.paintLabel(station.cashLabel, `${counter.pendingCash}`, (ctx, w, h) => {
       this.roundRect(ctx, 5, 5, w - 10, h - 10, 24, '#f4f5df');
-      this.text(ctx, cashText(counter.pendingCash), w / 2, h / 2 + 2, 102, '#477448');
+      // Front receipt region is clear of the notes. Longer precise amounts scale to fit.
+      const font = this.text(ctx, cashText(counter.pendingCash), w / 2, h * .60, 124, '#477448', w - 28);
+      station.cashLabel.mesh.metadata = { ...station.cashLabel.mesh.metadata, coffeePaintedFontSize: font };
     });
     const brew = counter.brew;
     const progress = brew ? clamp(brew.elapsed / Math.max(0.001, brew.duration)) : 0;
@@ -835,17 +852,21 @@ export class CoffeeScene {
   private updateManager(state: Readonly<SliceState>, dt: number): void {
     const person = this.manager;
     const manager = state.manager;
-    this.paintLabel(this.managerLabel, `level-${manager.level}`, (ctx, w, h) => {
-      this.roundRect(ctx, 4, 4, w - 8, h - 8, 22, '#f1dd9f');
-      this.text(ctx, '经理', w / 2, h * .34, 136, '#405a45');
-      this.text(ctx, `Lv.${manager.level} ↑`, w / 2, h * .72, 90, '#405a45');
+    this.paintLabel(this.vaultLabel, `manager-${manager.level}`, (ctx, w, h) => {
+      this.roundRect(ctx, 6, 6, w - 12, h - 12, 22, '#f1dd9f');
+      this.text(ctx, '金库', w / 2, h * .23, 100, '#405a45');
+      this.text(ctx, `经理 Lv.${manager.level} ↑`, w / 2, h * .58, 70, '#405a45');
+      this.text(ctx, '存款 / 升级', w / 2, h * .84, 48, '#405a45');
     });
-    const dx = manager.x - person.previousX;
+    this.vaultLabel.mesh.metadata = { ...this.vaultLabel.mesh.metadata, coffeeManagerLevel: manager.level };
+    const x = managerPresentationX(manager);
+    const dx = x - person.previousX;
     const dz = manager.z - person.previousZ;
     const moving = manager.phase === 'moving' && dt > 0;
-    const blend = dt > 0 ? 1 - Math.exp(-dt * 24) : 1;
-    person.root.position.x += (manager.x - person.root.position.x) * blend;
-    person.root.position.z += (manager.z - person.root.position.z) * blend;
+    // Core snapshots already move continuously. Avoid smoothing past a collection/deposit
+    // endpoint, so the actual handoff occurs directly below the relocated physical vault.
+    person.root.position.x = x;
+    person.root.position.z = manager.z;
     if (moving && Math.hypot(dx, dz) > 0.003) person.root.rotation.y = Math.atan2(dx, dz);
     else if (manager.phase === 'collecting') person.root.rotation.y = 0;
     else if (manager.phase === 'depositing') person.root.rotation.y = -Math.PI / 2;
@@ -859,11 +880,11 @@ export class CoffeeScene {
     }
     // The trolley follows the bounded service lane in world orientation. The manager
     // turns to reach stations; that turn must not orbit a wide trolley through the wall.
-    this.managerCart.position.set(person.root.position.x + 1.35, 0, person.root.position.z - .6);
+    this.managerCart.position.set(person.root.position.x + .70, 0, person.root.position.z - .55);
     const stacks = manager.carrying > 0 ? Math.min(6, Math.max(1, Math.ceil(manager.carrying / 600))) : 0;
     this.cartCash.forEach((cash, i) => cash.setEnabled(i < stacks));
     person.shadow.position.set(person.root.position.x, 0.04, person.root.position.z);
-    person.previousX = manager.x;
+    person.previousX = x;
     person.previousZ = manager.z;
   }
 
@@ -886,38 +907,26 @@ export class CoffeeScene {
     return root;
   }
 
-  private makeCart(parent: TransformNode): Label {
+  private makeCart(parent: TransformNode): void {
     const root = new TransformNode('manager-cash-cart', this.scene);
     this.managerCart = root;
-    root.position.set(parent.position.x + 1.35, 0, parent.position.z - .6);
-    this.box('cart-base', 1.78, 0.12, 2.25, 0, 0.30, 0, '#866748', root);
-    this.box('cart-left-rail', 0.065, 0.18, 2.25, -.88, .41, 0, COLORS.gold, root);
-    this.box('cart-right-rail', 0.065, 0.18, 2.25, .88, .41, 0, COLORS.gold, root);
-    this.box('cart-front-rail', 1.76, .18, .065, 0, .41, 1.10, COLORS.gold, root);
-    this.box('cart-back-rail', 1.76, .18, .065, 0, .41, -1.10, COLORS.gold, root);
-    for (const x of [-.80, .80]) {
-      for (const z of [-.98, .98]) this.cylinder(`cart-wheel-${x}-${z}`, 0.20, 0.09, x, 0.15, z, '#394844', root).rotation.z = Math.PI / 2;
+    root.position.set(parent.position.x + .70, 0, parent.position.z - .55);
+    // A small, fixed-world-orientation money trolley. It has no action metadata or clipboard.
+    this.box('cart-base', .92, .10, .64, 0, .29, 0, '#866748', root);
+    for (const x of [-.42, .42]) {
+      this.box(`cart-rail-${x}`, .045, .12, .62, x, .38, 0, COLORS.gold, root);
+      for (const z of [-.25, .25]) this.cylinder(`cart-wheel-${x}-${z}`, .18, .065, x, .14, z, '#394844', root).rotation.z = Math.PI / 2;
     }
-    this.box('cart-handle-post', 0.045, 0.5, 0.045, -.88, .61, .8, COLORS.steel, root);
-    this.box('cart-handle', 0.38, 0.06, 0.06, -.99, .75, .8, COLORS.dark, root);
-    this.box('cart-cash-bay', 1.52, .18, .51, 0, .65, .87, COLORS.woodLight, root);
-    this.box('cart-cash-bay-support', .17, .34, .44, 0, .45, .87, COLORS.woodDark, root);
+    this.box('cart-handle-post', .04, .47, .04, -.44, .58, .25, COLORS.steel, root);
+    this.box('cart-handle', .30, .055, .055, -.48, .78, .25, COLORS.dark, root);
+    this.box('cart-cash-table', .88, .08, .44, 0, .74, 0, COLORS.woodLight, root);
+    for (const x of [-.32, .32]) this.box(`cart-cash-support-${x}`, .055, .43, .055, x, .51, 0, COLORS.woodDark, root);
     for (let pile = 0; pile < 6; pile++) {
       const stack = this.makeCashStack(`cart-cash-${pile}`, root);
-      stack.position.set(-.38 + (pile % 2) * .68, .75 + Math.floor(pile / 2) * .085, .87);
+      stack.position.set(-.20 + (pile % 2) * .40, .785 + Math.floor(pile / 2) * .085, 0);
       stack.setEnabled(false);
       this.cartCash.push(stack);
     }
-    const clipboard = new TransformNode('manager-cart-clipboard', this.scene);
-    clipboard.parent = root;
-    clipboard.position.set(0, .445, -.25);
-    clipboard.rotation.x = -Math.PI / 2;
-    // A rear tray clipboard rotates with this trolley; the separate front cash bay
-    // stands above it so transported notes remain visible from every approach.
-    const label = this.makeLabel('manager-cart-control', 1.55, 1.55, new Vector3(0, 0, .03), clipboard, { type: 'manager' }, 512, 512);
-    this.registerAnchor('manager', label.mesh);
-    for (const mesh of root.getChildMeshes()) if (mesh instanceof Mesh) mesh.metadata = { ...mesh.metadata, coffeeAction: { type: 'manager' } };
-    return label;
   }
 
   private makeEntrance(): Label {
@@ -940,8 +949,8 @@ export class CoffeeScene {
     return label;
   }
 
-  private makeVault(): Mesh {
-    const vault = new TransformNode('cash-vault', this.scene); vault.position.set(-8, 1.18, -3.09);
+  private makeVault(): { lamp: Mesh; label: Label } {
+    const vault = new TransformNode('cash-vault', this.scene); vault.position.set(VISUAL_VAULT_X, 1.18, -3.09);
     this.box('vault-wall-bracket', 1.63, .12, .75, 0, .09, -.02, COLORS.woodDark, vault);
     this.box('vault-body', 1.48, 1.28, 0.88, 0, 0.77, 0, '#466660', vault);
     const door = this.box('vault-door', 1.26, 1.06, 0.08, 0, 0.79, 0.48, '#739286', vault);
@@ -952,13 +961,8 @@ export class CoffeeScene {
     this.box('vault-slot', 0.54, 0.063, 0.07, 0, 1.13, 0.55, '#213e37', vault, false);
     const label = this.makeLabel('vault-bank-label', 1.55, 1.04, new Vector3(0, 1.64, .55), vault, { type: 'vault' }, 512, 384);
     this.registerAnchor('vault', label.mesh);
-    this.paintLabel(label, 'bank', (ctx, w, h) => {
-      this.roundRect(ctx, 6, 6, w - 12, h - 12, 22, '#f1dd9f');
-      this.text(ctx, '金库', w / 2, h * .32, 110, '#405a45');
-      this.text(ctx, '存款明细', w / 2, h * .74, 68, '#405a45');
-    });
     const lamp = this.cylinder('vault-deposit-light', 0.12, 0.045, 0.48, 1.14, 0.56, '#92bfa3', vault, false); lamp.rotation.x = Math.PI / 2;
-    return lamp;
+    return { lamp, label };
   }
 
   private makePlant(name: string, x: number, z: number, scale: number): void {
@@ -984,26 +988,10 @@ export class CoffeeScene {
     this.box('bench-cushion', 0.86, 0.1, 0.53, -0.5, 0.67, 0.01, '#7e9c7e', root);
   }
 
-  private makeServicePanel(): Label {
-    const panel = new TransformNode('wall-service-panel', this.scene);
-    panel.position.set(8.15, 2.88, -3.35);
-    this.box('service-panel-case', 3.4, 1.43, .16, 0, 0, -.04, COLORS.woodDark, panel);
-    const pause = this.makeLabel('shop-pause-control', 1.42, 1.15, new Vector3(-.79, 0, .075), panel, { type: 'pause' }, 384, 288);
-    const settings = this.makeLabel('shop-settings-control', 1.42, 1.15, new Vector3(.79, 0, .075), panel, { type: 'settings' }, 384, 288);
-    this.registerAnchor('pause', pause.mesh);
-    this.registerAnchor('settings', settings.mesh);
-    this.paintLabel(settings, 'settings', (ctx, w, h) => {
-      this.roundRect(ctx, 0, 0, w, h, 12, '#efe4c5');
-      this.text(ctx, '⚙', w / 2, h * .38, 104, '#315d54');
-      this.text(ctx, '设置', w / 2, h * .78, 85, '#315d54');
-    });
-    return pause;
-  }
-
-  private makeLabel(name: string, width: number, height: number, position: Vector3, parent?: TransformNode, action?: CoffeeSceneAction, pixels = 768, pixelHeight = 192): Label {
+  private makeLabel(name: string, width: number, height: number, position: Vector3, parent?: TransformNode, action?: CoffeeSceneAction, pixels = 768, pixelHeight = 192, rim = .10): Label {
     // Every label is ink on a real opaque slab. Its material follows the room's light,
     // ordinary depth testing and shadow reception; no billboard or rendering-group HUD.
-    const mount = this.box(`${name}-mount`, width + .10, height + .10, .075, position.x, position.y, position.z - .05, '#806345', parent);
+    const mount = this.box(`${name}-mount`, width + rim, height + rim, .075, position.x, position.y, position.z - .05, '#806345', parent);
     if (action) mount.metadata = { coffeeAction: action };
     const mesh = CreatePlane(name, { width, height, sideOrientation: Mesh.DOUBLESIDE }, this.scene);
     mesh.position.copyFrom(position);
@@ -1044,12 +1032,17 @@ export class CoffeeScene {
     label.texture.update();
   }
 
-  private text(ctx: CanvasRenderingContext2D, value: string, x: number, y: number, size: number, color: string): void {
+  private text(ctx: CanvasRenderingContext2D, value: string, x: number, y: number, size: number, color: string, maxWidth?: number): number {
     ctx.fillStyle = color;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font = `700 ${size}px system-ui, sans-serif`;
+    if (maxWidth !== undefined) {
+      const measured = ctx.measureText(value).width;
+      if (measured > maxWidth) { size *= maxWidth / measured; ctx.font = `700 ${size}px system-ui, sans-serif`; }
+    }
     ctx.fillText(value, x, y);
+    return size;
   }
 
   private roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, radius: number, color: string): void {

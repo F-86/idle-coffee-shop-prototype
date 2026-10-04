@@ -1,4 +1,4 @@
-import { createEngine, recipeById } from "./core/engine";
+import { createEngine, recipeById, managerSpeed } from "./core/engine";
 import { LocalSaveRepository, SAVE_KEY } from "./core/persistence";
 import type {
   CounterId,
@@ -17,8 +17,8 @@ const root = document.querySelector<HTMLDivElement>("#slice-root")!;
 root.innerHTML = `
 <main class="coffee-world" aria-label="Mellow Bean 全屏咖啡店">
   <canvas id="coffee-canvas" tabindex="0" aria-label="Mellow Bean 店铺场景" aria-describedby="scene-instructions"></canvas>
-  <p id="scene-instructions" class="sr-only">拖动逛店，点击墙上的咖啡菜单、金库、营业牌或设置牌，以及柜台配方牌、升级牌和经理推车。键盘左右箭头选择店内物件，上下箭头平移，Enter 或空格操作，Home 返回柜台 A。</p>
-  <header class="hud" aria-label="当前金额"><div class="wallet-chip"><strong id="wallet">¥0.00</strong></div></header>
+  <p id="scene-instructions" class="sr-only">拖动逛店，点击墙上的咖啡菜单和金库，以及柜台前脸的配方牌和升级牌。金库管理收钱经理；右上角打开设置。键盘左右箭头选择店内物件，上下箭头平移，Enter 或空格操作，Home 返回柜台 A。</p>
+  <header class="hud" aria-label="金额与设置"><div class="wallet-chip"><strong id="wallet">¥0.00</strong></div><button id="settings" class="settings-button" aria-label="打开店铺设置">⚙</button></header>
   <div id="render-error" class="render-error" hidden></div>
   <dialog id="operation-dialog" class="operation-dialog" aria-labelledby="dialog-title">
     <button id="dialog-close" class="dialog-close" aria-label="关闭操作窗口">×</button>
@@ -29,9 +29,8 @@ root.innerHTML = `
       <div class="upgrade-preview"><span id="counter-preview"></span><small id="counter-payback"></small></div><button id="counter-upgrade" class="primary-button"></button>
     </div>
     <div id="coffee-panel" class="operation-panel" hidden><div class="coffee-medallion" id="coffee-symbol" aria-hidden="true">☕</div><p id="coffee-detail"></p><p class="detail-note">两款配方已解锁。分配到柜台后，下一杯开始生效。</p><div class="assign-buttons"><button data-assign="counter-a">供给柜台 A</button><button data-assign="counter-b">供给柜台 B</button></div></div>
-    <div id="vault-panel" class="operation-panel" hidden><div class="vault-total"><span>已存入金库</span><strong id="vault-total"></strong></div><div class="detail-grid"><span>台面待收<strong id="pending"></strong></span><span>经理运送<strong id="carrying"></strong></span></div><p class="detail-note">钱留在台面，再由经理沿后方通道送回。送到金库才可用于升级。</p><p id="served" class="detail-note"></p><button class="secondary-button" data-open-manager>查看收钱经理</button></div>
-    <div id="manager-panel" class="operation-panel" hidden><div class="detail-grid"><span>收运等级<strong id="manager-rank"></strong></span><span>走路速度<strong id="manager-speed"></strong></span></div><p id="manager-status" class="detail-note"></p><p id="manager-preview"></p><button id="manager-upgrade" class="primary-button"></button></div>
-    <div id="settings-panel" class="operation-panel" hidden><p id="save-status" class="save-status">本地自动保存</p><p class="detail-note">当前只保存到本浏览器，iCloud 尚未配置。</p><div class="settings-grid"><button id="save">保存进度</button><button id="export">导出备份</button><button id="reload" hidden>读取最新档</button><button id="new-shop" hidden>备份并开始新店</button></div><p class="settings-label">逛逛小店</p><div class="jump-grid"><button data-focus="counter-a-recipe">柜台 A</button><button data-focus="counter-b-recipe">柜台 B</button><button data-focus="menu-espresso">咖啡墙</button><button data-focus="vault">金库</button><button data-focus="invite">入口</button><button data-focus="pause">营业牌</button><button data-focus="settings">设置牌</button></div><details><summary>怎么玩</summary><p>客人会自动进入、排队和取杯，入口也能招呼客人。柜台升级更快更值钱，经理升级提高收运。点柜台上的配方牌换咖啡，墙上菜单能查看配方或分配到柜台。制作中的那一杯不会被追改。</p><p>点击墙上营业牌可以暂停或继续。暂停冻结营业。离线收益最多结算 2 小时，且只结算一次。此版本没有真实跨设备同步。</p></details></div>
+    <div id="vault-panel" class="operation-panel" hidden><div class="vault-total"><span>已存入金库</span><strong id="vault-total"></strong></div><div class="detail-grid"><span>台面待收<strong id="pending"></strong></span><span>经理运送<strong id="carrying"></strong></span></div><p class="detail-note">钱留在台面，再由经理沿后方通道送回。送到金库才可用于升级。</p><p id="served" class="detail-note"></p><h2 class="manager-heading">收钱经理</h2><div class="detail-grid"><span>收运等级<strong id="manager-rank"></strong></span><span>收运效率<strong id="manager-speed"></strong></span></div><p id="manager-status" class="detail-note"></p><p id="manager-preview"></p><button id="manager-upgrade" class="primary-button"></button></div>
+    <div id="settings-panel" class="operation-panel" hidden><p id="save-status" class="save-status">本地自动保存</p><p class="detail-note">当前只保存到本浏览器，iCloud 尚未配置。</p><div class="settings-grid"><button id="save">保存进度</button><button id="export">导出备份</button><button id="reload" hidden>读取最新档</button><button id="new-shop" hidden>备份并开始新店</button></div><p class="settings-label">逛逛小店</p><div class="jump-grid"><button data-focus="counter-a-recipe">柜台 A</button><button data-focus="counter-b-recipe">柜台 B</button><button data-focus="menu-espresso">咖啡墙</button><button data-focus="vault">金库</button><button data-focus="invite">入口</button></div><details><summary>怎么玩</summary><p>客人会自动进入、排队和取杯，入口也能招呼客人。柜台升级更快更值钱，在金库里升级经理提高收运。点柜台前脸的配方牌换咖啡，墙上菜单能查看配方或分配到柜台。制作中的那一杯不会被追改。</p><p>离线收益最多结算 2 小时，且只结算一次。此版本没有真实跨设备同步。</p></details></div>
   </dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>`;
@@ -41,14 +40,13 @@ const money = (cents: number) => `¥${(cents / 100).toFixed(2)}`;
 const dialog = $<HTMLDialogElement>("#operation-dialog");
 const sceneAnchors: CoffeeSceneAnchor[] = [
   "counter-a-recipe", "counter-a-upgrade", "counter-b-recipe", "counter-b-upgrade",
-  "menu-espresso", "menu-latte", "vault", "manager", "invite", "pause", "settings",
+  "menu-espresso", "menu-latte", "vault", "invite",
 ];
 const anchorNames: Record<CoffeeSceneAnchor, string> = {
   "counter-a-recipe": "柜台 A 配方牌", "counter-a-upgrade": "柜台 A 升级牌",
   "counter-b-recipe": "柜台 B 配方牌", "counter-b-upgrade": "柜台 B 升级牌",
   "menu-espresso": "墙上浓缩咖啡菜单", "menu-latte": "墙上拿铁菜单",
-  vault: "墙上金库", manager: "收钱经理推车", invite: "入口招客牌",
-  pause: "墙上营业牌", settings: "墙上设置牌",
+  vault: "金库与收钱经理", invite: "入口招客牌",
 };
 let browserStorage: Pick<Storage, "getItem" | "setItem" | "removeItem">;
 try {
@@ -92,11 +90,14 @@ let saveBlocked =
   loaded.status === "offline-save-failed";
 let conflictBlocked =
   loaded.status === "conflict" || loaded.status === "offline-save-failed";
+// A valid old manual-pause save stays paused during repository offline settlement.
+// This no-pause UI resumes only current play after load; conflicts still freeze it.
 if (conflictBlocked && !engine.state.paused) engine.togglePause();
+else if (!conflictBlocked && engine.state.paused) engine.togglePause();
 $("#reload").hidden = !conflictBlocked;
 $("#new-shop").hidden = !loaded.protectedRaw;
 let selected: CounterId = "counter-a";
-let panel: "counter" | "coffee" | "vault" | "manager" | "settings" | null =
+let panel: "counter" | "coffee" | "vault" | "settings" | null =
     null,
   viewedRecipe: RecipeId = "espresso";
 let scene: CoffeeScene | null = null;
@@ -183,9 +184,7 @@ function sceneAction(action: CoffeeSceneAction) {
   else if (action.type === "menu")
     showPanel("coffee", undefined, action.recipe);
   else if (action.type === "vault") showPanel("vault");
-  else if (action.type === "manager") showPanel("manager");
-  else if (action.type === "settings") showPanel("settings");
-  else if (action.type === "pause") togglePause();
+
 }
 try {
   scene = new CoffeeScene($("#coffee-canvas"), sceneAction);
@@ -200,7 +199,7 @@ function invite() {
   else
     toast(
       engine.state.paused
-        ? "继续营业后再招呼客人"
+        ? "存档冲突已暂停营业，请在设置中读取最新档"
         : "先让队伍往前走，再招呼下一位客人",
     );
   updateUI();
@@ -249,19 +248,12 @@ on(root, "click", (event) => {
   } else if (button.dataset.focus) {
     closePanel();
     scene?.focusAnchor(button.dataset.focus as CoffeeSceneAnchor);
-  } else if (button.hasAttribute("data-open-manager")) showPanel("manager");
-});
-function togglePause() {
-  if (conflictBlocked) {
-    toast("先读取最新存档，再继续营业");
-    return;
   }
-  engine.togglePause();
-  last = performance.now();
-  save();
-  updateUI();
-  toast(engine.state.paused ? "小店休息中，点击营业牌继续" : "小店继续营业");
-}
+});
+on($("#settings"), "click", () => {
+  if (stopped || dialog.open) return;
+  showPanel("settings");
+});
 const canvas = $<HTMLCanvasElement>("#coffee-canvas");
 on(canvas, "pointerdown", () => {
   if (!dialog.open) canvas.focus({ preventScroll: true });
@@ -389,6 +381,7 @@ on($("#reload"), "click", () => {
     recovered.status === "conflict" ||
     recovered.status === "offline-save-failed";
   if (conflictBlocked && !engine.state.paused) engine.togglePause();
+  else if (!conflictBlocked && engine.state.paused) engine.togglePause();
   $("#reload").hidden = !conflictBlocked;
   $("#new-shop").hidden = !recovered.protectedRaw;
   $("#save-status").textContent = saveBlocked
@@ -481,13 +474,9 @@ function updateUI() {
       `${money(s.counters.reduce((n, c) => n + c.pendingCash, 0))}`;
     $("#carrying").textContent = `${money(s.manager.carrying)}`;
     $("#served").textContent = `这间小店已卖出 ${s.totalServed} 杯咖啡`;
-  } else if (panel === "manager") {
     const q = engine.managerQuote();
-    $("#dialog-eyebrow").textContent = "CASH MANAGER";
-    $("#dialog-title").textContent = "收钱经理";
-    $("#dialog-description").textContent = "沿柜台后方收钱，再送回墙上金库";
     $("#manager-rank").textContent = `Lv. ${s.manager.level}`;
-    $("#manager-speed").textContent = `${q.speed.toFixed(2)} 米/秒`;
+    $("#manager-speed").textContent = `${Math.round(q.speed / managerSpeed(1) * 100)}%`;
     $("#manager-status").textContent =
       s.manager.phase === "depositing"
         ? "正在金库存入现金"
@@ -496,7 +485,7 @@ function updateUI() {
           : "正在后方通道收运";
     $("#manager-preview").textContent = q.capped
       ? "经理已满级"
-      : `下一级走路速度 ${q.nextSpeed.toFixed(2)} 米/秒，收运容量也会提升。`;
+      : `下一级收运效率 ${Math.round(q.nextSpeed / managerSpeed(1) * 100)}%，收运容量也会提升。`;
     $("#manager-upgrade").textContent = q.capped
       ? "已满级"
       : `升级经理 · ${money(q.cost)}`;

@@ -116,6 +116,22 @@ button:active:not(:disabled) {
   letter-spacing: -0.7px;
   display: block;
 }
+.settings-button {
+  width: 46px;
+  height: 46px;
+  pointer-events: auto;
+  border: 1px solid #e6d9b9;
+  border-radius: 14px;
+  background: #fff9e9f2;
+  box-shadow: 0 3px 12px #344a2e12;
+  font-size: 23px;
+}
+.manager-heading {
+  font-size: 15px;
+  margin: 22px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid #e1d7bf;
+}
 .sr-only {
   position: absolute;
   width: 1px;

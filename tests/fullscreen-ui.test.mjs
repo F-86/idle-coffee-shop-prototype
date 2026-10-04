@@ -12,7 +12,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
     throw error;
   }
 } });
-const { createEngine, createInitialState, recipeById } = await import('../src/slice/core/engine.ts');
+const { createEngine, createInitialState, recipeById, managerSpeed } = await import('../src/slice/core/engine.ts');
 const { LocalSaveRepository, SAVE_KEY, createMemoryStorage } = await import('../src/slice/core/persistence.ts');
 
 // These checks inspect actual markup/CSS and execute actual app handlers with a fake
@@ -85,7 +85,7 @@ class FakeElement {
   focus() { this.focused++; this.ownerDocument.activeElement = this; }
   getBoundingClientRect() { return { left: 100, right: 500, top: 100, bottom: 650, width: 400, height: 550 }; }
 }
-function fixture({ initial = createInitialState(), raw, storageUnavailable = false, deferDialogClose = false } = {}) {
+function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, storageUnavailable = false, writeUnavailable = false, conflictDuringClaim = false, deferDialogClose = false } = {}) {
   const clock = { now: Date.now(), performance: 0 };
   const nodes = [], closeEvents = [];
   const document = new FakeElement('document', null);
@@ -116,8 +116,20 @@ function fixture({ initial = createInitialState(), raw, storageUnavailable = fal
   document.createElement = tag => { const element = new FakeElement(tag, document); element.click = () => downloads.push(element); return element; };
   const memory = createMemoryStorage();
   if (raw !== undefined) memory.setItem(SAVE_KEY, raw);
-  else if (initial) { const repo = new LocalSaveRepository(memory); repo.load(clock.now); assert.equal(repo.save(initial, clock.now).ok, true); }
-  const storage = storageUnavailable ? { getItem() { throw new Error('storage unavailable'); }, setItem() { throw new Error('storage unavailable'); }, removeItem() { throw new Error('storage unavailable'); } } : memory;
+  else if (initial) { const repo = new LocalSaveRepository(memory); repo.load(clock.now); assert.equal(repo.save(initial, clock.now - savedAtAgoSeconds * 1000).ok, true); }
+  const storageControl = { writeUnavailable };
+  let storageReads = 0;
+  const storage = storageUnavailable ? { getItem() { throw new Error('storage unavailable'); }, setItem() { throw new Error('storage unavailable'); }, removeItem() { throw new Error('storage unavailable'); } } : {
+    getItem(key) {
+      if (key === SAVE_KEY && conflictDuringClaim && ++storageReads === 2) {
+        const foreign = JSON.parse(memory.getItem(SAVE_KEY)); foreign.recordChangeTag = 'concurrent-offline-claim';
+        memory.setItem(SAVE_KEY, JSON.stringify(foreign));
+      }
+      return memory.getItem(key);
+    },
+    setItem(key, value) { if (storageControl.writeUnavailable) throw new Error('writes unavailable'); memory.setItem(key, value); },
+    removeItem(key) { if (storageControl.writeUnavailable) throw new Error('writes unavailable'); memory.removeItem(key); },
+  };
   const window = new FakeElement('window', document);
   window.localStorage = storage;
   window.visualViewport = new FakeElement('visualViewport', document);
@@ -130,10 +142,10 @@ function fixture({ initial = createInitialState(), raw, storageUnavailable = fal
     update(state, dt) { this.updates.push({ state: structuredClone(state), dt }); }
     selectedCounter(id) { this.selection.push(id); }
     resize() { this.resizeCalls++; }
-    focusAnchor(key) { if (!this.interactionEnabled) return; this.focusCalls.push(key); this.focused = key; }
+    focusAnchor(key) { if (!this.interactionEnabled || !['counter-a-recipe', 'counter-a-upgrade', 'counter-b-recipe', 'counter-b-upgrade', 'menu-espresso', 'menu-latte', 'vault', 'invite'].includes(key)) return; this.focusCalls.push(key); this.focused = key; }
     getFocus() { return this.focused; }
     focusNext(direction) {
-      const keys = ['counter-a-recipe', 'counter-a-upgrade', 'counter-b-recipe', 'counter-b-upgrade', 'menu-espresso', 'menu-latte', 'vault', 'manager', 'invite', 'pause', 'settings'];
+      const keys = ['counter-a-recipe', 'counter-a-upgrade', 'counter-b-recipe', 'counter-b-upgrade', 'menu-espresso', 'menu-latte', 'vault', 'invite'];
       const current = this.focused ? keys.indexOf(this.focused) : -1;
       this.focusAnchor(keys[current < 0 ? (direction < 0 ? keys.length - 1 : 0) : (current + direction + keys.length) % keys.length]);
       return this.focused;
@@ -145,7 +157,7 @@ function fixture({ initial = createInitialState(), raw, storageUnavailable = fal
     getAnchorFootprint() { return { width: 60, height: 60 }; }
     dispose() { this.disposed = true; }
     activateAnchor(key) {
-      const actions = { invite: { type: 'invite' }, pause: { type: 'pause' }, settings: { type: 'settings' }, vault: { type: 'vault' }, manager: { type: 'manager' }, 'menu-espresso': { type: 'menu', recipe: 'espresso' }, 'menu-latte': { type: 'menu', recipe: 'latte' }, 'counter-a-recipe': { type: 'recipe', id: 'counter-a' }, 'counter-b-recipe': { type: 'recipe', id: 'counter-b' }, 'counter-a-upgrade': { type: 'counter', id: 'counter-a' }, 'counter-b-upgrade': { type: 'counter', id: 'counter-b' } };
+      const actions = { invite: { type: 'invite' }, vault: { type: 'vault' }, 'menu-espresso': { type: 'menu', recipe: 'espresso' }, 'menu-latte': { type: 'menu', recipe: 'latte' }, 'counter-a-recipe': { type: 'recipe', id: 'counter-a' }, 'counter-b-recipe': { type: 'recipe', id: 'counter-b' }, 'counter-a-upgrade': { type: 'counter', id: 'counter-a' }, 'counter-b-upgrade': { type: 'counter', id: 'counter-b' } };
       if (actions[key]) this.action(actions[key]);
     }
   }
@@ -157,10 +169,10 @@ function fixture({ initial = createInitialState(), raw, storageUnavailable = fal
   }
   class FakeDate extends Date { constructor(...args) { super(...(args.length ? args : [clock.now])); } static now() { return clock.now; } }
   const source = main.replace(/^import\s[\s\S]*?;\n/gm, '').replace(/if \(import\.meta\.hot\) import\.meta\.hot\.dispose\(\(\) => cleanup\(\)\);/, 'captureCleanup(() => cleanup());');
-  const context = { document, window, location: { search: '?qa' }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, createEngine, recipeById, LocalSaveRepository, SAVE_KEY, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL() {} }, Blob, console, setTimeout: callback => { const id = ++nextId; timers.set(id, callback); return id; }, clearTimeout: id => timers.delete(id), requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
+  const context = { document, window, location: { search: '?qa' }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, createEngine, recipeById, managerSpeed, LocalSaveRepository, SAVE_KEY, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL() {} }, Blob, console, setTimeout: callback => { const id = ++nextId; timers.set(id, callback); return id; }, clearTimeout: id => timers.delete(id), requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
   runInNewContext(stripTypeScriptTypes(source), context, { timeout: 1500 });
   const state = () => structuredClone(window.__coffeeSliceDebug.readState());
-  return { clock, document, window, root, nodes, renderer, observer, frames, timers, memory, downloads, blobs, state, flushCloseEvents() { for (const callback of closeEvents.splice(0)) callback(); }, element: selector => root.querySelector(selector), action: action => renderer.action(action), click(selector, extra = {}) { const target = root.querySelector(selector); assert.ok(target, selector); if (!target.disabled) { const event = { target, detail: 1, ...extra }; target.emit('click', event); root.emit('click', event); } }, tick(seconds = .2) { clock.now += seconds * 1000; clock.performance += seconds * 1000; const pending = [...frames.values()]; frames.clear(); for (const callback of pending) callback(clock.performance); }, dispose() { hmrCleanup?.(); } };
+  return { clock, document, window, root, nodes, renderer, observer, frames, timers, memory, storageControl, downloads, blobs, state, flushCloseEvents() { for (const callback of closeEvents.splice(0)) callback(); }, element: selector => root.querySelector(selector), action: action => renderer.action(action), click(selector, extra = {}) { const target = root.querySelector(selector); assert.ok(target, selector); if (!target.disabled) { const event = { target, detail: 1, ...extra }; target.emit('click', event); root.emit('click', event); } }, tick(seconds = .2) { clock.now += seconds * 1000; clock.performance += seconds * 1000; const pending = [...frames.values()]; frames.clear(); for (const callback of pending) callback(clock.performance); }, dispose() { hmrCleanup?.(); } };
 }
 
 test('TC-3D-008 REQ-3D-015 full-viewport scene has no webpage frame or page scroll (static contract)', () => {
@@ -179,21 +191,27 @@ test('TC-3D-008 REQ-3D-015 full-viewport scene has no webpage frame or page scro
   assert.equal(openingTags(outsideModal, 'canvas').length, 1);
 });
 
-test('TC-3D-008 REQ-3D-013 the only permanent HUD is a noninteractive ¥ amount (static contract)', () => {
+test('TC-3D-009 REQ-3D-016 permanent HUD contains only a noninteractive ¥ amount and accessible settings (static contract)', () => {
   const hud = html.match(/<header\b[^>]*class="hud"[\s\S]*?<\/header>/)?.[0];
   assert.ok(hud);
-  assert.equal(openingTags(hud, 'button').length, 0);
+  assert.equal(openingTags(hud, 'button').length, 1);
+  assert.match(openingTags(hud, 'button')[0], /id="settings"/);
+  assert.match(openingTags(hud, 'button')[0], /aria-label="[^"]*设置[^"]*"/);
   assert.equal(openingTags(hud, 'strong').length, 1);
   assert.match(hud, /id="wallet"/);
-  assert.doesNotMatch(hud, /open-status|coin-mark|hud-actions|id="pause"|id="settings"|咖啡币|营业中|休息中|¤|<small\b/);
+  assert.doesNotMatch(hud, /open-status|coin-mark|hud-actions|id="pause"|咖啡币|营业中|休息中|¤|<small\b/);
   assert.deepEqual(declarations('.hud', 'pointer-events'), ['none']);
   assert.deepEqual(declarations('.wallet-chip', 'pointer-events'), ['auto'], 'the visible amount blocks clicks on obscured scene pixels without becoming an action');
   assert.deepEqual(declarations('.wallet-chip', 'touch-action'), ['none']);
   assert.deepEqual(declarations('.wallet-chip', 'user-select'), ['none']);
-  assert.doesNotMatch(outsideModal, /<button\b|<nav\b|data-anchor=|world-controls|world-button/);
+  assert.deepEqual(openingTags(outsideModal, 'button'), openingTags(hud, 'button'));
+  assert.doesNotMatch(outsideModal, /<nav\b|data-anchor=|world-controls|world-button|营业牌|暂停|经理推车/);
   assert.doesNotMatch(main, /positionControls|beginAnchorPointer|\.style\.transform\s*=\s*`translate\(/, 'no permanent screen-projected DOM controls remain');
   assert.equal(rules('.world-button').length, 0);
-  assert.equal(rules('.hud-button').length, 0);
+  assert.ok(declarations('.settings-button', 'pointer-events').includes('auto'));
+  for (const property of ['width', 'height']) assert.ok(declarations('.settings-button', property).some(value => Number.parseFloat(value) >= 44), `HUD settings ${property} is at least 44px`);
+  assert.doesNotMatch(main, /function togglePause\(|action\.type === "(?:pause|manager|settings)"/);
+  assert.doesNotMatch(modal, /id="manager-panel"|data-open-manager|data-focus="(?:pause|manager|settings)"/);
 });
 
 test('TC-3D-008 REQ-3D-013 all rendered amounts use ¥ with two fractional digits (app harness)', () => {
@@ -205,20 +223,20 @@ test('TC-3D-008 REQ-3D-013 all rendered amounts use ¥ with two fractional digit
     wallet.emit('pointerdown'); f.root.emit('click', { target: wallet });
     assert.deepEqual(f.state(), beforeWallet);
     assert.equal(f.element('#operation-dialog').open, false, 'amount display has no action route');
-    for (const action of [{ type: 'counter', id: 'counter-a' }, { type: 'menu', recipe: 'latte' }, { type: 'vault' }, { type: 'manager' }]) {
+    for (const action of [{ type: 'counter', id: 'counter-a' }, { type: 'menu', recipe: 'latte' }, { type: 'vault' }]) {
       f.action(action);
       const shown = f.nodes.filter(node => !node.hidden && /\d+\.\d{2}/.test(node.textContent)).map(node => node.textContent);
       assert.ok(shown.length);
-      for (const text of shown) { assert.doesNotMatch(text, /¤|\d\.\d{2}\s*币/); if (!/米\/秒/.test(text)) assert.match(text, /¥\s?\d+\.\d{2}/, text); }
+      for (const text of shown) { assert.doesNotMatch(text, /¤|\d\.\d{2}\s*币/); assert.match(text, /¥\s?\d+\.\d{2}/, text); }
       f.click('#dialog-close');
     }
   } finally { f.dispose(); }
 });
 
-test('TC-3D-008 REQ-3D-013 physical scene actions open each corresponding panel without hidden DOM anchors (app harness)', () => {
+test('TC-3D-009 REQ-3D-016 scene actions and HUD settings open the correct details without hidden DOM anchors (app harness)', () => {
   const f = fixture();
   try {
-    for (const [action, expected] of [[{ type: 'counter', id: 'counter-b' }, 'counter-panel'], [{ type: 'recipe', id: 'counter-a' }, 'counter-panel'], [{ type: 'menu', recipe: 'latte' }, 'coffee-panel'], [{ type: 'vault' }, 'vault-panel'], [{ type: 'manager' }, 'manager-panel'], [{ type: 'settings' }, 'settings-panel']]) {
+    for (const [action, expected] of [[{ type: 'counter', id: 'counter-b' }, 'counter-panel'], [{ type: 'recipe', id: 'counter-a' }, 'counter-panel'], [{ type: 'menu', recipe: 'latte' }, 'coffee-panel'], [{ type: 'vault' }, 'vault-panel']]) {
       const before = f.state();
       f.action(action);
       assert.equal(f.element('#operation-dialog').open, true);
@@ -226,34 +244,35 @@ test('TC-3D-008 REQ-3D-013 physical scene actions open each corresponding panel 
       assert.deepEqual(f.state(), before, 'opening scene detail does not alter economy');
       f.click('#dialog-close');
     }
+    const before = f.state();
+    f.click('#settings');
+    assert.equal(f.element('#operation-dialog').open, true);
+    assert.deepEqual(f.nodes.filter(node => node.classList.contains('operation-panel') && !node.hidden).map(node => node.id), ['settings-panel']);
+    assert.deepEqual(f.state(), before);
   } finally { f.dispose(); }
 });
 
-test('TC-3D-008 REQ-3D-013 pause and settings are dispatched from physical scene objects; pause freezes time (app harness)', () => {
+test('TC-3D-009 REQ-3D-016 removed pause/manager/settings scene routes and pause hotkeys cannot alter play (app harness)', () => {
   const f = fixture();
   try {
     assert.equal(f.element('#pause'), null);
-    assert.equal(f.element('#settings'), null);
-    f.action({ type: 'pause' });
-    assert.equal(f.state().paused, true);
-    const paused = f.state();
-    f.tick(4);
-    assert.deepEqual(f.state(), paused);
-    f.action({ type: 'pause' });
+    assert.ok(f.element('#settings'));
+    const before = f.state();
+    for (const type of ['pause', 'manager', 'settings']) f.action({ type });
+    for (const key of ['p', 'P', 'Pause', 'Escape']) f.element('#coffee-canvas').emit('keydown', { key, repeat: false });
+    assert.deepEqual(f.state(), before);
+    assert.equal(f.element('#operation-dialog').open, false);
     assert.equal(f.state().paused, false);
     f.tick(.5);
-    assert.ok(f.state().elapsed > paused.elapsed);
-    f.action({ type: 'settings' });
-    assert.equal(f.element('#settings-panel').hidden, false);
-    assert.equal(f.element('#operation-dialog').open, true);
+    assert.ok(f.state().elapsed > before.elapsed, 'current play continues without a user pause route');
   } finally { f.dispose(); }
 });
 
-test('TC-3D-008 REQ-3D-015 closed native dialog is the sole location of DOM operating buttons (static contract)', () => {
+test('TC-3D-009 REQ-3D-016 only HUD settings remains outside the closed native operation dialog (static contract)', () => {
   assert.ok(modalStart >= 0);
   assert.doesNotMatch(openingTags(modal, 'dialog')[0], /\bopen(?:\s|=|>)/);
   const panels = openingTags(modal, 'div').filter(tag => tag.includes('class="operation-panel"'));
-  assert.equal(panels.length, 5);
+  assert.equal(panels.length, 4);
   for (const panel of panels) assert.match(panel, /\bhidden(?:\s|>)/);
   assert.doesNotMatch(outsideModal, /class="operation-panel"|id="counter-panel"|id="settings-panel"/);
   assert.deepEqual(declarations('[hidden]', 'display'), ['none']);
@@ -281,7 +300,7 @@ test('TC-3D-008 REQ-3D-015 modal close/backdrop restore canvas focus and reject 
     assert.equal(dialog.open, false);
     assert.equal(f.renderer.interactionEnabled, true);
     assert.deepEqual(f.renderer.interactionCalls, [false, true]);
-    assert.equal(f.document.activeElement, canvas, 'close returns to the actual scene entry, no removed settings HUD');
+    assert.equal(f.document.activeElement, canvas, 'scene detail close returns to the actual canvas');
     f.action({ type: 'vault' });
     dialog.emit('click', { target: dialog, clientX: 90, clientY: 90 });
     assert.equal(dialog.open, false, 'click outside the dialog rectangle closes it');
@@ -290,8 +309,8 @@ test('TC-3D-008 REQ-3D-015 modal close/backdrop restore canvas focus and reject 
     assert.equal(dialog.open, true, 'click in the dialog content does not dismiss it');
     dialog.close(); // Simulates the close event native Escape supplies; not proof of browser Escape.
     assert.equal(f.document.activeElement, canvas);
-    f.action({ type: 'pause' });
-    assert.equal(f.state().paused, true, 'physical input is usable after dismissing a modal');
+    f.action({ type: 'invite' });
+    assert.ok(f.state().customers.length > before.customers.length, 'physical input is usable after dismissing a modal');
   } finally { f.dispose(); }
 });
 
@@ -301,7 +320,7 @@ test('TC-3D-008 REQ-3D-014 scene keyboard access is provided on the real canvas 
   assert.match(canvas, /aria-describedby="[^"]+"/);
   assert.match(outsideModal, /键盘|Tab|Enter|方向键|空格/);
   assert.match(main, /keydown/);
-  assert.doesNotMatch(outsideModal, /<button\b/, 'keyboard support cannot reintroduce offscreen duplicate scene buttons');
+  assert.deepEqual(openingTags(outsideModal, 'button').map(tag => /id="([^"]+)"/.exec(tag)?.[1]), ['settings'], 'keyboard support cannot reintroduce offscreen duplicate scene buttons');
   assert.ok(rules('#coffee-canvas:focus-visible').length, 'keyboard users can locate their scene focus');
   assert.ok(declarations('#coffee-canvas:focus-visible', 'outline-offset').some(value => Number.parseFloat(value) < 0), 'full-viewport focus ring must be inset so overflow:hidden does not clip it');
 });
@@ -317,7 +336,7 @@ test('TC-3D-008 REQ-3D-014 actual canvas keys select, pan and activate scene obj
     assert.equal(f.renderer.getFocus(), 'counter-a-recipe');
     assert.match(f.element('#toast').textContent, /柜台 A 配方牌/);
     canvas.emit('keydown', { key: 'ArrowLeft' });
-    assert.equal(f.renderer.getFocus(), 'settings');
+    assert.equal(f.renderer.getFocus(), 'invite');
     canvas.emit('keydown', { key: 'ArrowUp' }); canvas.emit('keydown', { key: 'ArrowDown' });
     assert.deepEqual(f.renderer.panCalls, [[0, 80], [0, -80]]);
     const focusCount = f.renderer.focusCalls.length;
@@ -338,13 +357,13 @@ test('TC-3D-008 REQ-3D-014 actual canvas keys select, pan and activate scene obj
     assert.equal(f.renderer.getFocus(), 'counter-a-recipe', 'inert modal background cannot change selected scene object');
     assert.equal(f.renderer.activationCalls, 1);
     f.click('#dialog-close');
-    f.renderer.focusAnchor('pause');
+    f.renderer.focusAnchor('vault');
     canvas.emit('keydown', { key: ' ', repeat: false });
-    assert.equal(f.state().paused, true);
+    assert.equal(f.element('#vault-panel').hidden, false);
     canvas.emit('keydown', { key: ' ', repeat: true });
-    assert.equal(f.state().paused, true, 'held Space cannot toggle back to running');
-    f.renderer.focusAnchor('settings');
-    canvas.emit('keydown', { key: 'Enter', repeat: false });
+    assert.equal(f.state().paused, false, 'Space operates focused geometry and never hides a pause toggle');
+    f.click('#dialog-close');
+    f.click('#settings');
     assert.equal(f.element('#settings-panel').hidden, false);
   } finally { f.dispose(); }
 });
@@ -362,11 +381,10 @@ test('TC-3D-008 REQ-3D-015 dialog recipe/upgrade/navigation routes preserve core
     assert.ok(f.state().wallet < beforeUpgrade.wallet);
     f.click('#dialog-close');
     f.action({ type: 'vault' });
-    const managerLink = f.nodes.find(node => node.hasAttribute('data-open-manager'));
-    f.root.emit('click', { target: managerLink });
-    assert.equal(f.element('#manager-panel').hidden, false);
-    assert.equal(f.document.activeElement, f.element('#dialog-close'), 'switching panel refocuses a visible close control');
-    assert.equal(f.element('#operation-dialog').showModalCalls, 2, 'an already open dialog is switched without opening it again');
+    assert.equal(f.element('#manager-panel'), null);
+    assert.equal(f.element('#manager-upgrade').disabled, true, 'vault owns the manager upgrade and uses its existing quote');
+    assert.match(f.element('#manager-rank').textContent, /^Lv\. 1$/);
+    assert.equal(f.document.activeElement, f.element('#dialog-close'));
     f.click('#dialog-close');
     f.action({ type: 'menu', recipe: 'espresso' });
     const assign = f.nodes.find(node => node.dataset.assign === 'counter-b');
@@ -375,18 +393,72 @@ test('TC-3D-008 REQ-3D-015 dialog recipe/upgrade/navigation routes preserve core
     assert.equal(f.element('#operation-dialog').open, false);
     assert.equal(f.document.activeElement, f.element('#coffee-canvas'));
     assert.equal(f.renderer.focusCalls.at(-1), 'counter-b-recipe');
-    f.action({ type: 'settings' });
-    const settingsJump = f.nodes.find(node => node.dataset.focus === 'settings');
-    f.root.emit('click', { target: settingsJump });
+    f.click('#settings');
+    const entryJump = f.nodes.find(node => node.dataset.focus === 'invite');
+    f.root.emit('click', { target: entryJump });
     assert.equal(f.element('#operation-dialog').open, false);
-    assert.equal(f.renderer.focusCalls.at(-1), 'settings');
+    assert.equal(f.renderer.focusCalls.at(-1), 'invite');
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-009 REQ-3D-017 manager grade, efficiency and upgrade belong to the vault and preserve the core quote (app harness)', () => {
+  const vaultMarkup = modal.slice(modal.indexOf('id="vault-panel"'), modal.indexOf('id="settings-panel"'));
+  for (const id of ['manager-rank', 'manager-speed', 'manager-status', 'manager-preview', 'manager-upgrade']) assert.match(vaultMarkup, new RegExp(`id="${id}"`));
+  assert.equal(openingTags(modal, 'button').filter(tag => tag.includes('id="manager-upgrade"')).length, 1);
+  assert.doesNotMatch(html, /manager-panel|data-open-manager|经理推车|米\/秒/);
+  const f = fixture();
+  try {
+    const expected = createEngine(f.state()), quote = expected.managerQuote();
+    f.action({ type: 'vault' });
+    assert.equal(f.element('#vault-panel').hidden, false);
+    assert.match(f.element('#manager-rank').textContent, /^Lv\. 1$/);
+    assert.equal(f.element('#manager-speed').textContent, '100%');
+    assert.match(f.element('#manager-preview').textContent, /107%/);
+    assert.match(f.element('#manager-upgrade').textContent, /¥10\.00/);
+    assert.equal(f.element('#manager-upgrade').disabled, false);
+    assert.equal(expected.upgradeManager(), true);
+    f.click('#manager-upgrade');
+    assert.deepEqual(f.state(), expected.snapshot(), 'the vault purchase has exactly the core cost, rank and event changes');
+    assert.equal(f.state().wallet, 1200 - quote.cost);
+    assert.equal(f.element('#manager-rank').textContent, 'Lv. 2');
+    assert.equal(f.element('#manager-speed').textContent, '107%');
+    assert.equal(f.element('#manager-upgrade').disabled, true, 'a repeated purchase cannot exceed the current wallet');
+    f.click('#manager-upgrade');
+    assert.deepEqual(f.state(), expected.snapshot());
+    assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, f.state());
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-009 REQ-3D-016 HUD settings uses the same modal input guard and restores its own visible focus (app harness)', () => {
+  const f = fixture();
+  try {
+    const settings = f.element('#settings'), dialog = f.element('#operation-dialog');
+    settings.focus(); f.click('#settings');
+    assert.equal(dialog.open, true);
+    assert.equal(f.renderer.interactionEnabled, false);
+    assert.equal(f.document.activeElement, f.element('#dialog-close'));
+    const before = f.state();
+    f.action({ type: 'invite' }); f.action({ type: 'vault' }); f.click('#settings');
+    assert.deepEqual(f.state(), before);
+    assert.equal(f.element('#settings-panel').hidden, false);
+    assert.equal(dialog.showModalCalls, 1, 'a repeated HUD click cannot reopen or replace the current modal');
+    f.tick(.5);
+    const expected = createEngine(before); expected.advance(.5);
+    assert.deepEqual(f.state(), expected.snapshot(), 'a settings modal suspends input while automatic play keeps running');
+    f.click('#dialog-close');
+    assert.equal(f.renderer.interactionEnabled, true);
+    assert.equal(f.document.activeElement, settings, 'HUD settings is still a visible keyboard return target');
+    f.click('#settings');
+    dialog.close(); // Native Escape behavior still requires browser QA.
+    assert.equal(f.document.activeElement, settings);
+    assert.equal(f.renderer.interactionEnabled, true);
   } finally { f.dispose(); }
 });
 
 test('TC-3D-008 REQ-3D-015 post-dialog navigation survives native asynchronous close-event ordering (app harness)', () => {
   const f = fixture({ deferDialogClose: true });
   try {
-    f.action({ type: 'settings' });
+    f.click('#settings');
     const jump = f.nodes.find(node => node.dataset.focus === 'vault');
     f.root.emit('click', { target: jump });
     assert.equal(f.element('#operation-dialog').open, false);
@@ -406,7 +478,7 @@ test('TC-3D-008 REQ-3D-015 a stale queued close cannot dismantle a newly reopene
   const f = fixture({ deferDialogClose: true });
   try {
     f.element('#coffee-canvas').focus();
-    f.action({ type: 'settings' });
+    f.click('#settings');
     f.click('#dialog-close');
     assert.equal(f.renderer.interactionEnabled, true);
     f.action({ type: 'vault' });
@@ -428,15 +500,18 @@ test('TC-3D-008 REQ-3D-015 a stale queued close cannot dismantle a newly reopene
   } finally { f.dispose(); }
 });
 
-test('TC-3D-008 REQ-3D-014 physical invite remains cooldown/paused guarded without duplicate DOM handlers (app harness)', () => {
+test('TC-3D-009 REQ-3D-016 physical invite remains cooldown/conflict guarded without duplicate DOM handlers (app harness)', () => {
   const f = fixture();
   try {
     const expected = createEngine(f.state()); expected.invite(); expected.invite();
     f.action({ type: 'invite' }); f.action({ type: 'invite' });
     assert.deepEqual(f.state(), expected.snapshot(), 'one accepted invite keeps the existing three-guest core rule; immediate repeat is rejected');
     assert.ok(f.state().inviteCooldown > 0);
-    f.action({ type: 'pause' });
+    const foreign = JSON.parse(f.memory.getItem(SAVE_KEY)); foreign.recordChangeTag = 'invite-conflict';
+    f.memory.setItem(SAVE_KEY, JSON.stringify(foreign));
+    f.window.emit('storage', { key: SAVE_KEY, newValue: JSON.stringify(foreign) });
     const paused = f.state();
+    assert.equal(paused.paused, true);
     f.action({ type: 'invite' });
     assert.deepEqual(f.state(), paused);
     assert.equal(f.element('#invite'), null, 'no parallel DOM invite can duplicate a geometry tap');
@@ -455,10 +530,10 @@ test('TC-3D-008 REQ-3D-015 modal controls maintain 44px targets, safe-area and d
   assert.match(main, /listeners\.abort\(\)/);
 });
 
-test('TC-3D-008 REQ-3D-006 physical settings preserve manual save and export, with corrupt bytes protected (app harness)', async () => {
+test('TC-3D-008 REQ-3D-006 HUD settings preserve manual save and export, with corrupt bytes protected (app harness)', async () => {
   const f = fixture();
   try {
-    f.action({ type: 'settings' });
+    f.click('#settings');
     f.click('#save');
     const envelope = JSON.parse(f.memory.getItem(SAVE_KEY));
     assert.deepEqual(envelope.state, f.state());
@@ -470,7 +545,7 @@ test('TC-3D-008 REQ-3D-006 physical settings preserve manual save and export, wi
   const raw = '{ definitely not a save';
   const corrupt = fixture({ raw });
   try {
-    corrupt.action({ type: 'settings' });
+    corrupt.click('#settings');
     assert.equal(corrupt.element('#new-shop').hidden, false);
     corrupt.click('#save');
     corrupt.tick(10);
@@ -485,7 +560,7 @@ test('TC-3D-008 REQ-3D-015 names and save feedback are transient; disabled brows
   const f = fixture({ storageUnavailable: true });
   try {
     assert.match(f.element('#save-status').textContent, /不可用/);
-    f.action({ type: 'settings' });
+    f.click('#settings');
     f.click('#save');
     assert.match(f.element('#save-status').textContent, /失败/);
     assert.equal(f.element('#toast').classList.contains('visible'), true);
@@ -499,7 +574,7 @@ test('TC-3D-008 REQ-3D-015 names and save feedback are transient; disabled brows
   } finally { f.dispose(); }
 });
 
-test('TC-3D-008 REQ-3D-006 external save conflict freezes and blocks physical resume/purchases (app harness)', () => {
+test('TC-3D-008 REQ-3D-006 external save conflict freezes and blocks removed pause routes and purchases (app harness)', () => {
   const f = fixture();
   try {
     const newer = JSON.parse(f.memory.getItem(SAVE_KEY)); newer.recordChangeTag = 'other-client';
@@ -507,16 +582,122 @@ test('TC-3D-008 REQ-3D-006 external save conflict freezes and blocks physical re
     f.window.emit('storage', { key: SAVE_KEY, newValue: JSON.stringify(newer) });
     assert.equal(f.state().paused, true);
     f.action({ type: 'pause' });
-    assert.equal(f.state().paused, true, 'physical pause must not bypass conflict protection');
+    assert.equal(f.state().paused, true, 'removed pause callback must not bypass conflict protection');
     f.action({ type: 'counter', id: 'counter-a' });
     assert.equal(f.element('#counter-upgrade').disabled, true);
     f.click('#dialog-close');
-    f.action({ type: 'settings' });
+    f.click('#settings');
     assert.equal(f.element('#reload').hidden, false);
     assert.match(f.element('#save-status').textContent, /变化|最新/);
     f.click('#save');
     assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).recordChangeTag, 'other-client');
   } finally { f.dispose(); }
+});
+
+function pausedProgress() {
+  const engine = createEngine(); engine.advance(22); engine.togglePause(); return engine.snapshot();
+}
+function omitPauseClaims(state) {
+  const copy = structuredClone(state); delete copy.paused; delete copy.lastOfflineClaimId; delete copy.offlineClaimIds; return copy;
+}
+
+test('TC-3D-009 REQ-3D-016 valid previous paused saves resume current play without paused-interval income on boot (app harness)', () => {
+  for (const savedAtAgoSeconds of [10, 3600]) {
+    const initial = pausedProgress(), f = fixture({ initial, savedAtAgoSeconds });
+    try {
+      assert.equal(f.state().paused, false, `valid ${savedAtAgoSeconds}s old pause must not strand the no-pause UI`);
+      assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(initial), 'repository first settles the old pause with zero elapsed, income, movement or asset changes');
+      assert.equal(f.element('#reload').hidden, true);
+      const before = f.state();
+      f.tick(.5);
+      const expected = createEngine(before); expected.advance(.5);
+      assert.deepEqual(f.state(), expected.snapshot(), 'only the new online interval advances after automatic resume');
+      f.click('#settings'); f.click('#save');
+      assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).state.paused, false);
+      const reloaded = fixture({ raw: f.memory.getItem(SAVE_KEY) });
+      try { assert.deepEqual(reloaded.state(), f.state(), 'immediate new boot cannot reclaim the already settled paused interval'); }
+      finally { reloaded.dispose(); }
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-009 REQ-3D-016 reading a valid external paused save resumes only current play after conflict recovery (app harness)', () => {
+  const f = fixture();
+  try {
+    const paused = pausedProgress();
+    const latest = { schemaVersion: 1, savedAt: f.clock.now - 3600000, recordChangeTag: 'valid-paused-other-window', state: paused };
+    const raw = JSON.stringify(latest); f.memory.setItem(SAVE_KEY, raw);
+    f.window.emit('storage', { key: SAVE_KEY, newValue: raw });
+    assert.equal(f.state().paused, true);
+    f.click('#settings'); f.click('#reload');
+    assert.equal(f.state().paused, false);
+    assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(paused), 'reload claims no income or movement from the paused hour');
+    assert.equal(f.element('#reload').hidden, true);
+    const before = f.state();
+    f.tick(.5);
+    const expected = createEngine(before); expected.advance(.5);
+    assert.deepEqual(f.state(), expected.snapshot());
+    f.click('#save');
+    assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).state.paused, false);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-009 REQ-3D-006 failed offline writes or a concurrent claim keep paused valid saves conflict-protected (app harness)', () => {
+  for (const mode of ['writeUnavailable', 'conflictDuringClaim']) {
+    const initial = pausedProgress(), f = fixture({ initial, savedAtAgoSeconds: 3600, [mode]: true });
+    try {
+      const raw = f.memory.getItem(SAVE_KEY), before = f.state();
+      assert.equal(before.paused, true, `${mode} must not be unlocked by valid-pause automatic resume`);
+      assert.deepEqual(omitPauseClaims(before), omitPauseClaims(initial));
+      assert.equal(f.element('#reload').hidden, false);
+      for (const type of ['pause', 'manager', 'settings', 'invite']) f.action({ type });
+      f.tick(20);
+      assert.deepEqual(f.state(), before);
+      assert.equal(f.memory.getItem(SAVE_KEY), raw, 'blocked autosave cannot replace the valid original or another client');
+      f.action({ type: 'vault' });
+      assert.equal(f.element('#manager-upgrade').disabled, true);
+      f.click('#manager-upgrade');
+      assert.deepEqual(f.state(), before);
+      f.click('#dialog-close'); f.click('#settings'); f.click('#save');
+      assert.equal(f.memory.getItem(SAVE_KEY), raw);
+      if (mode === 'writeUnavailable') {
+        f.click('#reload');
+        assert.equal(f.state().paused, true, 'repeated failed reload still cannot resume protected play');
+        f.storageControl.writeUnavailable = false;
+        f.click('#reload');
+        assert.equal(f.state().paused, false, 'explicit successful latest-save recovery can resume current play');
+        assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(initial));
+      }
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-009 REQ-3D-006 bad, future and foreign saves preserve source bytes through HUD settings and reload (app harness)', async () => {
+  const initial = createInitialState();
+  const badLedger = structuredClone(initial); badLedger.wallet++;
+  const cases = [
+    '{ definitely not a save',
+    JSON.stringify({ schemaVersion: 2, state: initial }),
+    JSON.stringify({ schemaVersion: 1, savedAt: Date.now(), recordChangeTag: 'bad-ledger', state: badLedger }),
+    JSON.stringify({ schemaVersion: 1, savedAt: Date.now(), recordChangeTag: 'foreign-schema', state: { schemaVersion: 1, economyVersion: 1, paused: true } }),
+  ];
+  for (const raw of cases) {
+    const f = fixture({ raw });
+    try {
+      f.click('#settings');
+      assert.equal(f.element('#new-shop').hidden, false);
+      f.click('#save'); f.tick(10);
+      assert.equal(f.memory.getItem(SAVE_KEY), raw);
+      f.click('#export');
+      assert.equal(await f.blobs[0].text(), raw, 'backup must preserve the source instead of a resumed invented state');
+      f.window.emit('storage', { key: SAVE_KEY, newValue: 'changed elsewhere' });
+      assert.equal(f.state().paused, true);
+      f.click('#reload');
+      f.click('#save'); f.tick(10);
+      assert.equal(f.memory.getItem(SAVE_KEY), raw, 'failed compatible reload does not release source-byte protection');
+      assert.equal(f.element('#new-shop').hidden, false);
+    } finally { f.dispose(); }
+  }
 });
 
 test('TC-3D-008 REQ-3D-004 hidden/BFCache resume applies elapsed time only once and retains one RAF owner (app harness)', () => {
@@ -552,7 +733,7 @@ test('TC-3D-008 REQ-3D-004 final disposal removes UI listeners, observer and RAF
   assert.equal(f.timers.size, 0);
   for (const target of [f.root, f.document, f.window, f.window.visualViewport, ...f.nodes]) assert.equal([...target.listeners.values()].reduce((n, listeners) => n + listeners.size, 0), 0);
   const before = f.state();
-  f.action({ type: 'pause' }); f.action({ type: 'invite' }); f.action({ type: 'settings' });
+  f.action({ type: 'pause' }); f.action({ type: 'invite' }); f.click('#settings');
   assert.deepEqual(f.state(), before);
   assert.equal(f.element('#operation-dialog').open, false);
   f.dispose();
