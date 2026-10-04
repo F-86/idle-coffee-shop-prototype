@@ -28,3 +28,7 @@ REQ-3D-016/017/018 → [TC-3D-009](cases/slice/TC-3D-009.md)，[计划](plans/va
 ## 用户指定表面与近到远顺序
 
 REQ-3D-019/020/021 → [TC-3D-010](cases/slice/TC-3D-010.md)，[计划](plans/room-route-refinement.md)。真实core路径、当前两柜台存档路线迁移与图标间隔取代旧TC009对应的“core不改/仅渲染映射”；其余UI与保存保护继续回归。
+
+## 性能预算与进出分流
+
+REQ-3D-022/023 → [TC-3D-011](cases/slice/TC-3D-011.md)、[计划](plans/performance-exit.md)。RenderBudget多刷新时钟、应用生命周期尾部、静态/动态几何、完整路径/存档测试与结构成本对比；GPU帧时与Mac发热另外测量，禁止冒充通过。

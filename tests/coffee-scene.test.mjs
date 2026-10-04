@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { NullEngine } from '@babylonjs/core/Engines/nullEngine.js';
+import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator.js';
 import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 
 registerHooks({ resolve(specifier, context, nextResolve) {
@@ -981,5 +982,105 @@ test('TC-3D-010 real core sweep collects visible B cash then A cash, and only de
     assert.equal(deposited, true, 'one full true-world sweep reaches its bounded expected endpoint');
     assert.deepEqual(transfers, [['collected', 'counter-b', 330], ['collected', 'counter-a', 220], ['deposited', 550]]);
     assert.equal(validateState(engine.state).ok, true);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-011 static work is frozen while live actors, cups, cash parents and physical controls stay correct', () => {
+  const f = fixture();
+  try {
+    const scene = f.renderer.scene;
+    assert.equal(scene.getMeshByName('continuous-shop-floor').isWorldMatrixFrozen, true);
+    assert.equal(scene.getMeshByName('counter-a-countertop').isWorldMatrixFrozen, true);
+    assert.equal(scene.getMeshByName('manager-shirt').isWorldMatrixFrozen, false);
+    assert.equal(scene.getMeshByName('counter-a-progress-fill').isWorldMatrixFrozen, false);
+    assert.equal(scene.getMeshByName('counter-a-ready-cup-cup').isWorldMatrixFrozen, false);
+    assert.equal(scene.getMeshByName('shared-box').isWorldMatrixFrozen, false, 'later clones never inherit a frozen source matrix');
+    const before = f.renderer.readRenderStats();
+    assert.ok(before.frozenMeshes >= 130, 'fixed room geometry avoids per-frame world-matrix updates');
+    const state = createInitialState();
+    state.customers = [{ id: 1, x: 0, z: 2, phase: 'leaving', counterId: 'counter-a', timer: 0, hasCup: true, skin: 0 }];
+    f.renderer.update(state, 0);
+    const actor = scene.getMeshByName('customer-1-shirt');
+    assert.equal(actor.isWorldMatrixFrozen, false);
+    const oldX = actor.getAbsolutePosition().x;
+    state.customers[0].x = 1;
+    f.renderer.update(state, 0);
+    assert.ok(Math.abs(actor.getAbsolutePosition().x - oldX - 1) < 1e-6, 'new actor meshes follow their live parent');
+    for (const caster of f.renderer.staticCasters) {
+      assert.ok(!/^(customer-|manager-|cart-|counter-[ab]-barista)/.test(caster.name), `${caster.name} cannot enter the cached furniture shadow map`);
+      assert.equal(caster.isDisposed(), false);
+    }
+    state.customers = [];
+    f.renderer.update(state, 0);
+    assert.equal(f.renderer.readRenderStats().meshCount, before.meshCount, 'departed people do not accumulate scene resources');
+    for (const [key] of physicalControls) { f.renderer.focusAnchor(key); assert.equal(f.renderer.activateFocused(), true, key); }
+    assert.equal(f.actions.length, physicalControls.length);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-011 scene exit thresholds match core endpoints and end before the inbound aisle', () => {
+  const f = fixture();
+  try {
+    for (const x of [0, 5]) {
+      const exit = f.renderer.scene.getMeshByName(`customer-exit-${x}`);
+      assert.equal(exit.position.x, x + WORLD.departureOffsetX);
+      assert.equal(exit.position.z, WORLD.exitZ);
+      assert.equal(exit.metadata.coffeeRouteEndpoint, true);
+      assert.ok(WORLD.inboundZ - bounds(exit).maximumWorld.z > .9);
+      const aisle = f.renderer.scene.getMeshByName(`departure-aisle-${x}`);
+      assert.ok(bounds(aisle).minimumWorld.x > x + .9, 'departure geometry is alongside rather than over the incoming queue');
+    }
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-011 moving contact disks remain above the physical rug/arrow surfaces', () => {
+  const f = fixture();
+  try {
+    const state = createInitialState();
+    state.customers = [{ id: 99, x: 0, z: 6.11, phase: 'queue', counterId: 'counter-a', timer: 0, hasCup: false, skin: 0 }];
+    f.renderer.update(state, 0);
+    const scene = f.renderer.scene;
+    const shadow = bounds(scene.getMeshByName('customer-99-contact-shadow'));
+    for (const name of ['queue-rug-0', 'queue-rug-color-0', 'queue-arrow-l-0', 'queue-arrow-r-0']) {
+      assert.ok(shadow.minimumWorld.y > bounds(scene.getMeshByName(name)).maximumWorld.y, `${name} cannot hide the only moving contact shadow`);
+    }
+  } finally { f.dispose(); }
+});
+
+
+test('TC-3D-011 cached shadow bounds cover static furniture and upgrades invalidate once (NullEngine math)', () => {
+  const f = fixture();
+  try {
+    const scene = f.renderer.scene;
+    const generator = new ShadowGenerator(1024, scene.getLightByName('warm-window-light'));
+    f.renderer.shadowGenerator = generator;
+    f.renderer.prepareStaticGeometry();
+    const map = generator.getShadowMap();
+    assert.equal(map.refreshRate, 0);
+    assert.ok(map.renderList.length > 50);
+    assert.ok(map.renderList.every(mesh => !/^(customer-|manager-|cart-|counter-[ab]-barista)/.test(mesh.name)));
+    const matrix = generator.getTransformMatrix().clone();
+    for (const mesh of map.renderList) {
+      for (const corner of bounds(mesh).vectorsWorld) {
+        const point = Vector3.TransformCoordinates(corner, matrix);
+        assert.ok(Math.abs(point.x) <= 1.001 && Math.abs(point.y) <= 1.001 && Math.abs(point.z) <= 1.001, `${mesh.name} is inside the cached shadow frustum`);
+      }
+    }
+    let invalidations = 0;
+    const reset = map.resetRefreshCounter.bind(map);
+    map.resetRefreshCounter = () => { invalidations++; reset(); };
+    const state = createInitialState();
+    // Exercise invalidation directly: NullEngine has no GPU-ready shadow effects.
+    f.renderer.updateStation(f.renderer.stations.get('counter-a'), state.counters[0], false);
+    assert.equal(invalidations, 0, 'unchanged frames do not refresh furniture shadows');
+    state.counters[0].level = 6;
+    // Exercise invalidation directly: NullEngine has no GPU-ready shadow effects.
+    f.renderer.updateStation(f.renderer.stations.get('counter-a'), state.counters[0], false);
+    assert.equal(invalidations, 1, 'enabling machine extras refreshes their static shadow');
+    // Exercise invalidation directly: NullEngine has no GPU-ready shadow effects.
+    f.renderer.updateStation(f.renderer.stations.get('counter-a'), state.counters[0], false);
+    assert.equal(invalidations, 1);
+    f.renderer.focusAnchor('invite'); f.renderer.resize();
+    assert.deepEqual(generator.getTransformMatrix().asArray(), matrix.asArray(), 'pan/resize do not move the fixed-world shadow projection');
   } finally { f.dispose(); }
 });

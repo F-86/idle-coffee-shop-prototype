@@ -12,6 +12,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
     throw error;
   }
 } });
+const { RenderBudget } = await import('../src/slice/render/RenderBudget.ts');
 const { createEngine, createInitialState, recipeById, managerSpeed } = await import('../src/slice/core/engine.ts');
 const { LocalSaveRepository, SAVE_KEY, createMemoryStorage } = await import('../src/slice/core/persistence.ts');
 
@@ -169,7 +170,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   }
   class FakeDate extends Date { constructor(...args) { super(...(args.length ? args : [clock.now])); } static now() { return clock.now; } }
   const source = main.replace(/^import\s[\s\S]*?;\n/gm, '').replace(/if \(import\.meta\.hot\) import\.meta\.hot\.dispose\(\(\) => cleanup\(\)\);/, 'captureCleanup(() => cleanup());');
-  const context = { document, window, location: { search: '?qa' }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, createEngine, recipeById, managerSpeed, LocalSaveRepository, SAVE_KEY, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL() {} }, Blob, console, setTimeout: callback => { const id = ++nextId; timers.set(id, callback); return id; }, clearTimeout: id => timers.delete(id), requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
+  const context = { document, window, location: { search: '?qa' }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, createEngine, recipeById, managerSpeed, LocalSaveRepository, SAVE_KEY, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL() {} }, Blob, console, setTimeout: callback => { const id = ++nextId; timers.set(id, callback); return id; }, clearTimeout: id => timers.delete(id), requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
   runInNewContext(stripTypeScriptTypes(source), context, { timeout: 1500 });
   const state = () => structuredClone(window.__coffeeSliceDebug.readState());
   return { clock, document, window, root, nodes, renderer, observer, frames, timers, memory, storageControl, downloads, blobs, state, flushCloseEvents() { for (const callback of closeEvents.splice(0)) callback(); }, element: selector => root.querySelector(selector), action: action => renderer.action(action), click(selector, extra = {}) { const target = root.querySelector(selector); assert.ok(target, selector); if (!target.disabled) { const event = { target, detail: 1, ...extra }; target.emit('click', event); root.emit('click', event); } }, tick(seconds = .2) { clock.now += seconds * 1000; clock.performance += seconds * 1000; const pending = [...frames.values()]; frames.clear(); for (const callback of pending) callback(clock.performance); }, dispose() { hmrCleanup?.(); } };
@@ -873,4 +874,57 @@ test('TC-3D-008 REQ-3D-004 final disposal removes UI listeners, observer and RAF
   assert.deepEqual(f.state(), before);
   assert.equal(f.element('#operation-dialog').open, false);
   f.dispose();
+});
+
+test('TC-3D-011 high-refresh app submits only budgeted renders and keeps authoritative elapsed time', () => {
+  const f = fixture();
+  try {
+    for (let i = 0; i < 1200; i++) f.tick(1 / 120);
+    assert.equal(f.renderer.updates.length, 300);
+    assert.ok(Math.abs(f.state().elapsed - 10) < 1e-8);
+    assert.equal(f.frames.size, 1, 'there is still exactly one live RAF owner');
+    const rendered = f.renderer.updates.length;
+    f.document.hidden = true; f.document.emit('visibilitychange');
+    f.tick(5);
+    assert.equal(f.renderer.updates.length, rendered);
+    f.document.hidden = false; f.document.emit('visibilitychange');
+    f.tick(1 / 120);
+    assert.equal(f.renderer.updates.length, rendered, 'reset does not immediately render a stale catch-up frame');
+    f.tick(1 / 40);
+    assert.equal(f.renderer.updates.length, rendered + 1);
+    assert.equal(f.frames.size, 1);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-011 sub-frame visibility and BFCache saves settle visible time once without extra renders', () => {
+  const f = fixture();
+  try {
+    for (let cycle = 0; cycle < 10; cycle++) {
+      f.tick(.025);
+      f.document.hidden = true; f.document.emit('visibilitychange');
+      f.window.emit('pagehide', { persisted: true });
+      f.tick(.010);
+      f.document.hidden = false; f.document.emit('visibilitychange');
+      f.window.emit('pageshow', { persisted: true });
+    }
+    assert.ok(Math.abs(f.state().elapsed + f.state().stepCarry - .35) < 1e-8, 'visible skipped frames and hidden intervals are each applied once');
+    assert.equal(f.renderer.updates.length, 0, 'lifecycle settlement never schedules a catch-up render');
+    assert.equal(f.frames.size, 1);
+  } finally { f.dispose(); }
+});
+
+
+test('TC-3D-011 delayed duplicate pageshow preserves the newly visible tail', () => {
+  const f = fixture();
+  try {
+    f.tick(.025);
+    f.document.hidden = true; f.document.emit('visibilitychange');
+    f.tick(.010);
+    f.window.emit('pagehide', { persisted: true });
+    f.document.hidden = false; f.document.emit('visibilitychange');
+    f.tick(.015);
+    f.window.emit('pageshow', { persisted: true });
+    assert.ok(Math.abs(f.state().elapsed + f.state().stepCarry - .05) < 1e-8);
+    assert.equal(f.frames.size, 1);
+  } finally { f.dispose(); }
 });

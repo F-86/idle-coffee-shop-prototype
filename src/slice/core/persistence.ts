@@ -1,4 +1,4 @@
-import { createEngine, createInitialState, INITIAL_WALLET, INVITE_COOLDOWN_SECONDS, MANAGER_ROUTE_VERSION, MAX_LEVEL, migrateManagerRoute, QUEUE_CAPACITY, STEP_SECONDS, WORLD } from './engine';
+import { createEngine, createInitialState, CUSTOMER_ROUTE_VERSION, INITIAL_WALLET, INVITE_COOLDOWN_SECONDS, MANAGER_ROUTE_VERSION, MAX_LEVEL, migrateCustomerRoutes, migrateManagerRoute, QUEUE_CAPACITY, STEP_SECONDS, WORLD } from './engine';
 import type { SliceState } from './types';
 
 export const SAVE_KEY = 'mellow-bean-3d-v1';
@@ -22,6 +22,8 @@ export function validateState(value: unknown): { ok: true; state: SliceState } |
   const fail = (message: string): { ok: false; message: string } => ({ ok: false, message });
   if (!object(value) || value.schemaVersion !== 1 || value.economyVersion !== 1) return fail('存档版本不受支持。');
   if (value.managerRouteVersion !== undefined && value.managerRouteVersion !== 1 && value.managerRouteVersion !== MANAGER_ROUTE_VERSION) return fail('经理路线版本不受支持。');
+  if (value.customerRouteVersion !== undefined && value.customerRouteVersion !== 1 && value.customerRouteVersion !== CUSTOMER_ROUTE_VERSION) return fail('顾客路线版本不受支持。');
+  const legacyCustomerRoute = value.customerRouteVersion === undefined || value.customerRouteVersion === 1;
   const legacyRoute = value.managerRouteVersion === undefined || value.managerRouteVersion === 1;
   for (const key of ['wallet', 'totalEarned', 'totalServed', 'spend', 'nextCustomerId']) if (!integer(value[key], key === 'nextCustomerId' ? 1 : 0)) return fail(`存档数值 ${key} 无效。`);
   if (!number(value.elapsed, 0, 4e9) || Math.abs(value.elapsed / STEP_SECONDS - Math.round(value.elapsed / STEP_SECONDS)) > .0001) return fail('模拟时钟无效。');
@@ -49,10 +51,35 @@ export function validateState(value: unknown): { ok: true; state: SliceState } |
   }
   const ids = new Set<number>();
   for (const entry of value.customers) {
-    if (!object(entry) || !integer(entry.id, 1) || ids.has(entry.id) || !counterId(entry.counterId) || !number(entry.x, -9, 7) || !number(entry.z, 1.3, 7) || !['entering', 'queue', 'serving', 'receiving', 'leaving'].includes(String(entry.phase)) || !number(entry.timer, 0, 2) || typeof entry.hasCup !== 'boolean' || !integer(entry.skin, 0, 5)) return fail('顾客状态无效。');
+    if (!object(entry) || !integer(entry.id, 1) || ids.has(entry.id) || !counterId(entry.counterId) || !number(entry.x, legacyCustomerRoute ? -9 : WORLD.entryX - QUEUE_CAPACITY * WORLD.queueGap, 7) || !number(entry.z, 1.3, legacyCustomerRoute ? 7 : WORLD.inboundZ) || !['entering', 'queue', 'serving', 'receiving', 'leaving'].includes(String(entry.phase)) || !number(entry.timer, 0, 2) || typeof entry.hasCup !== 'boolean' || !integer(entry.skin, 0, 5)) return fail('顾客状态无效。');
     if (entry.id >= (value.nextCustomerId as number)) return fail('顾客标识顺序无效。');
     if (entry.hasCup !== (entry.phase === 'receiving' || entry.phase === 'leaving')) return fail('顾客杯子状态无效。');
     if (entry.phase === 'leaving' && !integer(entry.timer, 0, 2) || entry.phase === 'receiving' && !number(entry.timer, 0, .7)) return fail('顾客动作计时无效。');
+    if (entry.phase !== 'receiving' && entry.phase !== 'leaving' && entry.timer !== 0) return fail('顾客非交杯计时无效。');
+    if (entry.finishLegacyRoute !== undefined && (legacyCustomerRoute || entry.finishLegacyRoute !== true || entry.phase !== 'entering' && entry.phase !== 'leaving')) return fail('顾客迁移路线标识无效。');
+    if (entry.routeLeg !== undefined && (legacyCustomerRoute || entry.finishLegacyRoute || !integer(entry.routeLeg, 0, 3) || entry.phase !== 'entering' && entry.phase !== 'leaving')) return fail('顾客路段标识无效。');
+    if (entry.finishLegacyRoute && (!number(entry.x, -9, 7) || !number(entry.z, 1.3, 7))) return fail('顾客旧路线坐标无效。');
+    if (!legacyCustomerRoute && !entry.finishLegacyRoute) {
+      const x = entry.counterId === 'counter-a' ? 0 : 5;
+      if (entry.phase !== 'receiving' && entry.timer !== 0) return fail('顾客路线计时无效。');
+      if (entry.phase === 'entering') {
+        if (entry.routeLeg === 0) {
+          if (entry.z !== WORLD.entryZ || !number(entry.x, WORLD.entryX - QUEUE_CAPACITY * WORLD.queueGap, WORLD.inboundX)) return fail('顾客入口路段无效。');
+        } else if (entry.routeLeg === 1) {
+          if (entry.x !== WORLD.inboundX || !number(entry.z, WORLD.entryZ, WORLD.inboundZ)) return fail('顾客入口转弯无效。');
+        } else if (entry.routeLeg === 2) {
+          if (entry.z !== WORLD.inboundZ || !number(entry.x, WORLD.inboundX, x)) return fail('顾客入店横道无效。');
+        } else if (entry.routeLeg === 3) {
+          if (entry.x !== x || !number(entry.z, WORLD.serviceZ, WORLD.inboundZ)) return fail('顾客入队路段无效。');
+        } else return fail('顾客入店路段缺失。');
+      } else if (entry.phase === 'leaving') {
+        if (entry.routeLeg === 0) {
+          if (entry.z !== WORLD.serviceZ || !number(entry.x, x, x + WORLD.departureOffsetX)) return fail('顾客离柜路段无效。');
+        } else if (entry.routeLeg === 1) {
+          if (entry.x !== x + WORLD.departureOffsetX || !number(entry.z, WORLD.serviceZ, WORLD.exitZ)) return fail('顾客离店路段无效。');
+        } else return fail('顾客离店路段缺失。');
+      } else if (entry.x !== x || !number(entry.z, WORLD.serviceZ, entry.phase === 'queue' ? WORLD.inboundZ : WORLD.serviceZ)) return fail('顾客排队或服务位置无效。');
+    }
     ids.add(entry.id);
   }
   const counters = value.counters;
@@ -77,13 +104,18 @@ export function validateState(value: unknown): { ok: true; state: SliceState } |
   const state = clone(value) as unknown as SliceState;
   state.stepCarry ??= 0; state.eventSequence ??= 0; state.offlineClaimIds ??= state.lastOfflineClaimId ? [state.lastOfflineClaimId] : [];
   migrateManagerRoute(state);
+  migrateCustomerRoutes(state);
+  // An accepted old archive must also be valid after its one-time migration.
+  // Impossible old stationary positions fail closed instead of becoming an
+  // un-saveable live game; do not teleport guests to silently repair it.
+  if (legacyCustomerRoute) return validateState(state);
   return { ok: true, state };
 }
 
 function decode(raw: string): { ok: true; envelope: Envelope } | { ok: false; status: 'corrupt' | 'future'; message: string } {
   let value: unknown;
   try { value = JSON.parse(raw); } catch { return { ok: false, status: 'corrupt', message: '存档无法读取，原始内容已保留。请先备份或明确重置。' }; }
-  if (object(value) && (number(value.schemaVersion, 2) || object(value.state) && (number(value.state.schemaVersion, 2) || number(value.state.economyVersion, 2) || number(value.state.managerRouteVersion, MANAGER_ROUTE_VERSION + 1)))) return { ok: false, status: 'future', message: '这是较新版本的存档，当前版本不会覆盖它。请使用兼容的新版本。' };
+  if (object(value) && (number(value.schemaVersion, 2) || object(value.state) && (number(value.state.schemaVersion, 2) || number(value.state.economyVersion, 2) || number(value.state.managerRouteVersion, MANAGER_ROUTE_VERSION + 1) || number(value.state.customerRouteVersion, CUSTOMER_ROUTE_VERSION + 1)))) return { ok: false, status: 'future', message: '这是较新版本的存档，当前版本不会覆盖它。请使用兼容的新版本。' };
   if (!object(value) || value.schemaVersion !== 1 || !number(value.savedAt, 0, 8.64e15) || typeof value.recordChangeTag !== 'string' || !value.recordChangeTag || value.recordChangeTag.length > 256) return { ok: false, status: 'corrupt', message: '存档格式或结算时间无效，原始内容已保留。' };
   const checked = validateState(value.state);
   if (!checked.ok) return { ok: false, status: 'corrupt', message: `${checked.message} 原始内容已保留。` };

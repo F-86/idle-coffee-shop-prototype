@@ -11,6 +11,7 @@ import {
   type CoffeeSceneAction,
   type CoffeeSceneAnchor,
 } from "./render/CoffeeScene";
+import { RenderBudget } from "./render/RenderBudget";
 import "./style.css";
 
 const root = document.querySelector<HTMLDivElement>("#slice-root")!;
@@ -68,10 +69,10 @@ const repository = new LocalSaveRepository(browserStorage);
 const loaded = repository.load(Date.now());
 let engine: SliceEngine = createEngine(loaded.state);
 let stopped = false,
-  last = performance.now(),
   frame = 0,
   lastSave = Date.now(),
   hiddenAt: number | null = document.hidden ? Date.now() : null;
+const renderBudget = new RenderBudget(performance.now());
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 const listeners = new AbortController();
 const on = (
@@ -387,7 +388,7 @@ on($("#reload"), "click", () => {
   $("#save-status").textContent = saveBlocked
     ? "已有存档已保留，自动保存暂停"
     : "本地存档已恢复";
-  last = performance.now();
+  renderBudget.reset(performance.now());
   toast(recovered.message);
   updateUI();
 });
@@ -414,7 +415,8 @@ on($("#new-shop"), "click", () => {
 });
 function updateUI() {
   const s = engine.state;
-  $("#wallet").textContent = money(s.wallet);
+  const walletText = money(s.wallet);
+  if ($("#wallet").textContent !== walletText) $("#wallet").textContent = walletText;
   if (panel === "counter") {
     const c = s.counters.find((c) => c.id === selected)!,
       q = engine.quote(selected);
@@ -502,8 +504,10 @@ function updateUI() {
 let hudElapsed = 0;
 function tick(now: number) {
   if (stopped || document.hidden) return;
-  const dt = Math.min((now - last) / 1000, 7200);
-  last = now;
+  const elapsed = renderBudget.take(now);
+  frame = requestAnimationFrame(tick);
+  if (elapsed === null) return;
+  const dt = Math.min(elapsed, 7200);
   engine.advance(Math.max(0, dt));
   scene?.update(engine.state, dt);
   hudElapsed += dt;
@@ -513,7 +517,6 @@ function tick(now: number) {
   }
   engine.drainEvents();
   if (Date.now() - lastSave > 8000) save();
-  frame = requestAnimationFrame(tick);
 }
 function resumeVisible() {
   if (stopped || document.hidden) return;
@@ -528,20 +531,26 @@ function resumeVisible() {
         toast(`欢迎回来！离线经营存入 ${money(result.amount)}`);
     } else engine.advance(secs);
     save();
-  }
-  last = performance.now();
+  } else settleVisibleTail();
+  renderBudget.reset(performance.now());
   scene?.resize();
   frame = requestAnimationFrame(tick);
+}
+function settleVisibleTail() {
+  if (hiddenAt !== null) return;
+  engine.advance(Math.min(renderBudget.flush(performance.now()), 7200));
 }
 function onVisibility() {
   cancelAnimationFrame(frame);
   if (document.hidden) {
+    settleVisibleTail();
     hiddenAt ??= Date.now();
     save(false, hiddenAt);
   } else resumeVisible();
 }
 function onPageHide(event: Event) {
   cancelAnimationFrame(frame);
+  settleVisibleTail();
   hiddenAt ??= Date.now();
   save(false, hiddenAt);
   if (!(event as PageTransitionEvent).persisted) cleanup(false);
@@ -563,7 +572,7 @@ if (visualViewport)
   });
 function cleanup(persist = true) {
   if (stopped) return;
-  if (persist) save(false, hiddenAt ?? Date.now());
+  if (persist) { settleVisibleTail(); save(false, hiddenAt ?? Date.now()); }
   stopped = true;
   cancelAnimationFrame(frame);
   if (toastTimer) clearTimeout(toastTimer);
@@ -582,6 +591,7 @@ if (new URLSearchParams(location.search).has("qa"))
       readState: (): SliceState => engine.snapshot(),
       selected: () => selected,
       focusedObject: () => scene?.getFocus(),
+      readRenderStats: () => scene?.readRenderStats(),
       readFootprints: () => Object.fromEntries(sceneAnchors.map((key) => [key, scene?.getAnchorFootprint(key)])),
       readAnchors: () =>
         Object.fromEntries(

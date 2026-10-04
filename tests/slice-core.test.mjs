@@ -151,7 +151,7 @@ test('TC-3D-004 explicit legacy migration preserves in-flight stops, timers, ass
 });
 
 test('TC-3D-004 legacy migration leaves active customers and frozen brew snapshots untouched', () => {
-  const live = createEngine(); live.advance(9.027);
+  const live = createEngine(); live.advance(11.027);
   const source = live.snapshot(); delete source.managerRouteVersion;
   source.manager = { ...source.manager, x: -3, target: 0, phase: 'moving', timer: 0 };
   assert.ok(source.customers.length && source.counters.some(counter => counter.brew));

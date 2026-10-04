@@ -35,3 +35,5 @@ iCloud/CloudKit 只预留 AuthProvider / SaveRepository 边界，真实容器/�
 最新布局按REQ-3D-016–018执行：[金库与柜台前脸计划](docs/testing/plans/vault-front-layout.md)。技术暂停只保留给核心/存档冲突，不提供玩家热键。
 
 最新房间/路线按REQ-3D-019–021执行：[计划](docs/testing/plans/room-route-refinement.md)。删除吊灯与排队装饰圈，墙地规则纹路、金库牌在图标上方；真实core与画面统一B→A→金库，当前两柜台档进行一次性路线转换，剩余旧轮安全收完后改顺序。
+
+性能/顾客分流按REQ-3D-022–023执行：[计划](docs/testing/plans/performance-exit.md)。默认30fps、DPR≤1.25/200万像素与缓存家具阴影；进店走横道，拿杯沿每柜台侧道到出口消失。新路线不交叉回入口，旧在途顾客只走完一次保存的旧路线。工程成本有明确减少；真实设备帧时/温度仍以实际验收为准。

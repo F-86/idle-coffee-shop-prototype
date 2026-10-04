@@ -1,0 +1,9 @@
+BJS - [02:22:02]: Babylon.js v9.29.0 - Null engine
+{
+  "evidence": "NullEngine structure, same synthetic 24-person snapshot; no GPU/thermal measurement",
+  "meshes": 1157,
+  "geometries": 17,
+  "frozenMeshes": 0,
+  "configuredShadowCasterCandidates": 544,
+  "movingCustomerShadowCasterCandidates": 384
+}

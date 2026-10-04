@@ -21,6 +21,7 @@ import { CreatePlane } from '@babylonjs/core/Meshes/Builders/planeBuilder.js';
 import '@babylonjs/core/Culling/ray.js';
 import type { Counter, CounterId, Customer, RecipeId, SliceState } from '../core/types';
 import { recipeById, WORLD } from '../core/engine';
+import { renderPixelRatio, RENDER_FPS } from './RenderBudget';
 
 export type CoffeeSceneAction =
   | { type: 'invite' }
@@ -67,6 +68,7 @@ type Station = {
   selection: Mesh;
   level: number;
   recipe: string;
+  pendingCash: number;
 };
 
 const COLORS = {
@@ -80,6 +82,9 @@ const SKINS = ['#e6b88d', '#bb855e', '#f1ccb0', '#916247', '#d9a780'];
 const SHIRTS = ['#c86e5d', '#5c9ca6', '#d3ac50', '#8b84ae', '#779f74', '#c28798'];
 const HAIR = ['#3d3531', '#6c4531', '#d5b677', '#493b49', '#aba99d'];
 const TAU = Math.PI * 2;
+// Above rug ink/arrow overlays (highest top=.065), so cached furniture shadows
+// can coexist with visible, cheap moving contact disks.
+const CONTACT_SHADOW_Y = .074;
 const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
 // Fixed-camera room coordinates, shared by its solids and their world-scaled patterns.
 const ROOM = { width: 144, depth: 144, floorY: 0, rearZ: -3.6, tilePitch: 2.4, panelPitch: .72 };
@@ -105,6 +110,8 @@ export class CoffeeScene {
   private panY = 0;
   private hasSized = false;
   private panBounds = { left: 0, right: 0, bottom: 0, top: 0 };
+  private readonly staticCasters = new Set<Mesh>();
+  private renderedFrames = 0;
   private readonly materials = new Map<string, StandardMaterial>();
   private readonly shapes = new Map<Shape, Mesh>();
   private readonly customers = new Map<number, Person>();
@@ -120,6 +127,8 @@ export class CoffeeScene {
   private disposed = false;
   private interactionEnabled = true;
   private animationTime = 0;
+  private lastManagerLevel = -1;
+  private lastCartStacks = -1;
   private lastInviteKey = '';
   private selected: CounterId | null = null;
   private focused: CoffeeSceneAnchor | null = null;
@@ -134,10 +143,7 @@ export class CoffeeScene {
     this.canvas = canvas;
     this.onAction = onAction;
     this.ownsEngine = !options.engine;
-    this.engine = options.engine ?? new Engine(canvas, true, { stencil: true, powerPreference: 'high-performance' }, false);
-    if (!options.engine && typeof window !== 'undefined') {
-      this.engine.setHardwareScalingLevel(1 / Math.min(window.devicePixelRatio || 1, 1.75));
-    }
+    this.engine = options.engine ?? new Engine(canvas, true, { stencil: false, powerPreference: 'low-power' }, false);
     this.scene = new Scene(this.engine);
     this.scene.clearColor = Color4.FromHexString('#efe9d9ff');
     this.scene.ambientColor = Color3.FromHexString('#f6ecd7');
@@ -186,6 +192,7 @@ export class CoffeeScene {
     this.manager.previousZ = WORLD.backZ;
     this.manager.root.scaling.setAll(0.97);
     this.makeCart(this.manager.root);
+    this.prepareStaticGeometry();
     canvas.addEventListener('pointerdown', this.handleDown);
     canvas.addEventListener('pointermove', this.handleMove);
     canvas.addEventListener('pointerup', this.handleUp);
@@ -220,8 +227,6 @@ export class CoffeeScene {
     }
     for (const [id, person] of this.customers) {
       if (!live.has(id)) {
-        // Remove shadow-list entries before disposing a complete character hierarchy.
-        this.removeCasterTree(person.root);
         person.root.dispose(false, false);
         person.shadow.dispose(false, false);
         this.customers.delete(id);
@@ -242,6 +247,7 @@ export class CoffeeScene {
       if (this.down.target.isDisposed() || Math.hypot(point.x - this.down.targetPoint.x, point.y - this.down.targetPoint.y) > 9) this.down.invalidated = true;
     }
     this.scene.render();
+    this.renderedFrames++;
   }
 
   selectedCounter(id: CounterId | null): void {
@@ -325,8 +331,12 @@ export class CoffeeScene {
 
   resize(): void {
     if (this.disposed) return;
-    this.engine.resize();
     const rect = this.canvas.getBoundingClientRect();
+    if (this.ownsEngine && typeof window !== 'undefined') {
+      const scale = 1 / renderPixelRatio(rect.width, rect.height, window.devicePixelRatio || 1);
+      if (Math.abs(this.engine.getHardwareScalingLevel() - scale) > .001) this.engine.setHardwareScalingLevel(scale);
+    }
+    this.engine.resize();
     const aspect = Math.max(0.1, rect.width / Math.max(1, rect.height));
     // Phones crop a room at useful object scale. Landscape sees a close counter-and-wall view;
     // portrait has vertical room for queues, while dragging reveals the other shop areas.
@@ -361,6 +371,7 @@ export class CoffeeScene {
     this.labels.length = 0;
     this.anchors.clear();
     this.focusMaterials.clear();
+    this.staticCasters.clear();
     this.focused = null;
   }
 
@@ -546,7 +557,7 @@ export class CoffeeScene {
     mesh.scaling.copyFrom(size);
     mesh.position.copyFrom(position);
     mesh.material = this.material(color);
-    if (shadow) this.shadowGenerator?.addShadowCaster(mesh, false);
+    if (shadow) this.staticCasters.add(mesh);
     return mesh;
   }
 
@@ -602,8 +613,22 @@ export class CoffeeScene {
       left.rotation.y = -Math.PI / 4;
       right.rotation.y = Math.PI / 4;
     }
-    // A small welcome runner leads towards the two lanes without blocking the entrance.
-    this.box('welcome-runner', 4.0, 0.022, 1.1, -4.5, 0.011, 5.3, '#d5ccb4', undefined, false);
+    // Two short outbound aisles terminate before the separate incoming cross-aisle.
+    // Physical floor thresholds explain where a cup-carrying guest leaves the simulation.
+    for (const x of [0, 5]) {
+      const exitX = x + WORLD.departureOffsetX;
+      const aisle = this.box(`departure-aisle-${x}`, .65, .012, WORLD.exitZ - WORLD.serviceZ,
+        exitX, .006, (WORLD.exitZ + WORLD.serviceZ) / 2, '#ded6c0', undefined, false);
+      aisle.metadata = { coffeeFlow: 'outgoing' };
+      const threshold = this.box(`customer-exit-${x}`, .86, .02, .18, exitX, .01, WORLD.exitZ, '#8fafa1', undefined, false);
+      threshold.metadata = { coffeeFlow: 'outgoing', coffeeRouteEndpoint: true };
+      for (const side of [-1, 1]) {
+        const arrow = this.box(`departure-arrow-${x}-${side}`, .27, .015, .06, exitX + side * .09, .02, WORLD.exitZ - .45, '#5e8975', undefined, false);
+        arrow.rotation.y = side * Math.PI / 4;
+      }
+    }
+    // The previous welcome strip at z=5 incorrectly advertised the shared return route.
+    this.box('welcome-runner', 11.6, .012, .68, -.5, .006, WORLD.inboundZ, '#d5ccb4', undefined, false);
   }
 
   private makeStation(id: CounterId, x: number, accent: string, deep: string, letter: string): Station {
@@ -707,7 +732,7 @@ export class CoffeeScene {
     progressRoot.setEnabled(false);
     const body = this.scene.getMeshByName(`${id}-body`)!;
     body.metadata = { coffeeAction: { type: 'counter', id } };
-    const station: Station = { root, barista, progressRoot, progressFill, plaque, selector, cashLabel, cashRoot, cash, machineExtras: extras, readyCup, selection, level: -1, recipe: '' };
+    const station: Station = { root, barista, progressRoot, progressFill, plaque, selector, cashLabel, cashRoot, cash, machineExtras: extras, readyCup, selection, level: -1, recipe: '', pendingCash: -1 };
     // Build the initial labels even before the first simulation frame arrives.
     this.updateStation(station, { id, x, level: 1, recipe: letter === 'A' ? 'espresso' : 'latte', pendingCash: 0, brewed: 0, brew: null }, false);
     return station;
@@ -744,6 +769,7 @@ export class CoffeeScene {
       station.machineExtras[0].setEnabled(counter.level >= 2);
       station.machineExtras[1].setEnabled(counter.level >= 6);
       station.level = counter.level;
+      this.shadowGenerator?.getShadowMap()?.resetRefreshCounter();
     }
     if (station.recipe !== counter.recipe) {
       const espresso = counter.recipe === 'espresso';
@@ -754,16 +780,19 @@ export class CoffeeScene {
       });
       station.recipe = counter.recipe;
     }
-    const piles = counter.pendingCash > 0 ? Math.min(6, Math.max(1, Math.ceil(counter.pendingCash / 450))) : 0;
-    station.cash.forEach((stack, i) => stack.setEnabled(i < piles));
-    station.cashRoot.setEnabled(counter.pendingCash > 0);
-    station.cashLabel.mesh.metadata = { ...station.cashLabel.mesh.metadata, coffeeAmount: counter.pendingCash };
-    if (counter.pendingCash > 0) this.paintLabel(station.cashLabel, `${counter.pendingCash}`, (ctx, w, h) => {
-      this.roundRect(ctx, 5, 5, w - 10, h - 10, 24, '#f4f5df');
-      // Front receipt region is clear of the notes. Longer precise amounts scale to fit.
-      const font = this.text(ctx, cashText(counter.pendingCash), w / 2, h * .60, 124, '#477448', w - 28);
-      station.cashLabel.mesh.metadata = { ...station.cashLabel.mesh.metadata, coffeePaintedFontSize: font };
-    });
+    if (station.pendingCash !== counter.pendingCash) {
+      const piles = counter.pendingCash > 0 ? Math.min(6, Math.max(1, Math.ceil(counter.pendingCash / 450))) : 0;
+      station.cash.forEach((stack, i) => stack.setEnabled(i < piles));
+      station.cashRoot.setEnabled(counter.pendingCash > 0);
+      station.cashLabel.mesh.metadata = { ...station.cashLabel.mesh.metadata, coffeeAmount: counter.pendingCash };
+      if (counter.pendingCash > 0) this.paintLabel(station.cashLabel, `${counter.pendingCash}`, (ctx, w, h) => {
+        this.roundRect(ctx, 5, 5, w - 10, h - 10, 24, '#f4f5df');
+        // Front receipt region is clear of the notes. Longer precise amounts scale to fit.
+        const font = this.text(ctx, cashText(counter.pendingCash), w / 2, h * .60, 124, '#477448', w - 28);
+        station.cashLabel.mesh.metadata = { ...station.cashLabel.mesh.metadata, coffeePaintedFontSize: font };
+      });
+      station.pendingCash = counter.pendingCash;
+    }
     const brew = counter.brew;
     const progress = brew ? clamp(brew.elapsed / Math.max(0.001, brew.duration)) : 0;
     station.progressRoot.setEnabled(Boolean(brew));
@@ -777,7 +806,7 @@ export class CoffeeScene {
       station.barista.leftArm.rotation.x = brew ? -0.4 - pulse * 0.15 : -0.12;
       station.barista.root.position.y = brew ? Math.max(0, pulse) * 0.019 : 0;
     }
-    station.barista.shadow.position.set(station.barista.root.position.x, 0.039, station.barista.root.position.z);
+    station.barista.shadow.position.set(station.barista.root.position.x, CONTACT_SHADOW_Y, station.barista.root.position.z);
     station.selection.setEnabled(this.selected === counter.id);
   }
 
@@ -830,9 +859,11 @@ export class CoffeeScene {
     cup.position.set(0.015, -0.5, 0.19);
     cup.scaling.setAll(0.85);
     cup.setEnabled(false);
-    const shadow = this.shape('cylinder', `${name}-contact-shadow`, new Vector3(0.95, 0.008, 0.65), new Vector3(0, 0.039, 0), '#30433b', undefined, false);
+    const shadow = this.shape('cylinder', `${name}-contact-shadow`, new Vector3(0.95, 0.008, 0.65), new Vector3(0, CONTACT_SHADOW_Y, 0), '#30433b', undefined, false);
     shadow.material = this.material('#30433b', false, 0.12);
     shadow.isPickable = false;
+    // Moving silhouettes use one cheap contact shadow, never the static shadow map.
+    for (const mesh of root.getChildMeshes()) this.staticCasters.delete(mesh as Mesh);
     return { root, leftArm, rightArm, leftLeg, rightLeg, cup, shadow, previousX: 0, previousZ: 0 };
   }
 
@@ -863,7 +894,7 @@ export class CoffeeScene {
     person.cup.setEnabled(customer.hasCup || customer.phase === 'receiving');
     // During receipt the outstretched hand makes the actual cup transition legible.
     if (customer.phase === 'receiving' && dt > 0) person.rightArm.rotation.x = -1.13 + Math.sin(this.animationTime * 5) * 0.08;
-    person.shadow.position.set(person.root.position.x, 0.04, person.root.position.z);
+    person.shadow.position.set(person.root.position.x, CONTACT_SHADOW_Y, person.root.position.z);
     person.previousX = customer.x;
     person.previousZ = customer.z;
   }
@@ -871,13 +902,16 @@ export class CoffeeScene {
   private updateManager(state: Readonly<SliceState>, dt: number): void {
     const person = this.manager;
     const manager = state.manager;
-    this.paintLabel(this.vaultLabel, `manager-${manager.level}`, (ctx, w, h) => {
-      this.roundRect(ctx, 6, 6, w - 12, h - 12, 22, '#f1dd9f');
-      this.text(ctx, '金库', w / 2, h * .23, 100, '#405a45');
-      this.text(ctx, `经理 Lv.${manager.level} ↑`, w / 2, h * .58, 70, '#405a45');
-      this.text(ctx, '存款 / 升级', w / 2, h * .84, 48, '#405a45');
-    });
-    this.vaultLabel.mesh.metadata = { ...this.vaultLabel.mesh.metadata, coffeeManagerLevel: manager.level };
+    if (this.lastManagerLevel !== manager.level) {
+      this.paintLabel(this.vaultLabel, `manager-${manager.level}`, (ctx, w, h) => {
+        this.roundRect(ctx, 6, 6, w - 12, h - 12, 22, '#f1dd9f');
+        this.text(ctx, '金库', w / 2, h * .23, 100, '#405a45');
+        this.text(ctx, `经理 Lv.${manager.level} ↑`, w / 2, h * .58, 70, '#405a45');
+        this.text(ctx, '存款 / 升级', w / 2, h * .84, 48, '#405a45');
+      });
+      this.vaultLabel.mesh.metadata = { ...this.vaultLabel.mesh.metadata, coffeeManagerLevel: manager.level };
+      this.lastManagerLevel = manager.level;
+    }
     const x = manager.x;
     const dx = x - person.previousX;
     const dz = manager.z - person.previousZ;
@@ -901,8 +935,11 @@ export class CoffeeScene {
     // turns to reach stations; that turn must not orbit a wide trolley through the wall.
     this.managerCart.position.set(person.root.position.x + .70, 0, person.root.position.z - .55);
     const stacks = manager.carrying > 0 ? Math.min(6, Math.max(1, Math.ceil(manager.carrying / 600))) : 0;
-    this.cartCash.forEach((cash, i) => cash.setEnabled(i < stacks));
-    person.shadow.position.set(person.root.position.x, 0.04, person.root.position.z);
+    if (stacks !== this.lastCartStacks) {
+      this.cartCash.forEach((cash, i) => cash.setEnabled(i < stacks));
+      this.lastCartStacks = stacks;
+    }
+    person.shadow.position.set(person.root.position.x, CONTACT_SHADOW_Y, person.root.position.z);
     person.previousX = x;
     person.previousZ = manager.z;
   }
@@ -1075,8 +1112,40 @@ export class CoffeeScene {
     ctx.fillStyle = color; ctx.fill();
   }
 
-  private removeCasterTree(root: TransformNode): void {
-    if (!this.shadowGenerator) return;
-    for (const mesh of root.getChildMeshes()) if (mesh instanceof Mesh) this.shadowGenerator.removeShadowCaster(mesh, false);
+  /** Read-only QA counters; NullEngine values are structural, not GPU timing. */
+  readRenderStats() {
+    return {
+      targetFps: RENDER_FPS, renderedFrames: this.renderedFrames,
+      renderWidth: this.engine.getRenderWidth(), renderHeight: this.engine.getRenderHeight(),
+      meshCount: this.scene.meshes.length,
+      frozenMeshes: this.scene.meshes.filter(mesh => mesh.isWorldMatrixFrozen).length,
+      staticShadowCasters: this.shadowGenerator?.getShadowMap()?.renderList?.length ?? 0,
+      shadowRefreshRate: this.shadowGenerator?.getShadowMap()?.refreshRate ?? null,
+    };
+  }
+
+  private prepareStaticGeometry(): void {
+    // Freeze only truly immobile world geometry. Cash clusters intentionally retain
+    // parent-transform semantics; people, cups, progress, trolley and contact shadows move.
+    const moving = new Set<TransformNode>([this.manager.root, this.manager.shadow, this.managerCart]);
+    for (const station of this.stations.values()) {
+      for (const root of [station.barista.root, station.barista.shadow, station.readyCup, station.progressFill, station.cashRoot]) moving.add(root);
+    }
+    const isMoving = (mesh: Mesh): boolean => {
+      for (let node: TransformNode | null = mesh; node; node = node.parent as TransformNode | null) if (moving.has(node)) return true;
+      return false;
+    };
+    for (const mesh of this.scene.meshes) {
+      if (!(mesh instanceof Mesh)) continue;
+      if (isMoving(mesh)) { this.staticCasters.delete(mesh); continue; }
+      // Keep reusable source geometries and interactive anchor hierarchies unfrozen.
+      // They must retain correct picking if a diagnostic/layout move occurs.
+      if (mesh.name.startsWith('shared-') || mesh.name.startsWith('vault-')) continue;
+      mesh.freezeWorldMatrix();
+    }
+    for (const mesh of this.staticCasters) this.shadowGenerator?.addShadowCaster(mesh, false);
+    // Static furniture shadows are rendered once, and invalidated only by an upgrade.
+    const shadowMap = this.shadowGenerator?.getShadowMap();
+    if (shadowMap) shadowMap.refreshRate = 0;
   }
 }

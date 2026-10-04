@@ -9,7 +9,9 @@ export const INVITE_COOLDOWN_SECONDS = 18;
 export const OFFLINE_CAP_SECONDS = 7200;
 export const OFFLINE_EFFICIENCY = .5;
 export const MANAGER_ROUTE_VERSION = 2;
-export const WORLD = Object.freeze({ entryX: -8, entryZ: 5, serviceZ: 1.5, queueGap: .72, backZ: -1.7, vaultX: 8.8 });
+export const CUSTOMER_ROUTE_VERSION = 2;
+export const CUSTOMER_SPEED = 2.5;
+export const WORLD = Object.freeze({ entryX: -8, entryZ: 5, inboundX: -6, inboundZ: 8.2, departureOffsetX: 1.6, exitZ: 7.1, serviceZ: 1.5, queueGap: .72, backZ: -1.7, vaultX: 8.8 });
 export const recipes: readonly Recipe[] = Object.freeze([
   Object.freeze({ id: 'espresso', name: '浓缩咖啡', price: 110, brewSeconds: 3.6, color: '#a7693d', description: '出杯快、单价低，适合长队。' }),
   Object.freeze({ id: 'latte', name: '拿铁', price: 220, brewSeconds: 6.8, color: '#f0c793', description: '制作较慢、每杯收入更高。' })
@@ -44,9 +46,20 @@ export function migrateManagerRoute(state: SliceState): void {
   state.managerRouteVersion = MANAGER_ROUTE_VERSION;
 }
 
+/** Old in-flight customers finish their visible leg once; new arrivals use v2.
+ * Coordinates, brew snapshots and assets never change during migration. */
+export function migrateCustomerRoutes(state: SliceState): void {
+  if (state.customerRouteVersion === CUSTOMER_ROUTE_VERSION) return;
+  if (state.customerRouteVersion !== undefined && state.customerRouteVersion !== 1) throw new Error('Unsupported customer route version.');
+  for (const customer of state.customers) {
+    if (customer.phase === 'entering' || customer.phase === 'leaving') customer.finishLegacyRoute = true;
+  }
+  state.customerRouteVersion = CUSTOMER_ROUTE_VERSION;
+}
+
 export function createInitialState(): SliceState {
   return {
-    schemaVersion: 1, economyVersion: 1, managerRouteVersion: MANAGER_ROUTE_VERSION, elapsed: 0, wallet: INITIAL_WALLET,
+    schemaVersion: 1, economyVersion: 1, managerRouteVersion: MANAGER_ROUTE_VERSION, customerRouteVersion: CUSTOMER_ROUTE_VERSION, elapsed: 0, wallet: INITIAL_WALLET,
     totalEarned: 0, totalServed: 0, spend: 0, nextCustomerId: 1,
     arrivalTimer: 0, inviteCooldown: 0, paused: false, stepCarry: 0, eventSequence: 0, offlineClaimIds: [],
     counters: [
@@ -61,6 +74,7 @@ export function createInitialState(): SliceState {
 export function createEngine(initial: SliceState = createInitialState()): SliceEngine {
   const state = clone(initial);
   migrateManagerRoute(state);
+  migrateCustomerRoutes(state);
   state.stepCarry ??= 0;
   state.eventSequence ??= 0;
   state.offlineClaimIds ??= state.lastOfflineClaimId ? [state.lastOfflineClaimId] : [];
@@ -82,12 +96,17 @@ export function createEngine(initial: SliceState = createInitialState()): SliceE
     if (smallest >= QUEUE_CAPACITY) return false;
     const candidates = state.counters.filter((_, i) => counts[i] === smallest);
     const counter = candidates[(state.nextCustomerId - 1) % candidates.length];
+    // Batch invitations form a short physical line at the entrance instead of
+    // spawning three bodies on the very same point.
+    const entryLine = state.customers.filter(customer => customer.phase === 'entering' && !customer.finishLegacyRoute && customer.routeLeg === 0);
+    const entryX = Math.min(WORLD.entryX, ...entryLine.map(customer => customer.x - WORLD.queueGap));
+    if (entryX < WORLD.entryX - QUEUE_CAPACITY * WORLD.queueGap) return false;
     const id = state.nextCustomerId++;
-    state.customers.push({ id, x: WORLD.entryX, z: WORLD.entryZ, phase: 'entering', counterId: counter.id, timer: 0, hasCup: false, skin: (id * 37 + 11) % 6 });
+    state.customers.push({ id, x: entryX, z: WORLD.entryZ, phase: 'entering', counterId: counter.id, timer: 0, routeLeg: 0, hasCup: false, skin: (id * 37 + 11) % 6 });
     emit('arrived', { counterId: counter.id });
     return true;
   }
-  function move(customer: Customer, x: number, z: number, speed = 2.5): boolean {
+  function move(customer: Customer, x: number, z: number, speed = CUSTOMER_SPEED): boolean {
     const dx = x - customer.x, dz = z - customer.z;
     const distance = Math.hypot(dx, dz), step = speed * STEP_SECONDS;
     if (distance <= step + 1e-9) { customer.x = x; customer.z = z; return true; }
@@ -101,10 +120,25 @@ export function createEngine(initial: SliceState = createInitialState()): SliceE
       for (let i = 0; i < queue.length; i++) {
         const customer = queue[i];
         if (customer.phase === 'entering' || customer.phase === 'queue') {
-          const targetZ = WORLD.serviceZ + i * WORLD.queueGap;
-          const reached = move(customer, counter.x, targetZ);
-          if (customer.phase === 'entering' && reached) customer.phase = 'queue';
-          if (i === 0 && customer.phase === 'queue' && reached && !counter.brew) {
+          let targetZ = WORLD.serviceZ + i * WORLD.queueGap;
+          const previous = queue[i - 1];
+          if (previous && previous.x === counter.x) targetZ = Math.max(targetZ, previous.z + WORLD.queueGap);
+          // Do not reverse out into the cross-aisle when a preceding customer
+          // is still turning into this lane. Wait, then follow at queue spacing.
+          if (customer.x === counter.x) targetZ = Math.min(targetZ, customer.z);
+          const clearingService = i === 0 && state.customers.some(departing => departing.counterId === counter.id && departing.phase === 'leaving' && !departing.finishLegacyRoute && departing.routeLeg === 0 && departing.x - counter.x < WORLD.queueGap);
+          let reached = false;
+          if (customer.phase === 'entering' && !customer.finishLegacyRoute && customer.routeLeg !== 3) {
+            // The cross-aisle lies beyond the longest queue AND both departure
+            // endpoints. B arrivals never cut through A's queue or exit lane.
+            if (customer.routeLeg === 0 && move(customer, WORLD.inboundX, WORLD.entryZ)) customer.routeLeg = 1;
+            else if (customer.routeLeg === 1 && move(customer, WORLD.inboundX, WORLD.inboundZ)) customer.routeLeg = 2;
+            else if (customer.routeLeg === 2 && move(customer, counter.x, WORLD.inboundZ)) customer.routeLeg = 3;
+          } else if (!clearingService) reached = move(customer, counter.x, targetZ);
+          if (customer.phase === 'entering' && reached) {
+            customer.phase = 'queue'; delete customer.routeLeg; delete customer.finishLegacyRoute;
+          }
+          if (i === 0 && customer.phase === 'queue' && reached && customer.z === WORLD.serviceZ && !counter.brew) {
             customer.phase = 'serving'; customer.timer = 0;
             counter.brew = { recipe: counter.recipe, customerId: customer.id, elapsed: 0, duration: counterBrewSeconds(counter.recipe, counter.level, counter.id), price: counterPrice(counter.recipe, counter.level, counter.id) };
           }
@@ -113,7 +147,7 @@ export function createEngine(initial: SliceState = createInitialState()): SliceE
           if (customer.timer >= .7 && counter.brew?.customerId === customer.id) {
             const price = counter.brew.price;
             counter.pendingCash += price; state.totalEarned += price; state.totalServed++;
-            counter.brew = null; customer.phase = 'leaving'; customer.timer = 0;
+            counter.brew = null; customer.phase = 'leaving'; customer.timer = 0; customer.routeLeg = 0;
             emit('served', { counterId: counter.id, amount: price });
           }
         }
@@ -122,13 +156,23 @@ export function createEngine(initial: SliceState = createInitialState()): SliceE
     for (const customer of state.customers) {
       if (customer.phase !== 'leaving') continue;
       const counter = findCounter(customer.counterId)!;
-      // Step aside first, then walk up the shared front aisle to the exit.
-      if (customer.timer === 0 && move(customer, counter.x + 1.25, WORLD.serviceZ + .15)) customer.timer = 1;
-      else if (customer.timer === 1 && move(customer, counter.x + 1.25, WORLD.entryZ)) customer.timer = 2;
-      else if (customer.timer === 2 && move(customer, WORLD.entryX, WORLD.entryZ)) customer.timer = 3;
+      if (customer.finishLegacyRoute) {
+        // Bound the compatibility exception to customers already leaving in an
+        // old archive. Finishing it keeps their cup and saved position intact.
+        if (customer.timer === 0 && move(customer, counter.x + 1.25, WORLD.serviceZ + .15)) customer.timer = 1;
+        else if (customer.timer === 1 && move(customer, counter.x + 1.25, WORLD.entryZ)) customer.timer = 2;
+        else if (customer.timer === 2 && move(customer, WORLD.entryX, WORLD.entryZ)) customer.timer = 3;
+      } else {
+        // Each counter has its own exit on the outer side of its queue. Stop
+        // before the inbound aisle, never cross it to reach a shared exit.
+        const exitX = counter.x + WORLD.departureOffsetX;
+        if (customer.routeLeg === 0 && move(customer, exitX, WORLD.serviceZ)) customer.routeLeg = 1;
+        else if (customer.routeLeg === 1 && move(customer, exitX, WORLD.exitZ)) customer.routeLeg = 2;
+      }
     }
-    state.customers = state.customers.filter(customer => !(customer.phase === 'leaving' && customer.timer === 3));
+    state.customers = state.customers.filter(customer => !(customer.phase === 'leaving' && (customer.finishLegacyRoute ? customer.timer === 3 : customer.routeLeg === 2)));
   }
+
   function advanceBrews(): void {
     for (const counter of state.counters) {
       const brew = counter.brew;
@@ -199,7 +243,11 @@ export function createEngine(initial: SliceState = createInitialState()): SliceE
     const cost = capped ? 0 : Math.round(800 * 1.16 ** (counter.level - 1));
     const beforePrice = counterPrice(counter.recipe, counter.level, counter.id), afterPrice = counterPrice(counter.recipe, nextLevel, counter.id);
     const beforeSeconds = counterBrewSeconds(counter.recipe, counter.level, counter.id), afterSeconds = counterBrewSeconds(counter.recipe, nextLevel, counter.id);
-    const incremental = afterPrice / (afterSeconds + .7 + WORLD.queueGap / 2.5) - beforePrice / (beforeSeconds + .7 + WORLD.queueGap / 2.5);
+    // Departure starts on the payment tick. Later guests wait the remaining
+    // fixed steps needed for one queue-gap of sideways clearance.
+    const clearanceSeconds = (Math.ceil(WORLD.queueGap / (CUSTOMER_SPEED * STEP_SECONDS)) - 1) * STEP_SECONDS;
+    const turnoverSeconds = .7 + WORLD.queueGap / CUSTOMER_SPEED + clearanceSeconds;
+    const incremental = afterPrice / (afterSeconds + turnoverSeconds) - beforePrice / (beforeSeconds + turnoverSeconds);
     return { cost, beforePrice, afterPrice, beforeSeconds, afterSeconds, paybackSeconds: capped ? 0 : cost / Math.max(.001, incremental), capped };
   }
   function managerQuote() {
