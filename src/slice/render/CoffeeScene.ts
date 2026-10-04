@@ -254,6 +254,17 @@ export class CoffeeScene {
     this.renderedFrames++;
   }
 
+  /** Read the actual presented mesh after update; viewport bounds do not assert occlusion. */
+  readCustomerPose(id: number | null): { x: number; z: number; screenX: number; screenY: number; inViewport: boolean } | null {
+    const person = id === null ? undefined : this.customers.get(id);
+    if (this.disposed || !person || person.root.isDisposed()) return null;
+    const position = person.root.position;
+    const projected = this.projectWorld(new Vector3(position.x, position.y + 2.25, position.z));
+    const rect = this.canvas.getBoundingClientRect();
+    return { x: position.x, z: position.z, screenX: rect.left + projected.x, screenY: rect.top + projected.y,
+      inViewport: projected.z >= 0 && projected.z <= 1 && projected.x >= 0 && projected.x <= rect.width && projected.y >= 0 && projected.y <= rect.height };
+  }
+
   selectedCounter(id: CounterId | null): void {
     if (this.disposed) return;
     this.selected = id;

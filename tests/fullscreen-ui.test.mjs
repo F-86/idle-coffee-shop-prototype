@@ -14,6 +14,8 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 const { RenderBudget, readRenderMode, isRenderMode, RENDER_MODE_KEY } = await import('../src/slice/render/RenderBudget.ts');
 const { FrameInterpolator } = await import('../src/slice/render/FrameInterpolator.ts');
+const { RouteDiagnostics, isRouteQA } = await import('../src/slice/qa/RouteDiagnostics.ts');
+const { RouteQAPanel } = await import('../src/slice/qa/RouteQAPanel.ts');
 const { createEngine, createInitialState, recipeById, managerSpeed } = await import('../src/slice/core/engine.ts');
 const { LocalSaveRepository, SAVE_KEY, createMemoryStorage } = await import('../src/slice/core/persistence.ts');
 
@@ -48,6 +50,11 @@ class FakeElement {
   isConnected = true;
   textContent = '';
   focused = 0;
+  children = [];
+  get className() { return this.getAttribute('class') ?? ''; }
+  set className(value) { this.setAttribute('class', value); }
+  append(...nodes) { for (const node of nodes) { this.children.push(node); if (!this.ownerDocument._nodes.includes(node)) this.ownerDocument._nodes.push(node); } }
+  remove() { for (const child of this.children) child.remove(); const index = this.ownerDocument._nodes.indexOf(this); if (index >= 0) this.ownerDocument._nodes.splice(index, 1); this.isConnected = false; }
   constructor(tag, document) {
     this.tagName = tag.toUpperCase(); this.ownerDocument = document;
     const classes = new Set();
@@ -87,11 +94,12 @@ class FakeElement {
   focus() { this.focused++; this.ownerDocument.activeElement = this; }
   getBoundingClientRect() { return { left: 100, right: 500, top: 100, bottom: 650, width: 400, height: 550 }; }
 }
-function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, storageUnavailable = false, writeUnavailable = false, conflictDuringClaim = false, deferDialogClose = false, renderMode } = {}) {
+function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, storageUnavailable = false, writeUnavailable = false, conflictDuringClaim = false, deferDialogClose = false, renderMode, query = '?qa=1', renderUnavailable = false } = {}) {
   const clock = { now: Date.now(), performance: 0 };
   const nodes = [], closeEvents = [];
   const document = new FakeElement('document', null);
   document.ownerDocument = document;
+  document._nodes = nodes;
   document.activeElement = null;
   document.hidden = false;
   const root = new FakeElement('div', document);
@@ -141,9 +149,10 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   let nextId = 0, renderer, observer, hmrCleanup;
   class FakeScene {
     updates = []; focusCalls = []; selection = []; interactionCalls = []; interactionEnabled = true; panCalls = []; focused = null; activationCalls = 0; disposed = false; resizeCalls = 0;
-    constructor(canvas, action, options) { this.canvas = canvas; this.action = action; this.renderMode = options.renderMode; renderer = this; }
+    constructor(canvas, action, options) { if (renderUnavailable) throw Error('WebGL unavailable in test fixture'); this.canvas = canvas; this.action = action; this.renderMode = options.renderMode; renderer = this; }
     setRenderMode(mode) { this.renderMode = mode; this.resize(); }
     update(state, dt) { this.updates.push({ state: structuredClone(state), dt }); }
+    readCustomerPose(id) { const customer = this.updates.at(-1)?.state.customers.find(customer => customer.id === id); return customer ? { x: customer.x, z: customer.z, screenX: 200, screenY: 250, inViewport: true } : null; }
     selectedCounter(id) { this.selection.push(id); }
     resize() { this.resizeCalls++; }
     focusAnchor(key) { if (!this.interactionEnabled || !['counter-a-recipe', 'counter-a-upgrade', 'counter-b-recipe', 'counter-b-upgrade', 'menu-espresso', 'menu-latte', 'vault', 'invite'].includes(key)) return; this.focusCalls.push(key); this.focused = key; }
@@ -173,9 +182,10 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   }
   class FakeDate extends Date { constructor(...args) { super(...(args.length ? args : [clock.now])); } static now() { return clock.now; } }
   const source = main.replace(/^import\s[\s\S]*?;\n/gm, '').replace(/if \(import\.meta\.hot\) import\.meta\.hot\.dispose\(\(\) => cleanup\(\)\);/, 'captureCleanup(() => cleanup());');
-  const context = { document, window, location: { search: '?qa' }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, createEngine, recipeById, managerSpeed, LocalSaveRepository, SAVE_KEY, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL() {} }, Blob, console, setTimeout: callback => { const id = ++nextId; timers.set(id, callback); return id; }, clearTimeout: id => timers.delete(id), requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
+  const context = { document, window, location: { search: query }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, RouteDiagnostics, isRouteQA, RouteQAPanel, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, createEngine, recipeById, managerSpeed, LocalSaveRepository, SAVE_KEY, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL() {} }, Blob, console, setTimeout: callback => { const id = ++nextId; timers.set(id, callback); return id; }, clearTimeout: id => timers.delete(id), requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
   runInNewContext(stripTypeScriptTypes(source), context, { timeout: 1500 });
-  const state = () => structuredClone(window.__coffeeSliceDebug.readState());
+  const debug = window.__coffeeSliceDebug;
+  const state = () => structuredClone(debug.readState());
   return { clock, document, window, root, nodes, renderer, observer, frames, timers, memory, storageControl, downloads, blobs, state, flushCloseEvents() { for (const callback of closeEvents.splice(0)) callback(); }, element: selector => root.querySelector(selector), action: action => renderer.action(action), click(selector, extra = {}) { const target = root.querySelector(selector); assert.ok(target, selector); if (!target.disabled) { const event = { target, detail: 1, ...extra }; target.emit('click', event); root.emit('click', event); } }, tick(seconds = .2) { clock.now += seconds * 1000; clock.performance += seconds * 1000; const pending = [...frames.values()]; frames.clear(); for (const callback of pending) callback(clock.performance); }, dispose() { hmrCleanup?.(); } };
 }
 
@@ -973,4 +983,86 @@ test('TC-3D-012 quality selection changes renderer/budget, persists separately, 
     assert.equal(blocked.renderer.renderMode, 'low-power');
     assert.match(blocked.element('#toast').textContent, /已生效.*未允许保存/);
   } finally { blocked.dispose(); }
+});
+
+test('TC-3D-014 QA panel/debug are absent by default and explicit opt-in leaves saves and one-RAF timing unchanged', () => {
+  for (const query of ['', '?qa', '?qa=0', '?qa=false']) {
+    const f = fixture({ query });
+    try {
+      assert.equal(f.element('.route-qa'), null); assert.equal(f.element('.route-qa-marker'), null);
+      assert.equal(f.window.__coffeeSliceDebug, undefined);
+      f.tick(20); f.click('#settings'); f.click('#save');
+      const expected = createEngine(); expected.advance(20);
+      assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, expected.snapshot());
+      assert.equal(f.frames.size, 1);
+    } finally { f.dispose(); }
+  }
+  const f = fixture();
+  try {
+    assert.ok(f.element('.route-qa')); assert.ok(f.window.__coffeeSliceDebug.readRoutes);
+    f.action({ type: 'invite' }); f.tick(10);
+    assert.equal(f.frames.size, 1);
+    const read = f.window.__coffeeSliceDebug.readRoutes();
+    assert.equal(read.selectedId, 1); assert.ok(read.sample.scene);
+    assert.equal(f.element('.route-qa-marker').textContent, '#1');
+    assert.match(f.element('.route-qa').children.find(child => child.tagName === 'PRE').textContent, /不能证明|passage/);
+    const selectB = f.element('.route-qa').children.find(child => child.textContent === '下一位 B');
+    const before = f.state(); selectB.emit('click'); assert.deepEqual(f.state(), before);
+    f.tick(.001);
+    const changed = f.window.__coffeeSliceDebug.readRoutes();
+    assert.equal(changed.sample.authority.counterId, 'counter-b');
+    assert.equal(f.element('.route-qa-marker').textContent, `#${changed.selectedId}`);
+    const raw = f.memory.getItem(SAVE_KEY); f.click('#settings'); f.click('#save');
+    assert.ok(raw); assert.doesNotMatch(f.memory.getItem(SAVE_KEY), /trackedRecords|routeTrace|diagnostic/);
+    f.document.hidden = true; f.document.emit('visibilitychange');
+    f.clock.now += 60000; f.clock.performance += 60000;
+    f.document.hidden = false; f.document.emit('visibilitychange'); f.tick(.001);
+    const resumed = f.window.__coffeeSliceDebug.readRoutes();
+    assert.equal(resumed.session, 2); assert.equal(resumed.terminal, null);
+    assert.match(resumed.reason, /discontinuity/);
+  } finally { f.dispose(); }
+  assert.equal(f.window.__coffeeSliceDebug, undefined); assert.equal(f.element('.route-qa'), null); assert.equal(f.element('.route-qa-marker'), null);
+});
+
+test('TC-3D-014 QA sessions reset on reload/new shop and report missing renderer honestly (app harness)', () => {
+  const f = fixture();
+  try {
+    f.tick(3); const session = f.window.__coffeeSliceDebug.readRoutes().session;
+    f.click('#settings'); f.click('#reload');
+    const reloaded = f.window.__coffeeSliceDebug.readRoutes();
+    assert.equal(reloaded.session, session + 1); assert.equal(reloaded.reason, 'save reload');
+    assert.equal(reloaded.records.length, 0); assert.equal(reloaded.selectedId, null);
+    f.tick(.2); assert.equal(f.window.__coffeeSliceDebug.readRoutes().sample.time, f.state().elapsed);
+  } finally { f.dispose(); }
+  const fresh = fixture({ raw: '{bad save' });
+  try {
+    fresh.tick(3); fresh.click('#settings'); fresh.click('#new-shop');
+    const reset = fresh.window.__coffeeSliceDebug.readRoutes();
+    assert.equal(reset.session, 2); assert.equal(reset.reason, 'new shop'); assert.equal(reset.records.length, 0);
+    fresh.tick(3);
+    assert.equal(fresh.window.__coffeeSliceDebug.readRoutes().selectedId, 1, 'new customer 1 is explicitly a different session');
+  } finally { fresh.dispose(); }
+  const unavailable = fixture({ renderUnavailable: true });
+  try {
+    unavailable.tick(3);
+    const read = unavailable.window.__coffeeSliceDebug.readRoutes();
+    assert.equal(read.sample.rendererAvailable, false); assert.equal(read.sample.scene, null);
+    assert.equal(unavailable.element('.route-qa-marker').hidden, true);
+    assert.match(unavailable.element('.route-qa').children.find(child => child.tagName === 'PRE').textContent, /renderer unavailable/);
+    assert.equal(unavailable.element('#render-error').hidden, false);
+  } finally { unavailable.dispose(); }
+});
+
+test('TC-3D-014 legacy-route actors are visibly marked rather than misreported as early new-route exits', () => {
+  const initial = createInitialState(); initial.customerRouteVersion = 1; initial.nextCustomerId = 2;
+  initial.customers = [{ id: 1, counterId: 'counter-a', phase: 'leaving', hasCup: true, skin: 0, timer: 2, x: -7, z: 5 }];
+  const f = fixture({ initial });
+  try {
+    f.tick(.2);
+    const text = f.element('.route-qa').children.find(child => child.tagName === 'PRE');
+    assert.match(text.textContent, /LEGACY route/);
+    f.tick(.3);
+    assert.match(text.textContent, /terminal.*despawn.*LEGACY route/);
+    assert.equal(f.window.__coffeeSliceDebug.readRoutes().terminal.x, -8);
+  } finally { f.dispose(); }
 });

@@ -1,3 +1,4 @@
+import type { RouteObserver, RouteTraceEvent } from './routeTrace';
 import type { Counter, CounterId, CounterQuote, Customer, Recipe, RecipeId, SliceEngine, SliceEvent, SliceState } from './types';
 
 /** Draft balance for this small playable slice, expressed in cents and metres. */
@@ -73,7 +74,7 @@ export function createInitialState(): SliceState {
   };
 }
 
-export function createEngine(initial: SliceState = createInitialState()): SliceEngine {
+export function createEngine(initial: SliceState = createInitialState(), observeRoute?: RouteObserver): SliceEngine {
   const state = clone(initial);
   migrateManagerRoute(state);
   migrateCustomerRoutes(state);
@@ -82,6 +83,22 @@ export function createEngine(initial: SliceState = createInitialState()): SliceE
   state.offlineClaimIds ??= state.lastOfflineClaimId ? [state.lastOfflineClaimId] : [];
   let events: SliceEvent[] = [];
   let silent = false;
+  function trace(event: Omit<RouteTraceEvent, 'time'>): void {
+    if (!observeRoute || silent) return;
+    // The observer receives detached scalar data and cannot break the simulation.
+    try { observeRoute({ time: state.elapsed, ...event }); } catch { /* QA is non-authoritative. */ }
+  }
+  function traceCustomer(kind: RouteTraceEvent['kind'], customer: Customer, extra: Partial<RouteTraceEvent> = {}): void {
+    if (!observeRoute || silent) return;
+    trace({ actor: 'customer', kind, customerId: customer.id, counterId: customer.counterId,
+      x: customer.x, z: customer.z, phase: customer.phase, routeLeg: customer.routeLeg,
+      legacy: !!customer.finishLegacyRoute, hasCup: customer.hasCup, ...extra });
+  }
+  function traceManager(kind: RouteTraceEvent['kind'], extra: Partial<RouteTraceEvent> = {}): void {
+    if (!observeRoute || silent) return;
+    const manager = state.manager;
+    trace({ actor: 'manager', kind, x: manager.x, z: manager.z, phase: manager.phase, target: manager.target, ...extra });
+  }
   function emit(type: SliceEvent['type'], payload: Omit<Partial<SliceEvent>, 'id' | 'type'> = {}): void {
     state.eventSequence = (state.eventSequence ?? 0) + 1;
     if (silent) return;
@@ -105,6 +122,7 @@ export function createEngine(initial: SliceState = createInitialState()): SliceE
     if (entryX < WORLD.entryX - QUEUE_CAPACITY * WORLD.queueGap) return false;
     const id = state.nextCustomerId++;
     state.customers.push({ id, x: entryX, z: WORLD.entryZ, phase: 'entering', counterId: counter.id, timer: 0, routeLeg: 0, hasCup: false, skin: (id * 37 + 11) % 6 });
+    traceCustomer('spawn', state.customers[state.customers.length - 1]);
     emit('arrived', { counterId: counter.id });
     return true;
   }
@@ -161,7 +179,18 @@ export function createEngine(initial: SliceState = createInitialState()): SliceE
         if (nextDistanceSquared <= currentDx * currentDx + currentDz * currentDz + 1e-12) return false;
       }
     }
+    const previousX = customer.x, previousZ = customer.z;
     customer.x = nextX; customer.z = nextZ;
+    if (observeRoute && !silent && !customer.finishLegacyRoute) {
+      // Half-open segments count a reached centreline once, including an exact endpoint.
+      const crosses = (from: number, to: number, line: number): boolean =>
+        from < line && to >= line || from > line && to <= line;
+      for (const crossingX of junctionXs) {
+        const horizontal = previousZ === WORLD.exitZ && nextZ === WORLD.exitZ && crosses(previousX, nextX, crossingX);
+        const vertical = previousX === crossingX && nextX === crossingX && crosses(previousZ, nextZ, WORLD.exitZ);
+        if (horizontal || vertical) traceCustomer('crossing', customer, { crossingX });
+      }
+    }
     return reached;
   }
   function advanceCustomers(): void {
@@ -181,15 +210,17 @@ export function createEngine(initial: SliceState = createInitialState()): SliceE
           if (customer.phase === 'entering' && !customer.finishLegacyRoute && customer.routeLeg !== 3) {
             // The inbound cross-aisle runs parallel to the return lane.
             // Its short vertical feeders use the junction right-of-way above.
-            if (customer.routeLeg === 0 && move(customer, WORLD.inboundX, WORLD.entryZ)) customer.routeLeg = 1;
-            else if (customer.routeLeg === 1 && move(customer, WORLD.inboundX, WORLD.inboundZ)) customer.routeLeg = 2;
-            else if (customer.routeLeg === 2 && move(customer, counter.x, WORLD.inboundZ)) customer.routeLeg = 3;
+            if (customer.routeLeg === 0 && move(customer, WORLD.inboundX, WORLD.entryZ)) { customer.routeLeg = 1; traceCustomer('phase', customer); }
+            else if (customer.routeLeg === 1 && move(customer, WORLD.inboundX, WORLD.inboundZ)) { customer.routeLeg = 2; traceCustomer('phase', customer); }
+            else if (customer.routeLeg === 2 && move(customer, counter.x, WORLD.inboundZ)) { customer.routeLeg = 3; traceCustomer('phase', customer); }
           } else if (!clearingService) reached = move(customer, counter.x, targetZ);
           if (customer.phase === 'entering' && reached) {
             customer.phase = 'queue'; delete customer.routeLeg; delete customer.finishLegacyRoute;
+            traceCustomer('phase', customer);
           }
           if (i === 0 && customer.phase === 'queue' && reached && customer.z === WORLD.serviceZ && !counter.brew) {
             customer.phase = 'serving'; customer.timer = 0;
+            traceCustomer('phase', customer);
             counter.brew = { recipe: counter.recipe, customerId: customer.id, elapsed: 0, duration: counterBrewSeconds(counter.recipe, counter.level, counter.id), price: counterPrice(counter.recipe, counter.level, counter.id) };
           }
         } else if (customer.phase === 'receiving') {
@@ -198,6 +229,7 @@ export function createEngine(initial: SliceState = createInitialState()): SliceE
             const price = counter.brew.price;
             counter.pendingCash += price; state.totalEarned += price; state.totalServed++;
             counter.brew = null; customer.phase = 'leaving'; customer.timer = 0; customer.routeLeg = 0;
+            traceCustomer('phase', customer);
             emit('served', { counterId: counter.id, amount: price });
           }
         }
@@ -216,12 +248,16 @@ export function createEngine(initial: SliceState = createInitialState()): SliceE
         // Clear the service point on its outer side, join the parallel
         // return lane, then walk beyond the entrance-side world boundary.
         const exitX = counter.x + WORLD.departureOffsetX;
-        if (customer.routeLeg === 0 && move(customer, exitX, WORLD.serviceZ)) customer.routeLeg = 1;
-        else if (customer.routeLeg === 1 && move(customer, exitX, WORLD.exitZ)) customer.routeLeg = 2;
-        else if (customer.routeLeg === 2 && move(customer, WORLD.exitX, WORLD.exitZ)) customer.routeLeg = 3;
+        if (customer.routeLeg === 0 && move(customer, exitX, WORLD.serviceZ)) { customer.routeLeg = 1; traceCustomer('phase', customer); }
+        else if (customer.routeLeg === 1 && move(customer, exitX, WORLD.exitZ)) { customer.routeLeg = 2; traceCustomer('phase', customer); }
+        else if (customer.routeLeg === 2 && move(customer, WORLD.exitX, WORLD.exitZ)) { customer.routeLeg = 3; traceCustomer('phase', customer); }
       }
     }
-    state.customers = state.customers.filter(customer => !(customer.phase === 'leaving' && (customer.finishLegacyRoute ? customer.timer === 3 : customer.routeLeg === 3)));
+    state.customers = state.customers.filter(customer => {
+      const removed = customer.phase === 'leaving' && (customer.finishLegacyRoute ? customer.timer === 3 : customer.routeLeg === 3);
+      if (removed) traceCustomer('despawn', customer);
+      return !removed;
+    });
   }
 
   function advanceBrews(): void {
@@ -233,6 +269,7 @@ export function createEngine(initial: SliceState = createInitialState()): SliceE
       brew.elapsed = Math.min(brew.duration, roundTime(brew.elapsed + STEP_SECONDS));
       if (brew.elapsed + 1e-9 >= brew.duration) {
         counter.brewed++; customer.phase = 'receiving'; customer.timer = 0; customer.hasCup = true;
+        traceCustomer('phase', customer);
         emit('brewed', { counterId: counter.id });
       }
     }
@@ -246,7 +283,15 @@ export function createEngine(initial: SliceState = createInitialState()): SliceE
       if (Math.abs(difference) <= step + 1e-9) {
         manager.x = targetX; manager.timer = 0;
         manager.phase = manager.target === 2 ? 'depositing' : 'collecting';
-      } else manager.x += Math.sign(difference) * step;
+        traceManager('phase');
+      } else {
+        const previousX = manager.x;
+        manager.x += Math.sign(difference) * step;
+        if (observeRoute && !silent) for (const [index, counter] of state.counters.entries()) {
+          if (index !== manager.target && (previousX < counter.x && manager.x >= counter.x || previousX > counter.x && manager.x <= counter.x))
+            traceManager('passage', { counterId: counter.id });
+        }
+      }
       return;
     }
     manager.timer = roundTime(manager.timer + STEP_SECONDS);
@@ -255,17 +300,27 @@ export function createEngine(initial: SliceState = createInitialState()): SliceE
       const counter = state.counters[manager.target];
       // Reserve half a bag for each counter, preventing high-level A from starving B.
       const amount = Math.min(counter.pendingCash, Math.floor(managerCapacity(manager.level) / 2), managerCapacity(manager.level) - manager.carrying);
-      if (amount > 0) { counter.pendingCash -= amount; manager.carrying += amount; emit('collected', { counterId: counter.id, amount }); }
+      if (amount > 0) {
+        const pendingBefore = counter.pendingCash, carryingBefore = manager.carrying;
+        counter.pendingCash -= amount; manager.carrying += amount; emit('collected', { counterId: counter.id, amount });
+        traceManager('collected', { counterId: counter.id, amount, pendingBefore, pendingAfter: counter.pendingCash,
+          carryingBefore, carryingAfter: manager.carrying, walletBefore: state.wallet, walletAfter: state.wallet });
+      }
       // Targets keep their counter identity. Current sweeps visit the nearest
       // counter B first; migrated sweeps finish only their remaining old stops.
       manager.target = manager.finishLegacySweep ? (manager.target === 0 ? 1 : 2) : (manager.target === 1 ? 0 : 2);
     } else {
       const amount = manager.carrying;
-      if (amount > 0) { state.wallet += amount; manager.carrying = 0; emit('deposited', { amount }); }
+      if (amount > 0) {
+        const walletBefore = state.wallet;
+        state.wallet += amount; manager.carrying = 0; emit('deposited', { amount });
+        traceManager('deposited', { amount, carryingBefore: amount, carryingAfter: 0, walletBefore, walletAfter: state.wallet });
+      }
       delete manager.finishLegacySweep;
       manager.target = 1;
     }
     manager.phase = 'moving'; manager.timer = 0;
+    traceManager('phase');
   }
   function tick(): void {
     state.elapsed = Math.round((state.elapsed + STEP_SECONDS) / STEP_SECONDS) * STEP_SECONDS;

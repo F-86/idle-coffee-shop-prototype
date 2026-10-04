@@ -40,3 +40,7 @@ REQ-3D-024 → [TC-3D-012](cases/slice/TC-3D-012.md)、[计划](plans/smooth-cla
 ## 离店至入口侧边界
 
 REQ-3D-025 → [TC-3D-013](cases/slice/TC-3D-013.md)、[计划](plans/customer-boundary-exit.md)。延伸返程横道、路口让行、连续性/分离/无死锁、v2原位延长、箭头删除；不是无几何交点的承诺。
+
+## 路线验收身份与事实诊断
+
+REQ-3D-020/025 辅助 → [TC-3D-014](cases/slice/TC-3D-014.md)、[计划](plans/route-observability.md)。严格opt-in、完整固定步事件、实际模型ID投影、收款/路过区别、有限内存、状态/保存不变和生命周期；真机视觉结果另外记录。

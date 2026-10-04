@@ -1115,3 +1115,27 @@ test('TC-3D-012 renderer pairs Babylon frame boundaries and changes quality with
     }
   } finally { f.dispose(); }
 });
+
+test('TC-3D-014 QA identity reads actual customer mesh and CSS projection without changing render objects', () => {
+  const f = fixture(1280, 900, 2);
+  try {
+    const core = createEngine(); core.invite(); f.renderer.update(core.state, .016);
+    const mesh = f.renderer.scene.getTransformNodeByName('customer-1');
+    assert.ok(mesh);
+    const meshCount = f.renderer.scene.meshes.length;
+    const pose = f.renderer.readCustomerPose(1);
+    assert.equal(pose.x, mesh.position.x); assert.equal(pose.z, mesh.position.z);
+    const projected = Vector3.Project(new Vector3(mesh.position.x, mesh.position.y + 2.25, mesh.position.z), Matrix.Identity(), f.renderer.scene.getTransformMatrix(), f.renderer.scene.activeCamera.viewport.toGlobal(f.engine.getRenderWidth(), f.engine.getRenderHeight()));
+    assert.ok(Math.abs(pose.screenX - (35 + projected.x * 2)) < 1e-7);
+    assert.ok(Math.abs(pose.screenY - (80 + projected.y * 2)) < 1e-7);
+    pose.x = 999; assert.equal(f.renderer.readCustomerPose(1).x, core.state.customers[0].x);
+    mesh.position.x = 999;
+    assert.equal(f.renderer.readCustomerPose(1).x, 999, 'readback must use the mesh, not a remembered simulation snapshot');
+    assert.equal(f.renderer.readCustomerPose(1).inViewport, false, 'camera offscreen is still an existing mesh');
+    assert.equal(f.renderer.scene.meshes.length, meshCount);
+    assert.equal(f.renderer.readCustomerPose(null), null); assert.equal(f.renderer.readCustomerPose(999), null);
+    core.state.customers = []; f.renderer.update(core.state, .016);
+    assert.equal(f.renderer.readCustomerPose(1), null);
+    f.renderer.dispose(); assert.equal(f.renderer.readCustomerPose(1), null);
+  } finally { f.dispose(); }
+});

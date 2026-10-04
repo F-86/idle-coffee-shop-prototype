@@ -13,6 +13,8 @@ import {
 } from "./render/CoffeeScene";
 import { RenderBudget, readRenderMode, isRenderMode, RENDER_MODE_KEY, type RenderMode } from "./render/RenderBudget";
 import { FrameInterpolator } from "./render/FrameInterpolator";
+import { RouteDiagnostics, isRouteQA } from "./qa/RouteDiagnostics";
+import { RouteQAPanel } from "./qa/RouteQAPanel";
 import "./style.css";
 
 const root = document.querySelector<HTMLDivElement>("#slice-root")!;
@@ -68,7 +70,9 @@ try {
 }
 const repository = new LocalSaveRepository(browserStorage);
 const loaded = repository.load(Date.now());
-let engine: SliceEngine = createEngine(loaded.state);
+const routeDiagnostics = isRouteQA(location.search) ? new RouteDiagnostics() : null;
+let engine: SliceEngine = createEngine(loaded.state, routeDiagnostics?.observe);
+const routePanel = routeDiagnostics ? new RouteQAPanel(root, routeDiagnostics, () => engine.state) : null;
 let stopped = false,
   frame = 0,
   lastSave = Date.now(),
@@ -386,7 +390,8 @@ on($("#reload"), "click", () => {
   )
     return;
   const recovered = repository.load(Date.now());
-  engine = createEngine(recovered.state);
+  routeDiagnostics?.reset("save reload");
+  engine = createEngine(recovered.state, routeDiagnostics?.observe);
   saveBlocked =
     recovered.protectedRaw ||
     recovered.status === "conflict" ||
@@ -417,7 +422,8 @@ on($("#new-shop"), "click", () => {
     toast(result.message);
     return;
   }
-  engine = createEngine();
+  routeDiagnostics?.reset("new shop");
+  engine = createEngine(undefined, routeDiagnostics?.observe);
   saveBlocked = false;
   conflictBlocked = false;
   $("#new-shop").hidden = true;
@@ -535,6 +541,11 @@ function tick(now: number) {
   const dt = Math.min(elapsed, 7200);
   const view = presentation.advance(engine, Math.max(0, dt));
   scene?.update(view, dt);
+  if (routeDiagnostics && routePanel) {
+    // Choose a loaded customer before asking the scene for its same-ID mesh.
+    if (routeDiagnostics.trackedId === null) routeDiagnostics.selectNext(engine.state);
+    routePanel.update(engine.state, view, !!scene, scene?.readCustomerPose(routeDiagnostics.trackedId) ?? null, dt);
+  }
   hudElapsed += dt;
   if (hudElapsed >= 0.15) {
     hudElapsed = 0;
@@ -560,6 +571,7 @@ function resumeVisible() {
   renderBudget.reset(performance.now());
   // Hidden/offline/reloaded state is a discontinuity, never blend across its old path.
   presentation.reset(engine.state);
+  routeDiagnostics?.reset("visibility / offline discontinuity");
   scene?.resize();
   frame = requestAnimationFrame(tick);
 }
@@ -605,6 +617,8 @@ function cleanup(persist = true) {
   if (toastTimer) clearTimeout(toastTimer);
   listeners.abort();
   sizeObserver?.disconnect();
+  routePanel?.dispose();
+  if (routeDiagnostics) Reflect.deleteProperty(window, "__coffeeSliceDebug");
   scene?.dispose();
 }
 on(document, "visibilitychange", onVisibility);
@@ -612,10 +626,11 @@ on(window, "pagehide", onPageHide);
 on(window, "pageshow", (event) => {
   if ((event as PageTransitionEvent).persisted) resumeVisible();
 });
-if (new URLSearchParams(location.search).has("qa"))
+if (routeDiagnostics)
   Object.defineProperty(window, "__coffeeSliceDebug", {
     value: {
       readState: (): SliceState => engine.snapshot(),
+      readRoutes: () => routeDiagnostics.read(),
       selected: () => selected,
       focusedObject: () => scene?.getFocus(),
       readRenderStats: () => scene?.readRenderStats(),
