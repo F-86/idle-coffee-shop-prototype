@@ -12,7 +12,8 @@ registerHooks({ resolve(specifier, context, nextResolve) {
     throw error;
   }
 } });
-const { RenderBudget } = await import('../src/slice/render/RenderBudget.ts');
+const { RenderBudget, readRenderMode, isRenderMode, RENDER_MODE_KEY } = await import('../src/slice/render/RenderBudget.ts');
+const { FrameInterpolator } = await import('../src/slice/render/FrameInterpolator.ts');
 const { createEngine, createInitialState, recipeById, managerSpeed } = await import('../src/slice/core/engine.ts');
 const { LocalSaveRepository, SAVE_KEY, createMemoryStorage } = await import('../src/slice/core/persistence.ts');
 
@@ -86,7 +87,7 @@ class FakeElement {
   focus() { this.focused++; this.ownerDocument.activeElement = this; }
   getBoundingClientRect() { return { left: 100, right: 500, top: 100, bottom: 650, width: 400, height: 550 }; }
 }
-function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, storageUnavailable = false, writeUnavailable = false, conflictDuringClaim = false, deferDialogClose = false } = {}) {
+function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, storageUnavailable = false, writeUnavailable = false, conflictDuringClaim = false, deferDialogClose = false, renderMode } = {}) {
   const clock = { now: Date.now(), performance: 0 };
   const nodes = [], closeEvents = [];
   const document = new FakeElement('document', null);
@@ -118,6 +119,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   const memory = createMemoryStorage();
   if (raw !== undefined) memory.setItem(SAVE_KEY, raw);
   else if (initial) { const repo = new LocalSaveRepository(memory); repo.load(clock.now); assert.equal(repo.save(initial, clock.now - savedAtAgoSeconds * 1000).ok, true); }
+  if (renderMode !== undefined) memory.setItem(RENDER_MODE_KEY, renderMode);
   const storageControl = { writeUnavailable };
   let storageReads = 0;
   const storage = storageUnavailable ? { getItem() { throw new Error('storage unavailable'); }, setItem() { throw new Error('storage unavailable'); }, removeItem() { throw new Error('storage unavailable'); } } : {
@@ -139,7 +141,8 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   let nextId = 0, renderer, observer, hmrCleanup;
   class FakeScene {
     updates = []; focusCalls = []; selection = []; interactionCalls = []; interactionEnabled = true; panCalls = []; focused = null; activationCalls = 0; disposed = false; resizeCalls = 0;
-    constructor(canvas, action) { this.canvas = canvas; this.action = action; renderer = this; }
+    constructor(canvas, action, options) { this.canvas = canvas; this.action = action; this.renderMode = options.renderMode; renderer = this; }
+    setRenderMode(mode) { this.renderMode = mode; this.resize(); }
     update(state, dt) { this.updates.push({ state: structuredClone(state), dt }); }
     selectedCounter(id) { this.selection.push(id); }
     resize() { this.resizeCalls++; }
@@ -170,7 +173,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   }
   class FakeDate extends Date { constructor(...args) { super(...(args.length ? args : [clock.now])); } static now() { return clock.now; } }
   const source = main.replace(/^import\s[\s\S]*?;\n/gm, '').replace(/if \(import\.meta\.hot\) import\.meta\.hot\.dispose\(\(\) => cleanup\(\)\);/, 'captureCleanup(() => cleanup());');
-  const context = { document, window, location: { search: '?qa' }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, createEngine, recipeById, managerSpeed, LocalSaveRepository, SAVE_KEY, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL() {} }, Blob, console, setTimeout: callback => { const id = ++nextId; timers.set(id, callback); return id; }, clearTimeout: id => timers.delete(id), requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
+  const context = { document, window, location: { search: '?qa' }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, createEngine, recipeById, managerSpeed, LocalSaveRepository, SAVE_KEY, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL() {} }, Blob, console, setTimeout: callback => { const id = ++nextId; timers.set(id, callback); return id; }, clearTimeout: id => timers.delete(id), requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
   runInNewContext(stripTypeScriptTypes(source), context, { timeout: 1500 });
   const state = () => structuredClone(window.__coffeeSliceDebug.readState());
   return { clock, document, window, root, nodes, renderer, observer, frames, timers, memory, storageControl, downloads, blobs, state, flushCloseEvents() { for (const callback of closeEvents.splice(0)) callback(); }, element: selector => root.querySelector(selector), action: action => renderer.action(action), click(selector, extra = {}) { const target = root.querySelector(selector); assert.ok(target, selector); if (!target.disabled) { const event = { target, detail: 1, ...extra }; target.emit('click', event); root.emit('click', event); } }, tick(seconds = .2) { clock.now += seconds * 1000; clock.performance += seconds * 1000; const pending = [...frames.values()]; frames.clear(); for (const callback of pending) callback(clock.performance); }, dispose() { hmrCleanup?.(); } };
@@ -876,8 +879,8 @@ test('TC-3D-008 REQ-3D-004 final disposal removes UI listeners, observer and RAF
   f.dispose();
 });
 
-test('TC-3D-011 high-refresh app submits only budgeted renders and keeps authoritative elapsed time', () => {
-  const f = fixture();
+test('TC-3D-011 explicit low-power app submits budgeted renders and keeps authoritative elapsed time', () => {
+  const f = fixture({ renderMode: 'low-power' });
   try {
     for (let i = 0; i < 1200; i++) f.tick(1 / 120);
     assert.equal(f.renderer.updates.length, 300);
@@ -897,7 +900,7 @@ test('TC-3D-011 high-refresh app submits only budgeted renders and keeps authori
 });
 
 test('TC-3D-011 sub-frame visibility and BFCache saves settle visible time once without extra renders', () => {
-  const f = fixture();
+  const f = fixture({ renderMode: 'low-power' });
   try {
     for (let cycle = 0; cycle < 10; cycle++) {
       f.tick(.025);
@@ -927,4 +930,47 @@ test('TC-3D-011 delayed duplicate pageshow preserves the newly visible tail', ()
     assert.ok(Math.abs(f.state().elapsed + f.state().stepCarry - .05) < 1e-8);
     assert.equal(f.frames.size, 1);
   } finally { f.dispose(); }
+});
+
+
+test('TC-3D-012 default app draws every display frame using interpolated poses, without extra RAF owners', () => {
+  const f = fixture();
+  try {
+    assert.equal(f.renderer.renderMode, 'smooth');
+    for (let i = 0; i < 120; i++) f.tick(1 / 120);
+    assert.equal(f.renderer.updates.length, 120);
+    assert.ok(Math.abs(f.state().elapsed - 1) < 1e-9);
+    const poses = f.renderer.updates.slice(12, 100).map(update => update.state.manager.x);
+    for (let i = 1; i < poses.length; i++) assert.ok(Math.abs(poses[i - 1] - poses[i] - 2.6 / 120) < 1e-8);
+    assert.equal(f.frames.size, 1);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-012 quality selection changes renderer/budget, persists separately, and preserves economy', () => {
+  const f = fixture({ renderMode: 'low-power' });
+  try {
+    f.tick(.01);
+    f.click('#settings');
+    const before = f.state();
+    const smooth = f.nodes.find(node => node.dataset.renderMode === 'smooth');
+    f.root.emit('click', { target: smooth });
+    assert.equal(f.renderer.renderMode, 'smooth');
+    assert.equal(f.memory.getItem(RENDER_MODE_KEY), 'smooth');
+    assert.equal(smooth.getAttribute('aria-pressed'), 'true');
+    assert.deepEqual(f.state(), before);
+    f.tick(.006);
+    assert.ok(Math.abs(f.state().elapsed + f.state().stepCarry - .016) < 1e-9);
+    assert.equal(f.renderer.updates.length, 1);
+    assert.equal(f.frames.size, 1);
+    f.root.emit('click', { target: smooth });
+    assert.equal(f.frames.size, 1, 'repeat selection does not create another loop');
+  } finally { f.dispose(); }
+  const blocked = fixture({ writeUnavailable: true });
+  try {
+    blocked.click('#settings');
+    const low = blocked.nodes.find(node => node.dataset.renderMode === 'low-power');
+    blocked.root.emit('click', { target: low });
+    assert.equal(blocked.renderer.renderMode, 'low-power');
+    assert.match(blocked.element('#toast').textContent, /已生效.*未允许保存/);
+  } finally { blocked.dispose(); }
 });

@@ -9,9 +9,9 @@ export const INVITE_COOLDOWN_SECONDS = 18;
 export const OFFLINE_CAP_SECONDS = 7200;
 export const OFFLINE_EFFICIENCY = .5;
 export const MANAGER_ROUTE_VERSION = 2;
-export const CUSTOMER_ROUTE_VERSION = 2;
+export const CUSTOMER_ROUTE_VERSION = 3;
 export const CUSTOMER_SPEED = 2.5;
-export const WORLD = Object.freeze({ entryX: -8, entryZ: 5, inboundX: -6, inboundZ: 8.2, departureOffsetX: 1.6, exitZ: 7.1, serviceZ: 1.5, queueGap: .72, backZ: -1.7, vaultX: 8.8 });
+export const WORLD = Object.freeze({ entryX: -8, entryZ: 5, inboundX: -6, inboundZ: 8.2, departureOffsetX: 1.6, exitZ: 7.4, exitX: -10.4, serviceZ: 1.5, queueGap: .72, backZ: -1.7, vaultX: 8.8 });
 export const recipes: readonly Recipe[] = Object.freeze([
   Object.freeze({ id: 'espresso', name: '浓缩咖啡', price: 110, brewSeconds: 3.6, color: '#a7693d', description: '出杯快、单价低，适合长队。' }),
   Object.freeze({ id: 'latte', name: '拿铁', price: 220, brewSeconds: 6.8, color: '#f0c793', description: '制作较慢、每杯收入更高。' })
@@ -46,13 +46,15 @@ export function migrateManagerRoute(state: SliceState): void {
   state.managerRouteVersion = MANAGER_ROUTE_VERSION;
 }
 
-/** Old in-flight customers finish their visible leg once; new arrivals use v2.
+/** Pre-v2 in-flight customers finish their visible leg once; v2 paths extend in place.
  * Coordinates, brew snapshots and assets never change during migration. */
 export function migrateCustomerRoutes(state: SliceState): void {
   if (state.customerRouteVersion === CUSTOMER_ROUTE_VERSION) return;
-  if (state.customerRouteVersion !== undefined && state.customerRouteVersion !== 1) throw new Error('Unsupported customer route version.');
-  for (const customer of state.customers) {
-    if (customer.phase === 'entering' || customer.phase === 'leaving') customer.finishLegacyRoute = true;
+  if (state.customerRouteVersion !== undefined && state.customerRouteVersion !== 1 && state.customerRouteVersion !== 2) throw new Error('Unsupported customer route version.');
+  if (state.customerRouteVersion !== 2) {
+    for (const customer of state.customers) {
+      if (customer.phase === 'entering' || customer.phase === 'leaving') customer.finishLegacyRoute = true;
+    }
   }
   state.customerRouteVersion = CUSTOMER_ROUTE_VERSION;
 }
@@ -106,13 +108,61 @@ export function createEngine(initial: SliceState = createInitialState()): SliceE
     emit('arrived', { counterId: counter.id });
     return true;
   }
+  // The parallel return lane crosses only the three short inbound feeders and
+  // the two local departure merges. A customer already inside a junction clears
+  // first; otherwise the horizontal return has priority. Reservations follow
+  // physical coordinates, so a saved/reloaded tick needs no hidden traffic state.
+  const junctionXs = [WORLD.inboundX, ...state.counters.flatMap(counter => [counter.x, counter.x + WORLD.departureOffsetX])];
+  function junctionBlocked(customer: Customer, nextX: number, nextZ: number): boolean {
+    const clearance = WORLD.queueGap, lookahead = clearance + CUSTOMER_SPEED * STEP_SECONDS;
+    const returning = customer.phase === 'leaving' && customer.routeLeg === 2;
+    for (const x of junctionXs) {
+      if (returning) {
+        if (customer.x < x - clearance || nextX > x + clearance) continue;
+        if (state.customers.some(other => other !== customer && !other.finishLegacyRoute && other.x === x &&
+          !(other.phase === 'leaving' && other.routeLeg === 2) && Math.abs(other.z - WORLD.exitZ) < clearance - 1e-9)) return true;
+      } else if (customer.x === x && nextX === x) {
+        // An established vertical occupant must be able to finish crossing even
+        // when the horizontal line is waiting immediately outside its stop line.
+        if (Math.abs(customer.z - WORLD.exitZ) < clearance - 1e-9) continue;
+        if (Math.min(customer.z, nextZ) > WORLD.exitZ + clearance || Math.max(customer.z, nextZ) < WORLD.exitZ - clearance) continue;
+        if (state.customers.some(other => other !== customer && !other.finishLegacyRoute && other.phase === 'leaving' && other.routeLeg === 2 &&
+          other.x > x - clearance && other.x < x + lookahead)) return true;
+      }
+    }
+    return false;
+  }
   function move(customer: Customer, x: number, z: number, speed = CUSTOMER_SPEED): boolean {
     const dx = x - customer.x, dz = z - customer.z;
-    const distance = Math.hypot(dx, dz), step = speed * STEP_SECONDS;
-    if (distance <= step + 1e-9) { customer.x = x; customer.z = z; return true; }
-    customer.x += dx / distance * step;
-    customer.z += dz / distance * step;
-    return false;
+    // Most queued customers are already at their target. A no-op cannot reduce
+    // clearance and should not run any traffic or pairwise distance work.
+    if (dx === 0 && dz === 0) return true;
+    const distance = Math.sqrt(dx * dx + dz * dz), step = speed * STEP_SECONDS;
+    const reached = distance <= step + 1e-9;
+    const nextX = reached ? x : customer.x + dx / distance * step;
+    const nextZ = reached ? z : customer.z + dz / distance * step;
+    if (!customer.finishLegacyRoute) {
+      if (junctionBlocked(customer, nextX, nextZ)) return false;
+      // Preserve body clearance at turns, shared-lane following and merges too.
+      // Checking the proposed point prevents fast upgrades and invite batches
+      // from overlapping when a preceding customer is waiting at a crossing.
+      const gap = WORLD.queueGap - 1e-9, gapSquared = gap * gap;
+      for (const other of state.customers) {
+        if (other === customer || other.finishLegacyRoute) continue;
+        const nextDx = nextX - other.x;
+        if (nextDx <= -gap || nextDx >= gap) continue;
+        const nextDz = nextZ - other.z;
+        if (nextDz <= -gap || nextDz >= gap) continue;
+        const nextDistanceSquared = nextDx * nextDx + nextDz * nextDz;
+        if (nextDistanceSquared >= gapSquared) continue;
+        // Only genuinely close pairs need the current-distance comparison.
+        // Valid v2 turns separate continuously without teleporting or freezing.
+        const currentDx = customer.x - other.x, currentDz = customer.z - other.z;
+        if (nextDistanceSquared <= currentDx * currentDx + currentDz * currentDz + 1e-12) return false;
+      }
+    }
+    customer.x = nextX; customer.z = nextZ;
+    return reached;
   }
   function advanceCustomers(): void {
     for (const counter of state.counters) {
@@ -129,8 +179,8 @@ export function createEngine(initial: SliceState = createInitialState()): SliceE
           const clearingService = i === 0 && state.customers.some(departing => departing.counterId === counter.id && departing.phase === 'leaving' && !departing.finishLegacyRoute && departing.routeLeg === 0 && departing.x - counter.x < WORLD.queueGap);
           let reached = false;
           if (customer.phase === 'entering' && !customer.finishLegacyRoute && customer.routeLeg !== 3) {
-            // The cross-aisle lies beyond the longest queue AND both departure
-            // endpoints. B arrivals never cut through A's queue or exit lane.
+            // The inbound cross-aisle runs parallel to the return lane.
+            // Its short vertical feeders use the junction right-of-way above.
             if (customer.routeLeg === 0 && move(customer, WORLD.inboundX, WORLD.entryZ)) customer.routeLeg = 1;
             else if (customer.routeLeg === 1 && move(customer, WORLD.inboundX, WORLD.inboundZ)) customer.routeLeg = 2;
             else if (customer.routeLeg === 2 && move(customer, counter.x, WORLD.inboundZ)) customer.routeLeg = 3;
@@ -163,14 +213,15 @@ export function createEngine(initial: SliceState = createInitialState()): SliceE
         else if (customer.timer === 1 && move(customer, counter.x + 1.25, WORLD.entryZ)) customer.timer = 2;
         else if (customer.timer === 2 && move(customer, WORLD.entryX, WORLD.entryZ)) customer.timer = 3;
       } else {
-        // Each counter has its own exit on the outer side of its queue. Stop
-        // before the inbound aisle, never cross it to reach a shared exit.
+        // Clear the service point on its outer side, join the parallel
+        // return lane, then walk beyond the entrance-side world boundary.
         const exitX = counter.x + WORLD.departureOffsetX;
         if (customer.routeLeg === 0 && move(customer, exitX, WORLD.serviceZ)) customer.routeLeg = 1;
         else if (customer.routeLeg === 1 && move(customer, exitX, WORLD.exitZ)) customer.routeLeg = 2;
+        else if (customer.routeLeg === 2 && move(customer, WORLD.exitX, WORLD.exitZ)) customer.routeLeg = 3;
       }
     }
-    state.customers = state.customers.filter(customer => !(customer.phase === 'leaving' && (customer.finishLegacyRoute ? customer.timer === 3 : customer.routeLeg === 2)));
+    state.customers = state.customers.filter(customer => !(customer.phase === 'leaving' && (customer.finishLegacyRoute ? customer.timer === 3 : customer.routeLeg === 3)));
   }
 
   function advanceBrews(): void {
@@ -226,7 +277,7 @@ export function createEngine(initial: SliceState = createInitialState()): SliceE
     if (state.arrivalTimer + 1e-9 >= interval) { state.arrivalTimer = roundTime(state.arrivalTimer - interval); arrive(); }
     advanceCustomers(); advanceBrews(); advanceManager();
   }
-  function advance(seconds: number): void {
+  function advance(seconds: number, beforeLastStep?: (state: Readonly<SliceState>) => void): void {
     if (state.paused || !Number.isFinite(seconds) || seconds <= 0) return;
     // Keep fractional frames instead of rounding each incoming delta. Rounding
     // 1/60 per call, for example, would drift relative to one whole second.
@@ -234,7 +285,11 @@ export function createEngine(initial: SliceState = createInitialState()): SliceE
     const steps = Math.floor((total + 1e-12) / STEP_SECONDS);
     const carry = total - steps * STEP_SECONDS;
     state.stepCarry = Math.abs(carry) < 1e-12 ? 0 : Math.max(0, carry);
-    for (let i = 0; i < steps; i++) tick();
+    for (let i = 0; i < steps; i++) {
+      // Optional read-only presentation seam; offline/core callers pay no snapshot cost.
+      if (i === steps - 1) beforeLastStep?.(state);
+      tick();
+    }
   }
   function quote(id: CounterId): CounterQuote {
     const counter = findCounter(id);

@@ -51,7 +51,7 @@ function samplePolyline(points) {
 }
 
 test('TC-3D-011 customer route geometry separates the trunk, full queues and local exits', () => {
-  assert.equal(CUSTOMER_ROUTE_VERSION, 2);
+  assert.equal(CUSTOMER_ROUTE_VERSION, 3);
   assert.ok(WORLD.inboundZ - WORLD.exitZ > WORLD.queueGap);
   assert.ok(WORLD.inboundZ > WORLD.serviceZ + (QUEUE_CAPACITY - 1) * WORLD.queueGap + WORLD.queueGap);
   assert.ok(WORLD.departureOffsetX > WORLD.queueGap);
@@ -107,13 +107,13 @@ test('TC-3D-011 live paths remain continuous and clear through full queues, upgr
       }
       for (const [id, removed] of previous) {
         if (currentIds.has(id)) continue;
-        assert.equal(removed.phase, 'leaving'); assert.equal(removed.routeLeg, 1); assert.equal(removed.hasCup, true);
-        assert.ok(distance(removed, { x: counterX(removed) + WORLD.departureOffsetX, z: WORLD.exitZ }) <= maxStep + EPSILON);
+        assert.equal(removed.phase, 'leaving'); assert.equal(removed.routeLeg, 2); assert.equal(removed.hasCup, true);
+        assert.ok(distance(removed, { x: WORLD.exitX, z: WORLD.exitZ }) <= maxStep + EPSILON);
         exitedCounters.add(removed.counterId);
       }
     }
   }
-  for (const key of ['entering:0', 'entering:1', 'entering:2', 'entering:3', 'leaving:0', 'leaving:1']) assert.ok(seenLegs.has(key), key);
+  for (const key of ['entering:0', 'entering:1', 'entering:2', 'entering:3', 'leaving:0', 'leaving:1', 'leaving:2']) assert.ok(seenLegs.has(key), key);
   assert.deepEqual([...exitedCounters].sort(), ['counter-a', 'counter-b']); assert.ok(handoffs > 80);
 });
 
@@ -130,7 +130,7 @@ test('TC-3D-011 saving and reloading each inbound and outbound leg resumes exact
       if (tick % 4 === 1 && !checkpoints.has(key)) checkpoints.set(key, engine.snapshot());
     }
   }
-  assert.equal(checkpoints.size, 6);
+  assert.equal(checkpoints.size, 7);
   for (const [key, checkpoint] of checkpoints) {
     checkpoint.stepCarry = .027;
     const memory = createMemoryStorage(), repository = new LocalSaveRepository(memory);
@@ -148,7 +148,7 @@ test('TC-3D-011 saving and reloading each inbound and outbound leg resumes exact
 test('TC-3D-011 route validation fails closed on corrupt legs, coordinates, flags and future versions', () => {
   const engine = createEngine(); engine.invite(); const valid = engine.snapshot();
   const mutations = [
-    s => s.customerRouteVersion = 0, s => s.customerRouteVersion = '2', s => s.customerRouteVersion = 3,
+    s => s.customerRouteVersion = 0, s => s.customerRouteVersion = '3', s => s.customerRouteVersion = 4,
     s => delete s.customers[0].routeLeg, s => s.customers[0].routeLeg = -1, s => s.customers[0].routeLeg = 4,
     s => s.customers[0].routeLeg = 1.5, s => s.customers[0].routeLeg = 1, s => s.customers[0].z = WORLD.inboundZ + .1,
     s => s.customers[0].x = Infinity, s => s.customers[0].timer = .1,
@@ -160,10 +160,10 @@ test('TC-3D-011 route validation fails closed on corrupt legs, coordinates, flag
     const state = clone(valid); mutate(state); assert.equal(validateState(state).ok, false);
     const raw = envelope(state), memory = createMemoryStorage(); memory.setItem(SAVE_KEY, raw);
     const repository = new LocalSaveRepository(memory), loaded = repository.load(121000);
-    assert.equal(loaded.status, state.customerRouteVersion === 3 ? 'future' : 'corrupt'); assert.equal(loaded.protectedRaw, true);
+    assert.equal(loaded.status, state.customerRouteVersion === 4 ? 'future' : 'corrupt'); assert.equal(loaded.protectedRaw, true);
     assert.equal(repository.save(loaded.state, 121000).ok, false); assert.equal(memory.getItem(SAVE_KEY), raw);
   }
-  for (const extra of [{ routeLeg: 0, x: 1, z: 2 }, { routeLeg: 1, x: 1, z: 3 }, { routeLeg: 1, x: 1.6, z: 7.2 }]) {
+  for (const extra of [{ routeLeg: 0, x: 1, z: 2 }, { routeLeg: 1, x: 1, z: 3 }, { routeLeg: 1, x: 1.6, z: 7.5 }]) {
     const state = createInitialState(); state.nextCustomerId = 2;
     state.customers = [guest(1, 'counter-a', 'leaving', 0, WORLD.serviceZ, extra)];
     assert.equal(validateState(state).ok, false);
@@ -261,4 +261,177 @@ test('TC-3D-011 draft full-load payback includes the physical sideways-clearance
     const expected = quote.cost / (quote.afterPrice / (quote.afterSeconds + turnoverSeconds) - quote.beforePrice / (quote.beforeSeconds + turnoverSeconds));
     assert.ok(Math.abs(quote.paybackSeconds - expected) < EPSILON);
   }
+});
+
+function assertSweptClearance(before, state) {
+  // Independent closest approach for two linearly interpolated bodies during
+  // the whole fixed step, not just their positions at the sampled endpoints.
+  const guests = state.customers.filter(customer => before.has(customer.id));
+  for (let i = 0; i < guests.length; i++) for (let j = i + 1; j < guests.length; j++) {
+    const a = guests[i], b = guests[j], p = before.get(a.id), q = before.get(b.id);
+    const dx = p.x - q.x, dz = p.z - q.z, vx = a.x - b.x - dx, vz = a.z - b.z - dz;
+    const squaredSpeed = vx * vx + vz * vz;
+    const t = squaredSpeed ? Math.max(0, Math.min(1, -(dx * vx + dz * vz) / squaredSpeed)) : 0;
+    assert.ok(Math.hypot(dx + t * vx, dz + t * vz) >= .72 - EPSILON, 'interpolated bodies must not cross between ticks');
+  }
+}
+
+function assertAllGuestsSeparated(state) {
+  for (let i = 0; i < state.customers.length; i++) for (let j = i + 1; j < state.customers.length; j++) {
+    assert.ok(distance(state.customers[i], state.customers[j]) >= .72 - EPSILON,
+      `body clearance: ${JSON.stringify([state.customers[i], state.customers[j]])}`);
+  }
+}
+
+test('TC-3D-013 parallel return lane clears full queue tails and continues beyond the entrance boundary', () => {
+  // Product geometry is an independent explicit expectation, not generated by
+  // the engine waypoint code being tested. The lane crosses only short feeders.
+  assert.equal(WORLD.exitZ, 7.4); assert.equal(WORLD.exitX, -10.4);
+  assert.ok(7.4 - (1.5 + 7 * .72) >= .72);
+  assert.ok(8.2 - 7.4 >= .72);
+  assert.ok(-8 - WORLD.exitX > 2);
+  const engine = createEngine(); engine.invite();
+  const walked = new Map(), completed = new Map();
+  for (let tick = 0; tick < 1800; tick++) {
+    const before = new Map(engine.state.customers.map(customer => [customer.id, clone(customer)]));
+    engine.advance(.05);
+    assertAllGuestsSeparated(engine.state);
+    for (const customer of engine.state.customers) {
+      const previous = before.get(customer.id);
+      if (!previous || customer.phase !== 'leaving') continue;
+      const length = distance(previous, customer);
+      assert.ok(length <= .125 + EPSILON);
+      walked.set(customer.id, (walked.get(customer.id) ?? 0) + length);
+      assert.equal(customer.hasCup, true);
+      if (customer.routeLeg === 2) {
+        assert.equal(customer.z, 7.4);
+        assert.ok(customer.x >= -10.4 && customer.x <= counterX(customer) + 1.6);
+      }
+    }
+    const live = new Set(engine.state.customers.map(customer => customer.id));
+    for (const [id, customer] of before) if (!live.has(id)) {
+      assert.equal(customer.phase, 'leaving'); assert.equal(customer.routeLeg, 2);
+      assert.ok(customer.x < -10.4 + .125 + EPSILON, 'a cup holder must not disappear at the rug or spawn line');
+      const length = walked.get(id) + distance(customer, { x: -10.4, z: 7.4 });
+      const expected = customer.counterId === 'counter-a' ? 19.5 : 24.5;
+      assert.ok(Math.abs(length - expected) < EPSILON, `full physical exit distance ${length}, expected ${expected}`);
+      completed.set(customer.counterId, (completed.get(customer.counterId) ?? 0) + 1);
+    }
+  }
+  assert.ok(completed.get('counter-a') > 8); assert.ok(completed.get('counter-b') > 4);
+});
+
+test('TC-3D-013 crossing and merge right-of-way remains collision-free, continuous and reloadable', () => {
+  const scenarios = [
+    { x: -6, z: 6.6, counter: 'counter-a', phase: 'entering', leg: 1 },
+    { x: 0, z: 8.2, counter: 'counter-a', phase: 'entering', leg: 3 },
+    { x: 5, z: 8.2, counter: 'counter-b', phase: 'entering', leg: 3 },
+    { x: 1.6, z: 6.6, counter: 'counter-a', phase: 'leaving', leg: 1 },
+    { x: 1.6, z: 6.75, counter: 'counter-a', phase: 'leaving', leg: 1 }
+  ];
+  for (const scenario of scenarios) {
+    const state = createInitialState(); state.nextCustomerId = 3;
+    state.customers = [guest(1, scenario.counter, scenario.phase, scenario.x, scenario.z, { routeLeg: scenario.leg }),
+      guest(2, 'counter-b', 'leaving', scenario.x + .75, 7.4, { routeLeg: 2 })];
+    assert.equal(validateState(state).ok, true);
+    let engine = createEngine(state); let waits = 0;
+    for (let tick = 0; tick < 100; tick++) {
+      const previous = new Map(engine.state.customers.map(customer => [customer.id, clone(customer)]));
+      engine.advance(.05); assertAllGuestsSeparated(engine.state);
+      for (const customer of engine.state.customers) {
+        const before = previous.get(customer.id);
+        if (before) { const step = distance(before, customer); assert.ok(step <= .125 + EPSILON); if (step === 0 && customer.id < 3) waits++; }
+      }
+      const snapshot = engine.snapshot(); assert.equal(validateState(snapshot).ok, true);
+      if (tick === 4) {
+        const memory = createMemoryStorage(), repo = new LocalSaveRepository(memory);
+        assert.equal(repo.save(snapshot, 1000).ok, true);
+        const loaded = new LocalSaveRepository(memory).load(1000); assert.equal(loaded.status, 'loaded');
+        const uninterrupted = createEngine(snapshot), restored = createEngine(loaded.state);
+        uninterrupted.advance(5); restored.advance(5);
+        assert.deepEqual(restored.snapshot(), uninterrupted.snapshot()); assert.deepEqual(restored.drainEvents(), uninterrupted.drainEvents());
+        engine = createEngine(loaded.state);
+      }
+    }
+    assert.ok(waits > 0, 'the conflict is resolved by physical waiting rather than overlap');
+    const crossingGuest = engine.state.customers.find(customer => customer.id === 1);
+    assert.ok(!crossingGuest || crossingGuest.phase !== scenario.phase || distance(crossingGuest, state.customers[0]) > 2, 'junction must not deadlock');
+    const returnGuest = engine.state.customers.find(customer => customer.id === 2);
+    assert.ok(!returnGuest || returnGuest.x < scenario.x - 2, 'return traffic must finish crossing');
+  }
+});
+
+test('TC-3D-013 v2 in-flight legs extend without migration teleport, economic changes or early disappearance', () => {
+  const source = createInitialState(); source.customerRouteVersion = 2; source.nextCustomerId = 7;
+  source.customers = [guest(1, 'counter-a', 'entering', -7, 5, { routeLeg: 0 }),
+    guest(2, 'counter-b', 'entering', -6, 6, { routeLeg: 1 }),
+    guest(3, 'counter-a', 'entering', -3, 8.2, { routeLeg: 2 }),
+    guest(4, 'counter-b', 'entering', 5, 7, { routeLeg: 3 }),
+    guest(5, 'counter-a', 'leaving', 1, 1.5, { routeLeg: 0 }),
+    guest(6, 'counter-b', 'leaving', 6.6, 7.1, { routeLeg: 1 })];
+  source.stepCarry = .027;
+  const original = clone(source), migrated = validateState(source);
+  assert.equal(migrated.ok, true); assert.deepEqual(source, original);
+  assert.deepEqual(migrated.state, { ...source, customerRouteVersion: 3 });
+  const memory = createMemoryStorage(); memory.setItem(SAVE_KEY, envelope(source));
+  const loaded = new LocalSaveRepository(memory).load(1000); assert.equal(loaded.status, 'loaded');
+  assert.deepEqual(loaded.state, migrated.state);
+  const engine = createEngine(loaded.state); let reachedReturn = false, removedBeyondBoundary = false;
+  for (let tick = 0; tick < 1500; tick++) {
+    const previous = new Map(engine.state.customers.map(customer => [customer.id, clone(customer)])); engine.advance(.05);
+    assert.equal(validateState(engine.snapshot()).ok, true); assertAllGuestsSeparated(engine.state);
+    assert.equal(assets(engine.state), INITIAL_WALLET + engine.state.totalEarned);
+    for (const customer of engine.state.customers) {
+      if (previous.has(customer.id)) assert.ok(distance(previous.get(customer.id), customer) <= .125 + EPSILON);
+      if (customer.id === 6 && customer.routeLeg === 2 && customer.x < 6.6) reachedReturn = true;
+    }
+    const old = previous.get(6);
+    if (old && !engine.state.customers.some(customer => customer.id === 6)) {
+      assert.equal(old.routeLeg, 2); assert.ok(old.x < -10.275 + EPSILON); removedBeyondBoundary = true;
+    }
+  }
+  assert.equal(reachedReturn, true); assert.equal(removedBeyondBoundary, true);
+  for (const mutate of [s => s.customers[5].z = 7.2, s => s.customers[5].routeLeg = 2]) {
+    const corrupt = clone(source); mutate(corrupt); assert.equal(validateState(corrupt).ok, false, 'v2 validation must not accept impossible new-route coordinates');
+  }
+});
+
+test('TC-3D-013 maximum-level sustained batches clear all junctions without overlap or permanent waiting', () => {
+  const state = fullQueueState(MAX_LEVEL); state.manager.level = MAX_LEVEL;
+  const engine = createEngine(state), departures = new Map(); let removed = 0;
+  for (let tick = 0; tick < 12000; tick++) {
+    if (tick % 360 === 0) engine.invite();
+    const before = new Map(engine.state.customers.map(customer => [customer.id, { ...customer }]));
+    engine.advance(.05); assertAllGuestsSeparated(engine.state); assertSweptClearance(before, engine.state);
+    const live = new Set(engine.state.customers.map(customer => customer.id));
+    for (const customer of engine.state.customers) if (customer.phase === 'leaving' && !departures.has(customer.id)) departures.set(customer.id, engine.state.elapsed);
+    for (const [id, began] of departures) {
+      if (!live.has(id)) { departures.delete(id); removed++; }
+      else assert.ok(engine.state.elapsed - began < 40, 'a served customer cannot remain stuck at a junction');
+    }
+    if (tick % 100 === 0) { assert.equal(validateState(engine.snapshot()).ok, true); assert.equal(assets(engine.state), INITIAL_WALLET + engine.state.totalEarned); }
+  }
+  assert.ok(removed > 250);
+});
+
+
+test('TC-3D-013 accepted close v2 turns separate continuously instead of freezing or teleporting', () => {
+  const source = createInitialState(); source.customerRouteVersion = 2; source.nextCustomerId = 3;
+  source.customers = [guest(1, 'counter-a', 'entering', -6, 8.1, { routeLeg: 1 }),
+    guest(2, 'counter-b', 'entering', -6, 7.6, { routeLeg: 1 })];
+  const migrated = validateState(source); assert.equal(migrated.ok, true);
+  assert.deepEqual(migrated.state.customers, source.customers);
+  const engine = createEngine(migrated.state); let previousClearance = .5, recovered = false;
+  for (let tick = 0; tick < 120; tick++) {
+    const before = new Map(engine.state.customers.map(customer => [customer.id, { ...customer }])); engine.advance(.05);
+    for (const customer of engine.state.customers) if (before.has(customer.id)) assert.ok(distance(before.get(customer.id), customer) <= .125 + EPSILON);
+    const a = engine.state.customers.find(customer => customer.id === 1), b = engine.state.customers.find(customer => customer.id === 2);
+    if (!a || !b) break;
+    const clearance = distance(a, b);
+    if (!recovered) assert.ok(clearance + EPSILON >= previousClearance, 'an existing overlap may only improve');
+    if (clearance >= .72 - EPSILON) recovered = true;
+    if (recovered) assertAllGuestsSeparated(engine.state);
+    previousClearance = clearance;
+  }
+  assert.equal(recovered, true);
 });

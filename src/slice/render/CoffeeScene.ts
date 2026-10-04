@@ -21,7 +21,7 @@ import { CreatePlane } from '@babylonjs/core/Meshes/Builders/planeBuilder.js';
 import '@babylonjs/core/Culling/ray.js';
 import type { Counter, CounterId, Customer, RecipeId, SliceState } from '../core/types';
 import { recipeById, WORLD } from '../core/engine';
-import { renderPixelRatio, RENDER_FPS } from './RenderBudget';
+import { DEFAULT_RENDER_MODE, RENDER_MODES, renderPixelRatio, type RenderMode } from './RenderBudget';
 
 export type CoffeeSceneAction =
   | { type: 'invite' }
@@ -37,7 +37,7 @@ export type CoffeeSceneAnchor =
 export interface AnchorProjection { x: number; y: number; visible: boolean }
 
 /** The optional engine is a QA seam; normal callers only supply canvas and action callback. */
-export interface CoffeeSceneOptions { engine?: AbstractEngine; shadows?: boolean }
+export interface CoffeeSceneOptions { engine?: AbstractEngine; shadows?: boolean; renderMode?: RenderMode }
 
 type Shape = 'box' | 'cylinder' | 'sphere' | 'ring';
 type PointerGesture = { id: number; x: number; y: number; lastX: number; lastY: number; time: number; dragged: boolean; target: Mesh | null; targetPoint: Vector3 | null; invalidated: boolean; action?: CoffeeSceneAction };
@@ -82,7 +82,7 @@ const SKINS = ['#e6b88d', '#bb855e', '#f1ccb0', '#916247', '#d9a780'];
 const SHIRTS = ['#c86e5d', '#5c9ca6', '#d3ac50', '#8b84ae', '#779f74', '#c28798'];
 const HAIR = ['#3d3531', '#6c4531', '#d5b677', '#493b49', '#aba99d'];
 const TAU = Math.PI * 2;
-// Above rug ink/arrow overlays (highest top=.065), so cached furniture shadows
+// Above the rug ink surfaces, so cached furniture shadows
 // can coexist with visible, cheap moving contact disks.
 const CONTACT_SHADOW_Y = .074;
 const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
@@ -112,6 +112,7 @@ export class CoffeeScene {
   private panBounds = { left: 0, right: 0, bottom: 0, top: 0 };
   private readonly staticCasters = new Set<Mesh>();
   private renderedFrames = 0;
+  private renderMode: RenderMode;
   private readonly materials = new Map<string, StandardMaterial>();
   private readonly shapes = new Map<Shape, Mesh>();
   private readonly customers = new Map<number, Person>();
@@ -143,7 +144,8 @@ export class CoffeeScene {
     this.canvas = canvas;
     this.onAction = onAction;
     this.ownsEngine = !options.engine;
-    this.engine = options.engine ?? new Engine(canvas, true, { stencil: false, powerPreference: 'low-power' }, false);
+    this.renderMode = options.renderMode ?? DEFAULT_RENDER_MODE;
+    this.engine = options.engine ?? new Engine(canvas, true, { stencil: false, powerPreference: 'default' }, false);
     this.scene = new Scene(this.engine);
     this.scene.clearColor = Color4.FromHexString('#efe9d9ff');
     this.scene.ambientColor = Color3.FromHexString('#f6ecd7');
@@ -246,7 +248,9 @@ export class CoffeeScene {
       const point = this.projectWorld(this.anchorWorld(this.down.target));
       if (this.down.target.isDisposed() || Math.hypot(point.x - this.down.targetPoint.x, point.y - this.down.targetPoint.y) > 9) this.down.invalidated = true;
     }
-    this.scene.render();
+    // One application-owned RAF loop, with Babylon's normal per-frame bookkeeping.
+    this.engine.beginFrame();
+    try { this.scene.render(); } finally { this.engine.endFrame(); }
     this.renderedFrames++;
   }
 
@@ -329,11 +333,17 @@ export class CoffeeScene {
       this.panY - cssDy * (this.camera.orthoTop! - this.camera.orthoBottom!) / rect.height);
   }
 
+  setRenderMode(mode: RenderMode): void {
+    if (this.disposed || this.renderMode === mode) return;
+    this.renderMode = mode;
+    this.resize();
+  }
+
   resize(): void {
     if (this.disposed) return;
     const rect = this.canvas.getBoundingClientRect();
     if (this.ownsEngine && typeof window !== 'undefined') {
-      const scale = 1 / renderPixelRatio(rect.width, rect.height, window.devicePixelRatio || 1);
+      const scale = 1 / renderPixelRatio(rect.width, rect.height, window.devicePixelRatio || 1, this.renderMode);
       if (Math.abs(this.engine.getHardwareScalingLevel() - scale) > .001) this.engine.setHardwareScalingLevel(scale);
     }
     this.engine.resize();
@@ -608,25 +618,21 @@ export class CoffeeScene {
       rug.receiveShadows = true;
       const center = this.box(`queue-rug-color-${x}`, 2.08, 0.01, 5.3, x, 0.04, 3.76, shade, undefined, false);
       center.receiveShadows = true;
-      const left = this.box(`queue-arrow-l-${x}`, 0.35, 0.02, 0.065, x - 0.12, 0.055, 6.11, '#fff7e9', undefined, false);
-      const right = this.box(`queue-arrow-r-${x}`, 0.35, 0.02, 0.065, x + 0.12, 0.055, 6.11, '#fff7e9', undefined, false);
-      left.rotation.y = -Math.PI / 4;
-      right.rotation.y = Math.PI / 4;
     }
-    // Two short outbound aisles terminate before the separate incoming cross-aisle.
-    // Physical floor thresholds explain where a cup-carrying guest leaves the simulation.
+    // The counter-side aisles join a separate return lane to the entrance-side boundary.
+    // Crossings yield in the core; no threshold suggests disappearing at the rug end.
     for (const x of [0, 5]) {
       const exitX = x + WORLD.departureOffsetX;
       const aisle = this.box(`departure-aisle-${x}`, .65, .012, WORLD.exitZ - WORLD.serviceZ,
         exitX, .006, (WORLD.exitZ + WORLD.serviceZ) / 2, '#ded6c0', undefined, false);
       aisle.metadata = { coffeeFlow: 'outgoing' };
-      const threshold = this.box(`customer-exit-${x}`, .86, .02, .18, exitX, .01, WORLD.exitZ, '#8fafa1', undefined, false);
-      threshold.metadata = { coffeeFlow: 'outgoing', coffeeRouteEndpoint: true };
-      for (const side of [-1, 1]) {
-        const arrow = this.box(`departure-arrow-${x}-${side}`, .27, .015, .06, exitX + side * .09, .02, WORLD.exitZ - .45, '#5e8975', undefined, false);
-        arrow.rotation.y = side * Math.PI / 4;
-      }
     }
+    const returnStartX = 5 + WORLD.departureOffsetX;
+    const returnLane = this.box('departure-return-lane', returnStartX - WORLD.exitX, .012, .54,
+      (returnStartX + WORLD.exitX) / 2, .006, WORLD.exitZ, '#ded6c0', undefined, false);
+    returnLane.metadata = { coffeeFlow: 'outgoing' };
+    const threshold = this.box('customer-exit-boundary', .18, .02, .72, WORLD.exitX, .01, WORLD.exitZ, '#8fafa1', undefined, false);
+    threshold.metadata = { coffeeFlow: 'outgoing', coffeeRouteEndpoint: true };
     // The previous welcome strip at z=5 incorrectly advertised the shared return route.
     this.box('welcome-runner', 11.6, .012, .68, -.5, .006, WORLD.inboundZ, '#d5ccb4', undefined, false);
   }
@@ -871,15 +877,15 @@ export class CoffeeScene {
     const dx = customer.x - person.previousX;
     const dz = customer.z - person.previousZ;
     const walking = (customer.phase === 'entering' || customer.phase === 'leaving' || Math.hypot(dx, dz) > 0.005) && dt > 0;
-    // Position smoothing stays inside one short frame and never alters the simulation.
-    const blend = dt > 0 ? 1 - Math.exp(-dt * 24) : 1;
-    person.root.position.x += (customer.x - person.root.position.x) * blend;
-    person.root.position.z += (customer.z - person.root.position.z) * blend;
+    // The app supplies adjacent-step interpolated coordinates. A second lag filter
+    // would reintroduce speed pulses and make the pose depend on display refresh.
+    person.root.position.x = customer.x;
+    person.root.position.z = customer.z;
     if (Math.hypot(dx, dz) > 0.003 && walking) {
       const target = Math.atan2(dx, dz);
       const current = person.root.rotation.y;
       const delta = ((target - current + Math.PI * 3) % TAU) - Math.PI;
-      person.root.rotation.y += delta * Math.min(1, dt * 14);
+      person.root.rotation.y += delta * (1 - Math.exp(-dt * 14));
     } else if (customer.phase === 'queue' || customer.phase === 'serving' || customer.phase === 'receiving') {
       person.root.rotation.y = Math.PI;
     }
@@ -916,8 +922,8 @@ export class CoffeeScene {
     const dx = x - person.previousX;
     const dz = manager.z - person.previousZ;
     const moving = manager.phase === 'moving' && dt > 0;
-    // Core snapshots already move continuously. Avoid smoothing past a collection/deposit
-    // endpoint. Core and room now share the same world coordinates at every handoff.
+    // Shared interpolated snapshots keep the cart, manager and handoff state together;
+    // raw core positions otherwise jump at 20Hz even when the GPU draws at 60Hz.
     person.root.position.x = x;
     person.root.position.z = manager.z;
     if (moving && Math.hypot(dx, dz) > 0.003) person.root.rotation.y = Math.atan2(dx, dz);
@@ -1069,8 +1075,10 @@ export class CoffeeScene {
     let texture: DynamicTexture | null = null;
     // NullEngine QA intentionally skips canvas ink while retaining the same physical material.
     if (typeof document !== 'undefined') {
-      texture = new DynamicTexture(`${name}-ink`, { width: pixels, height: pixelHeight }, this.scene, false);
+      texture = new DynamicTexture(`${name}-ink`, { width: pixels, height: pixelHeight }, this.scene, true, Texture.TRILINEAR_SAMPLINGMODE);
       texture.hasAlpha = false;
+      // Preserve fine ink on the oblique physical signs, without repainting it each frame.
+      texture.anisotropicFilteringLevel = 8;
       mat.diffuseTexture = texture;
     } else mat.diffuseColor = Color3.FromHexString('#f1dba1');
     mesh.material = mat;
@@ -1115,7 +1123,7 @@ export class CoffeeScene {
   /** Read-only QA counters; NullEngine values are structural, not GPU timing. */
   readRenderStats() {
     return {
-      targetFps: RENDER_FPS, renderedFrames: this.renderedFrames,
+      renderMode: this.renderMode, targetFps: RENDER_MODES[this.renderMode].fps, renderedFrames: this.renderedFrames,
       renderWidth: this.engine.getRenderWidth(), renderHeight: this.engine.getRenderHeight(),
       meshCount: this.scene.meshes.length,
       frozenMeshes: this.scene.meshes.filter(mesh => mesh.isWorldMatrixFrozen).length,

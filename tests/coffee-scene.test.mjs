@@ -872,7 +872,8 @@ test('TC-3D-010 continuous floor and wall carry aligned matte patterns with join
       const color = bounds(scene.getMeshByName(`queue-rug-color-${x}`));
       assert.ok(Math.abs(rug.minimumWorld.y - floorBounds.maximumWorld.y) < 1e-6, 'rug rests on the same continuous floor');
       assert.ok(Math.abs(color.minimumWorld.y - rug.maximumWorld.y) < 1e-6, 'rug color is seated on its backing');
-      assert.ok(Math.abs(bounds(scene.getMeshByName(`queue-arrow-l-${x}`)).minimumWorld.y - color.maximumWorld.y) < 1e-6, 'lane arrow touches the rug, with no raised seam');
+      assert.equal(scene.getMeshByName(`queue-arrow-l-${x}`), null, 'obsolete rug arrow is removed');
+      assert.equal(scene.getMeshByName(`queue-arrow-r-${x}`), null);
     }
     assert.ok(scene.getMeshByName('entrance-pad-border'), 'the functional entrance remains unchanged by removing queue markers');
     assert.equal(scene.activeCamera.mode, 1, 'the fixed orthographic room camera remains intentional');
@@ -1018,18 +1019,27 @@ test('TC-3D-011 static work is frozen while live actors, cups, cash parents and 
   } finally { f.dispose(); }
 });
 
-test('TC-3D-011 scene exit thresholds match core endpoints and end before the inbound aisle', () => {
+test('TC-3D-013 side aisles join a separate return lane ending beyond the entrance, with no obsolete arrows', () => {
   const f = fixture();
   try {
+    const scene = f.renderer.scene;
+    const exit = scene.getMeshByName('customer-exit-boundary');
+    assert.equal(exit.position.x, WORLD.exitX);
+    assert.equal(exit.position.z, WORLD.exitZ);
+    assert.equal(exit.metadata.coffeeRouteEndpoint, true);
+    assert.ok(WORLD.exitX < WORLD.entryX - 2);
+    const returnLane = bounds(scene.getMeshByName('departure-return-lane'));
+    assert.ok(Math.abs(returnLane.minimumWorld.x - WORLD.exitX) < 1e-6);
+    assert.ok(Math.abs(returnLane.maximumWorld.x - (5 + WORLD.departureOffsetX)) < 1e-6);
+    const incoming = bounds(scene.getMeshByName('welcome-runner'));
+    assert.ok(returnLane.maximumWorld.z < incoming.minimumWorld.z, 'opposing horizontal roads are visibly separate');
     for (const x of [0, 5]) {
-      const exit = f.renderer.scene.getMeshByName(`customer-exit-${x}`);
-      assert.equal(exit.position.x, x + WORLD.departureOffsetX);
-      assert.equal(exit.position.z, WORLD.exitZ);
-      assert.equal(exit.metadata.coffeeRouteEndpoint, true);
-      assert.ok(WORLD.inboundZ - bounds(exit).maximumWorld.z > .9);
-      const aisle = f.renderer.scene.getMeshByName(`departure-aisle-${x}`);
-      assert.ok(bounds(aisle).minimumWorld.x > x + .9, 'departure geometry is alongside rather than over the incoming queue');
+      assert.equal(scene.getMeshByName(`customer-exit-${x}`), null);
+      const aisle = scene.getMeshByName(`departure-aisle-${x}`);
+      assert.ok(bounds(aisle).minimumWorld.x > x + .9, 'departure geometry is alongside the queue');
+      assert.ok(Math.abs(bounds(aisle).maximumWorld.z - WORLD.exitZ) < 1e-6);
     }
+    assert.ok(!scene.meshes.some(mesh => /^(queue|departure)-arrow-/.test(mesh.name)));
   } finally { f.dispose(); }
 });
 
@@ -1041,7 +1051,7 @@ test('TC-3D-011 moving contact disks remain above the physical rug/arrow surface
     f.renderer.update(state, 0);
     const scene = f.renderer.scene;
     const shadow = bounds(scene.getMeshByName('customer-99-contact-shadow'));
-    for (const name of ['queue-rug-0', 'queue-rug-color-0', 'queue-arrow-l-0', 'queue-arrow-r-0']) {
+    for (const name of ['queue-rug-0', 'queue-rug-color-0']) {
       assert.ok(shadow.minimumWorld.y > bounds(scene.getMeshByName(name)).maximumWorld.y, `${name} cannot hide the only moving contact shadow`);
     }
   } finally { f.dispose(); }
@@ -1082,5 +1092,26 @@ test('TC-3D-011 cached shadow bounds cover static furniture and upgrades invalid
     assert.equal(invalidations, 1);
     f.renderer.focusAnchor('invite'); f.renderer.resize();
     assert.deepEqual(generator.getTransformMatrix().asArray(), matrix.asArray(), 'pan/resize do not move the fixed-world shadow projection');
+  } finally { f.dispose(); }
+});
+
+
+test('TC-3D-012 renderer pairs Babylon frame boundaries and changes quality without rebuilding the scene', () => {
+  const f = fixture();
+  try {
+    const scene = f.renderer.scene;
+    const meshes = scene.meshes.length;
+    const frames = f.renderer.readRenderStats().renderedFrames;
+    const frameId = f.engine.frameId;
+    f.renderer.update(createInitialState(), 1 / 60);
+    assert.equal(f.engine.frameId, frameId + 1);
+    assert.equal(f.renderer.readRenderStats().renderedFrames, frames + 1);
+    for (const [mode, target] of [['balanced', 60], ['low-power', 30], ['smooth', null]]) {
+      f.renderer.setRenderMode(mode);
+      assert.equal(f.renderer.readRenderStats().renderMode, mode);
+      assert.equal(f.renderer.readRenderStats().targetFps, target);
+      assert.equal(f.renderer.scene, scene);
+      assert.equal(scene.meshes.length, meshes);
+    }
   } finally { f.dispose(); }
 });

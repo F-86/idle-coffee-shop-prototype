@@ -465,3 +465,28 @@ details p {
     transition: none;
   }
 }
+
+.render-mode-picker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.render-mode-picker button {
+  min-height: 54px;
+  padding: 8px 4px;
+  border: 1px solid #e0ddc7;
+  border-radius: 10px;
+  background: #ecefdf;
+  font-size: 11px;
+}
+.render-mode-picker button small {
+  display: block;
+  font-size: 9px;
+  font-weight: 400;
+  margin-top: 3px;
+}
+.render-mode-picker button.active {
+  background: #355e4f;
+  color: #fff4d6;
+  border-color: #355e4f;
+}

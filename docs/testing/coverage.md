@@ -32,3 +32,11 @@ REQ-3D-019/020/021 → [TC-3D-010](cases/slice/TC-3D-010.md)，[计划](plans/ro
 ## 性能预算与进出分流
 
 REQ-3D-022/023 → [TC-3D-011](cases/slice/TC-3D-011.md)、[计划](plans/performance-exit.md)。RenderBudget多刷新时钟、应用生命周期尾部、静态/动态几何、完整路径/存档测试与结构成本对比；GPU帧时与Mac发热另外测量，禁止冒充通过。
+
+## 清晰度与连续运动
+
+REQ-3D-024 → [TC-3D-012](cases/slice/TC-3D-012.md)、[计划](plans/smooth-clarity.md)。默认显示刷新、分档采样/偏好、固定步插值、恒定速度、原始状态一致性、生命周期；实际GPU像素/帧时/发热另验。
+
+## 离店至入口侧边界
+
+REQ-3D-025 → [TC-3D-013](cases/slice/TC-3D-013.md)、[计划](plans/customer-boundary-exit.md)。延伸返程横道、路口让行、连续性/分离/无死锁、v2原位延长、箭头删除；不是无几何交点的承诺。

@@ -15,3 +15,7 @@
 最新房间/路线修订：[计划](testing/plans/room-route-refinement.md)、[TC-3D-010](testing/cases/slice/TC-3D-010.md)。删除吊灯/排队装饰圈、表面规则纹路、金库牌上移；真实收款改为近B→远A，替代旧渲染路线映射。
 
 最新性能/顾客动线：[计划](testing/plans/performance-exit.md)、[TC-3D-011](testing/cases/slice/TC-3D-011.md)。30fps/像素预算与缓存家具阴影，入店横道和每柜台独立出口；结构证据和实际浏览器/设备功耗验收分开记录。
+
+当前清晰度/流畅度修订：[计划](testing/plans/smooth-clarity.md)、[TC-3D-012](testing/cases/slice/TC-3D-012.md)。默认随显示刷新+DPR2，通过固定步插值消除20Hz位置台阶，另可选平衡/省电；替代上一轮统一30fps/低画质取舍。实际GPU和Mac负载待验证。
+
+当前顾客离店延伸：[计划](testing/plans/customer-boundary-exit.md)、[TC-3D-013](testing/cases/slice/TC-3D-013.md)。独立平行返程路走到入口侧边界，有限路口让行，删除地毯端箭头；连续路线、间距、满队活性与在途档原位迁移分别验证。

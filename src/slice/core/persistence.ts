@@ -22,8 +22,9 @@ export function validateState(value: unknown): { ok: true; state: SliceState } |
   const fail = (message: string): { ok: false; message: string } => ({ ok: false, message });
   if (!object(value) || value.schemaVersion !== 1 || value.economyVersion !== 1) return fail('存档版本不受支持。');
   if (value.managerRouteVersion !== undefined && value.managerRouteVersion !== 1 && value.managerRouteVersion !== MANAGER_ROUTE_VERSION) return fail('经理路线版本不受支持。');
-  if (value.customerRouteVersion !== undefined && value.customerRouteVersion !== 1 && value.customerRouteVersion !== CUSTOMER_ROUTE_VERSION) return fail('顾客路线版本不受支持。');
+  if (value.customerRouteVersion !== undefined && value.customerRouteVersion !== 1 && value.customerRouteVersion !== 2 && value.customerRouteVersion !== CUSTOMER_ROUTE_VERSION) return fail('顾客路线版本不受支持。');
   const legacyCustomerRoute = value.customerRouteVersion === undefined || value.customerRouteVersion === 1;
+  const localExitRoute = value.customerRouteVersion === 2;
   const legacyRoute = value.managerRouteVersion === undefined || value.managerRouteVersion === 1;
   for (const key of ['wallet', 'totalEarned', 'totalServed', 'spend', 'nextCustomerId']) if (!integer(value[key], key === 'nextCustomerId' ? 1 : 0)) return fail(`存档数值 ${key} 无效。`);
   if (!number(value.elapsed, 0, 4e9) || Math.abs(value.elapsed / STEP_SECONDS - Math.round(value.elapsed / STEP_SECONDS)) > .0001) return fail('模拟时钟无效。');
@@ -76,7 +77,9 @@ export function validateState(value: unknown): { ok: true; state: SliceState } |
         if (entry.routeLeg === 0) {
           if (entry.z !== WORLD.serviceZ || !number(entry.x, x, x + WORLD.departureOffsetX)) return fail('顾客离柜路段无效。');
         } else if (entry.routeLeg === 1) {
-          if (entry.x !== x + WORLD.departureOffsetX || !number(entry.z, WORLD.serviceZ, WORLD.exitZ)) return fail('顾客离店路段无效。');
+          if (entry.x !== x + WORLD.departureOffsetX || !number(entry.z, WORLD.serviceZ, localExitRoute ? 7.1 : WORLD.exitZ)) return fail('顾客离店路段无效。');
+        } else if (!localExitRoute && entry.routeLeg === 2) {
+          if (entry.z !== WORLD.exitZ || !number(entry.x, WORLD.exitX, x + WORLD.departureOffsetX)) return fail('顾客返程路段无效。');
         } else return fail('顾客离店路段缺失。');
       } else if (entry.x !== x || !number(entry.z, WORLD.serviceZ, entry.phase === 'queue' ? WORLD.inboundZ : WORLD.serviceZ)) return fail('顾客排队或服务位置无效。');
     }
@@ -108,7 +111,7 @@ export function validateState(value: unknown): { ok: true; state: SliceState } |
   // An accepted old archive must also be valid after its one-time migration.
   // Impossible old stationary positions fail closed instead of becoming an
   // un-saveable live game; do not teleport guests to silently repair it.
-  if (legacyCustomerRoute) return validateState(state);
+  if (legacyCustomerRoute || localExitRoute) return validateState(state);
   return { ok: true, state };
 }
 
