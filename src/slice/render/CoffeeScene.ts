@@ -9,6 +9,7 @@ import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight.js';
 import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator.js';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js';
+import { Texture } from '@babylonjs/core/Materials/Textures/texture.js';
 import { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js';
 import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder.js';
@@ -19,7 +20,7 @@ import { CreatePlane } from '@babylonjs/core/Meshes/Builders/planeBuilder.js';
 // Registers the scene ray-picking extension used by physical shop controls.
 import '@babylonjs/core/Culling/ray.js';
 import type { Counter, CounterId, Customer, RecipeId, SliceState } from '../core/types';
-import { recipeById } from '../core/engine';
+import { recipeById, WORLD } from '../core/engine';
 
 export type CoffeeSceneAction =
   | { type: 'invite' }
@@ -69,7 +70,7 @@ type Station = {
 };
 
 const COLORS = {
-  cream: '#efe9d9', tile: '#e7ddc8', tileLight: '#eee6d6', tileWarm: '#e8decc',
+  cream: '#efe9d9', tile: '#e7ddc8',
   dark: '#253c3a', wood: '#b47b50', woodLight: '#cd9362', woodDark: '#815337',
   metal: '#eeeae0', steel: '#809b96', gold: '#d5a54c', teal: '#4c9b96',
   tealDark: '#286c67', rose: '#d98b98', roseDark: '#985664', leaf: '#609678',
@@ -80,14 +81,8 @@ const SHIRTS = ['#c86e5d', '#5c9ca6', '#d3ac50', '#8b84ae', '#779f74', '#c28798'
 const HAIR = ['#3d3531', '#6c4531', '#d5b677', '#493b49', '#aba99d'];
 const TAU = Math.PI * 2;
 const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
-// World X runs right-to-left in this fixed camera. This location is left of both wall menus.
-const VISUAL_VAULT_X = 8.8;
-/** Presentation route only: the logical economy keeps its original -8 → 0 → 5 → -8 loop. */
-export function managerPresentationX(manager: Readonly<SliceState['manager']>): number {
-  if (manager.target === 0) return VISUAL_VAULT_X * (1 - clamp((manager.x + 8) / 8));
-  if (manager.target === 1) return clamp(manager.x, 0, 5);
-  return 5 + (VISUAL_VAULT_X - 5) * (1 - clamp((manager.x + 8) / 13));
-}
+// Fixed-camera room coordinates, shared by its solids and their world-scaled patterns.
+const ROOM = { width: 144, depth: 144, floorY: 0, rearZ: -3.6, tilePitch: 2.4, panelPitch: .72 };
 const cashText = (cents: number) => `¥ ${(cents / 100).toFixed(2)}`;
 
 /**
@@ -161,11 +156,12 @@ export class CoffeeScene {
     this.scene.activeCamera = this.camera;
     // No Babylon gesture controls: one bounded screen-plane pan keeps the room angle stable.
     const ambient = new HemisphericLight('soft-skylight', new Vector3(0, 1, 0), this.scene);
-    ambient.intensity = 0.84;
+    // Keep pale horizontal surfaces below diffuse clipping so both tile axes retain ink.
+    ambient.intensity = 0.64;
     ambient.groundColor = Color3.FromHexString('#b3aaa1');
     const sun = new DirectionalLight('warm-window-light', new Vector3(0.5, -1, -0.55), this.scene);
     sun.position = new Vector3(-7, 16, 10);
-    sun.intensity = 0.75;
+    sun.intensity = 0.48;
     sun.diffuse = Color3.FromHexString('#fff3df');
     this.shadowGenerator = options.shadows === false || !this.ownsEngine ? null : new ShadowGenerator(1024, sun);
     if (this.shadowGenerator) {
@@ -185,9 +181,9 @@ export class CoffeeScene {
     this.vaultLamp = vault.lamp;
     this.vaultLabel = vault.label;
     this.manager = this.makePerson('manager', 1, '#e0ad52', false, true);
-    this.manager.root.position.set(VISUAL_VAULT_X, 0, -1.7);
-    this.manager.previousX = VISUAL_VAULT_X;
-    this.manager.previousZ = -1.7;
+    this.manager.root.position.set(WORLD.vaultX, 0, WORLD.backZ);
+    this.manager.previousX = WORLD.vaultX;
+    this.manager.previousZ = WORLD.backZ;
     this.manager.root.scaling.setAll(0.97);
     this.makeCart(this.manager.root);
     canvas.addEventListener('pointerdown', this.handleDown);
@@ -502,6 +498,36 @@ export class CoffeeScene {
     return mat;
   }
 
+  /** Matte seamless ink; UV repetition is sized from the same physical room dimensions. */
+  private surfacePattern(name: string, fill: string, seam: string, repeatU: number, repeatV: number, square: boolean): StandardMaterial {
+    const mat = new StandardMaterial(name, this.scene);
+    mat.diffuseColor = Color3.FromHexString(fill);
+    mat.specularColor = Color3.Black();
+    mat.emissiveColor = Color3.Black();
+    mat.disableLighting = false;
+    mat.disableDepthWrite = false;
+    if (typeof document !== 'undefined') {
+      const texture = new DynamicTexture(`${name}-texture`, { width: 512, height: 512 }, this.scene, true);
+      const ctx = texture.getContext();
+      this.paintSurfacePattern(ctx, fill, seam, square);
+      texture.hasAlpha = false;
+      texture.wrapU = Texture.WRAP_ADDRESSMODE; texture.wrapV = Texture.WRAP_ADDRESSMODE;
+      texture.uScale = repeatU; texture.vScale = repeatV;
+      texture.anisotropicFilteringLevel = 4;
+      texture.update();
+      mat.diffuseColor = Color3.White();
+      mat.diffuseTexture = texture;
+    }
+    mat.metadata = { coffeePattern: { repeatU, repeatV, square, fill, seam, seamWidth: (square ? 3 : 8) / 512 } };
+    return mat;
+  }
+
+  private paintSurfacePattern(ctx: Pick<CanvasRenderingContext2D, 'fillStyle' | 'fillRect'>, fill: string, seam: string, square: boolean): void {
+    ctx.fillStyle = fill; ctx.fillRect(0, 0, 512, 512);
+    ctx.fillStyle = seam; ctx.fillRect(0, 0, square ? 3 : 8, 512);
+    if (square) ctx.fillRect(0, 0, 512, 3);
+  }
+
   private shape(kind: Shape, name: string, size: Vector3, position: Vector3, color: string, parent?: TransformNode, shadow = true): Mesh {
     let base = this.shapes.get(kind);
     if (!base) {
@@ -534,31 +560,28 @@ export class CoffeeScene {
   private makeEnvironment(): void {
     // This is a continuous room, not an island/plinth floating inside a blank canvas.
     // Surfaces deliberately extend beyond every bounded view, including portrait crops.
-    const floor = this.box('continuous-shop-floor', 140, .12, 140, 0, -.10, 24, COLORS.tile, undefined, false);
+    // One continuous solid carries one square, world-scaled tile pattern. Raised per-tile
+    // boxes gave the two grid directions different shadows and left a step at the wall.
+    const floor = this.box('continuous-shop-floor', ROOM.width, .12, ROOM.depth,
+      0, ROOM.floorY - .06, ROOM.rearZ + ROOM.depth / 2, COLORS.tile, undefined, false);
+    // Babylon box top UVs run U along +Z and V along −X, so use the matching spans.
+    floor.material = this.surfacePattern('floor-tile-ink', COLORS.tile, '#b9ad95', ROOM.depth / ROOM.tilePitch, ROOM.width / ROOM.tilePitch, true);
     floor.receiveShadows = true; floor.isPickable = true;
-    floor.metadata = { coffeeEnvironment: true };
-    for (let ix = 0; ix < 20; ix++) {
-      for (let iz = 0; iz < 12; iz++) {
-        const color = [COLORS.tile, COLORS.tileLight, COLORS.tileWarm][(ix + iz * 2) % 3];
-        const tile = this.box(`floor-${ix}-${iz}`, 2.37, .04, 2.37, -22.8 + ix * 2.4, -.02, -2.4 + iz * 2.4, color, undefined, false);
-        tile.receiveShadows = true;
-      }
-    }
-    const wall = this.box('rear-wall', 140, 28, .22, 0, 14, -3.72, COLORS.cream, undefined, false);
-    wall.isPickable = true; wall.metadata = { coffeeEnvironment: true };
-    this.box('rear-wainscot', 140, 1.22, .1, 0, .62, -3.57, COLORS.tealDark, undefined, false);
-    this.box('wall-chair-rail', 140, .12, .17, 0, 1.24, -3.53, COLORS.woodLight, undefined, false);
-    for (let x = -28; x < 28; x += .72) this.box(`wall-panel-${x}`, .024, 1.1, .04, x, .64, -3.49, '#3f7b71', undefined, false);
-    // A high picture rail and pendant lamps make the background read as an interior.
-    this.box('wall-picture-rail', 140, .12, .15, 0, 4.28, -3.52, COLORS.woodLight, undefined, false);
-    for (const x of [-11, 2.6, 10.8]) {
-      this.box(`pendant-cord-${x}`, .025, 1.15, .025, x, 4.5, -.8, COLORS.dark, undefined, false);
-      this.cylinder(`pendant-shade-${x}`, .78, .28, x, 3.84, -.8, COLORS.gold, undefined, false);
-      this.cylinder(`pendant-glow-${x}`, .58, .035, x, 3.68, -.8, '#fff3bd', undefined, false).material = this.material('#fff3bd', true);
-    }
+    floor.metadata = { coffeeEnvironment: true, coffeeSurface: 'floor', coffeePattern: { axes: 'xz', pitch: ROOM.tilePitch, originX: -ROOM.width / 2, originZ: ROOM.rearZ } };
+    const wall = this.box('rear-wall', ROOM.width, 28, .22, 0, 14, ROOM.rearZ - .11, COLORS.cream, undefined, false);
+    wall.isPickable = true; wall.metadata = { coffeeEnvironment: true, coffeeSurface: 'rear-wall' };
+    // The wall panelling meets the floor and its seams are ink on the actual front plane,
+    // rather than separately lit rods suspended ahead of the wall.
+    const panels = this.box('rear-wainscot', ROOM.width, 1.22, .1, 0, .61, ROOM.rearZ + .05, COLORS.tealDark, undefined, false);
+    panels.material = this.surfacePattern('wall-panel-ink', COLORS.tealDark, '#205f5b', ROOM.width / ROOM.panelPitch, 1, false);
+    panels.metadata = { coffeeSurface: 'wall-panels', coffeePattern: { axes: 'xy', pitch: ROOM.panelPitch, originX: -ROOM.width / 2 } };
+    this.box('wall-baseboard', ROOM.width, .08, .06, 0, .04, ROOM.rearZ + .13, COLORS.tealDark, undefined, false);
+    this.box('wall-chair-rail', ROOM.width, .12, .17, 0, 1.28, ROOM.rearZ + .085, COLORS.woodLight, undefined, false);
+    // The high rail is above the vault's separate wall-mounted upgrade plaque.
+    this.box('wall-picture-rail', ROOM.width, .12, .15, 0, 4.82, ROOM.rearZ + .075, COLORS.woodLight, undefined, false);
     // The back-of-house route visually separates the cash manager from customer queues.
-    this.box('manager-route', 10.4, 0.018, 0.86, 4.4, 0.027, -1.7, '#d4d2b8', undefined, false);
-    for (let x = -.5; x < 9.5; x += 1.1) this.box(`route-dash-${x}`, 0.4, 0.022, 0.055, x, 0.041, -1.75, '#f7f1dc', undefined, false);
+    this.box('manager-route', 10.4, 0.018, 0.86, 4.4, 0.009, WORLD.backZ, '#d4d2b8', undefined, false);
+    for (let x = -.5; x < 9.5; x += 1.1) this.box(`route-dash-${x}`, 0.4, 0.008, 0.055, x, 0.022, WORLD.backZ - .05, '#f7f1dc', undefined, false);
     const brand = this.makeLabel('brand-sign', 3.9, 0.72, new Vector3(-6.45, 2.92, -3.42));
     this.paintLabel(brand, 'brand', (ctx, w, h) => {
       this.roundRect(ctx, 8, 8, w - 16, h - 16, 20, '#315d54');
@@ -570,21 +593,17 @@ export class CoffeeScene {
     this.makePlant('entrance-plant', -9.0, 2.55, 0.7);
     this.makeBench();
     for (const [x, shade] of [[0, COLORS.teal], [5, COLORS.rose]] as const) {
-      const rug = this.box(`queue-rug-${x}`, 2.33, 0.035, 5.55, x, 0.033, 3.76, '#fcf7e9', undefined, false);
+      const rug = this.box(`queue-rug-${x}`, 2.33, 0.035, 5.55, x, 0.0175, 3.76, '#fcf7e9', undefined, false);
       rug.receiveShadows = true;
-      const center = this.box(`queue-rug-color-${x}`, 2.08, 0.039, 5.3, x, 0.055, 3.76, shade, undefined, false);
+      const center = this.box(`queue-rug-color-${x}`, 2.08, 0.01, 5.3, x, 0.04, 3.76, shade, undefined, false);
       center.receiveShadows = true;
-      for (let z = 1.9; z < 6.4; z += 1.0) {
-        const ring = this.shape('ring', `queue-position-${x}-${z}`, new Vector3(0.73, 0.3, 0.73), new Vector3(x, 0.089, z), '#f1e4d1', undefined, false);
-        ring.material = this.material('#f1e4d1', false, 0.33);
-      }
-      const left = this.box(`queue-arrow-l-${x}`, 0.35, 0.02, 0.065, x - 0.12, 0.089, 6.11, '#fff7e9', undefined, false);
-      const right = this.box(`queue-arrow-r-${x}`, 0.35, 0.02, 0.065, x + 0.12, 0.089, 6.11, '#fff7e9', undefined, false);
+      const left = this.box(`queue-arrow-l-${x}`, 0.35, 0.02, 0.065, x - 0.12, 0.055, 6.11, '#fff7e9', undefined, false);
+      const right = this.box(`queue-arrow-r-${x}`, 0.35, 0.02, 0.065, x + 0.12, 0.055, 6.11, '#fff7e9', undefined, false);
       left.rotation.y = -Math.PI / 4;
       right.rotation.y = Math.PI / 4;
     }
     // A small welcome runner leads towards the two lanes without blocking the entrance.
-    this.box('welcome-runner', 4.0, 0.022, 1.1, -4.5, 0.025, 5.3, '#d5ccb4', undefined, false);
+    this.box('welcome-runner', 4.0, 0.022, 1.1, -4.5, 0.011, 5.3, '#d5ccb4', undefined, false);
   }
 
   private makeStation(id: CounterId, x: number, accent: string, deep: string, letter: string): Station {
@@ -859,12 +878,12 @@ export class CoffeeScene {
       this.text(ctx, '存款 / 升级', w / 2, h * .84, 48, '#405a45');
     });
     this.vaultLabel.mesh.metadata = { ...this.vaultLabel.mesh.metadata, coffeeManagerLevel: manager.level };
-    const x = managerPresentationX(manager);
+    const x = manager.x;
     const dx = x - person.previousX;
     const dz = manager.z - person.previousZ;
     const moving = manager.phase === 'moving' && dt > 0;
     // Core snapshots already move continuously. Avoid smoothing past a collection/deposit
-    // endpoint, so the actual handoff occurs directly below the relocated physical vault.
+    // endpoint. Core and room now share the same world coordinates at every handoff.
     person.root.position.x = x;
     person.root.position.z = manager.z;
     if (moving && Math.hypot(dx, dz) > 0.003) person.root.rotation.y = Math.atan2(dx, dz);
@@ -950,7 +969,7 @@ export class CoffeeScene {
   }
 
   private makeVault(): { lamp: Mesh; label: Label } {
-    const vault = new TransformNode('cash-vault', this.scene); vault.position.set(VISUAL_VAULT_X, 1.18, -3.09);
+    const vault = new TransformNode('cash-vault', this.scene); vault.position.set(WORLD.vaultX, 1.18, -3.09);
     this.box('vault-wall-bracket', 1.63, .12, .75, 0, .09, -.02, COLORS.woodDark, vault);
     this.box('vault-body', 1.48, 1.28, 0.88, 0, 0.77, 0, '#466660', vault);
     const door = this.box('vault-door', 1.26, 1.06, 0.08, 0, 0.79, 0.48, '#739286', vault);
@@ -959,7 +978,10 @@ export class CoffeeScene {
     const wheel = this.cylinder('vault-wheel', 0.34, 0.072, 0, 0.78, 0.594, '#d8be76', vault); wheel.rotation.x = Math.PI / 2;
     this.box('vault-wheel-spoke', 0.29, 0.065, 0.045, 0, 0.78, 0.642, '#775d35', vault, false);
     this.box('vault-slot', 0.54, 0.063, 0.07, 0, 1.13, 0.55, '#213e37', vault, false);
-    const label = this.makeLabel('vault-bank-label', 1.55, 1.04, new Vector3(0, 1.64, .55), vault, { type: 'vault' }, 512, 384);
+    // Mount this plaque on the wall ABOVE the whole vault silhouette. A front-door
+    // label would overlap its icon under the fixed oblique view even with a small Y gap.
+    const label = this.makeLabel('vault-bank-label', 1.55, 1.04, new Vector3(0, 2.79, -.46), vault, { type: 'vault' }, 512, 384);
+    label.mesh.metadata = { ...label.mesh.metadata, coffeeSurface: 'vault-upgrade-plaque' };
     this.registerAnchor('vault', label.mesh);
     const lamp = this.cylinder('vault-deposit-light', 0.12, 0.045, 0.48, 1.14, 0.56, '#92bfa3', vault, false); lamp.rotation.x = Math.PI / 2;
     return { lamp, label };

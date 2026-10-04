@@ -10,11 +10,242 @@ registerHooks({ resolve(specifier, context, nextResolve) {
     throw error;
   }
 } });
-const { createEngine, createInitialState, recipes, MAX_LEVEL, INITIAL_WALLET, counterBrewSeconds, counterPrice } = await import('../src/slice/core/engine.ts');
+const { createEngine, createInitialState, recipes, MAX_LEVEL, INITIAL_WALLET, counterBrewSeconds, counterPrice, managerCapacity, managerSpeed, STEP_SECONDS, WORLD, MANAGER_ROUTE_VERSION } = await import('../src/slice/core/engine.ts');
 const { LocalSaveRepository, SAVE_KEY, validateState, createMemoryStorage } = await import('../src/slice/core/persistence.ts');
 const { InMemorySaveRepository, GuestAuthProvider } = await import('../src/slice/core/sync.ts');
 
 function assets(state) { return state.wallet + state.spend + state.manager.carrying + state.counters.reduce((sum, counter) => sum + counter.pendingCash, 0); }
+function withPendingCash(a = 1200, b = 1200) {
+  const state = createInitialState();
+  state.counters[0].pendingCash = a; state.counters[1].pendingCash = b;
+  state.totalEarned = a + b;
+  return state;
+}
+function cashEvents(events) { return events.filter(event => event.type === 'collected' || event.type === 'deposited'); }
+function until(engine, predicate, maxTicks = 1000) {
+  const events = [];
+  for (let tick = 0; tick < maxTicks; tick++) {
+    if (predicate(engine.state, events)) return events;
+    engine.advance(STEP_SECONDS); events.push(...engine.drainEvents());
+  }
+  assert.fail('Deterministic fixture did not reach its expected manager phase.');
+}
+function legacyState(manager = {}, a = 900, b = 900) {
+  const state = withPendingCash(a, b);
+  delete state.managerRouteVersion;
+  state.manager = { ...state.manager, x: -8, target: 0, ...manager };
+  state.totalEarned += state.manager.carrying;
+  return state;
+}
+function rawEnvelope(state, savedAt = 1000, recordChangeTag = 'legacy-route-source') {
+  return JSON.stringify({ schemaVersion: 1, savedAt, recordChangeTag, state });
+}
+
+test('TC-3D-001 real manager route collects nearest B, farther A, then deposits at the shared vault', () => {
+  const initial = withPendingCash();
+  assert.equal(MANAGER_ROUTE_VERSION, 2);
+  assert.equal(WORLD.vaultX, 8.8);
+  assert.deepEqual(initial.counters.map(counter => counter.x), [0, 5]);
+  assert.ok(Math.abs(WORLD.vaultX - initial.counters[1].x) < Math.abs(WORLD.vaultX - initial.counters[0].x));
+  assert.equal(initial.manager.x, WORLD.vaultX); assert.equal(initial.manager.target, 1);
+  const engine = createEngine(initial), stops = [], events = [];
+  let previousPhase = 'moving';
+  for (let i = 0; i < 500 && cashEvents(events).length < 4; i++) {
+    const before = structuredClone(engine.state.manager);
+    engine.advance(STEP_SECONDS); events.push(...engine.drainEvents());
+    const manager = engine.state.manager;
+    assert.equal(assets(engine.state), INITIAL_WALLET + engine.state.totalEarned);
+    assert.equal(validateState(engine.snapshot()).ok, true);
+    assert.ok(manager.x >= 0 && manager.x <= WORLD.vaultX);
+    assert.ok(Math.abs(manager.x - before.x) <= managerSpeed(manager.level) * STEP_SECONDS + 1e-9);
+    if (manager.phase !== previousPhase && manager.phase !== 'moving') stops.push([manager.target, manager.x, manager.phase]);
+    previousPhase = manager.phase;
+    if (!cashEvents(events).some(event => event.type === 'deposited')) assert.equal(engine.state.wallet, INITIAL_WALLET);
+  }
+  assert.deepEqual(stops.slice(0, 4), [[1, 5, 'collecting'], [0, 0, 'collecting'], [2, 8.8, 'depositing'], [1, 5, 'collecting']]);
+  assert.deepEqual(cashEvents(events).slice(0, 4).map(({ type, counterId, amount }) => [type, counterId ?? null, amount]), [
+    ['collected', 'counter-b', 600], ['collected', 'counter-a', 600], ['deposited', null, 1200], ['collected', 'counter-b', 600]
+  ]);
+});
+
+test('TC-3D-001 B-first collection preserves per-counter half-bag limits at every manager level', () => {
+  for (const level of [1, 7, MAX_LEVEL]) {
+    const initial = withPendingCash(20000, 20000); initial.manager.level = level;
+    const engine = createEngine(initial);
+    const events = until(engine, (_, events) => cashEvents(events).some(event => event.type === 'deposited'));
+    const limit = Math.floor(managerCapacity(level) / 2);
+    assert.deepEqual(cashEvents(events).map(({ type, counterId, amount }) => [type, counterId ?? null, amount]), [
+      ['collected', 'counter-b', limit], ['collected', 'counter-a', limit], ['deposited', null, limit * 2]
+    ]);
+    assert.equal(managerSpeed(level), 2.6 + .18 * (level - 1));
+    assert.equal(managerCapacity(level), 1200 + 180 * (level - 1));
+    assert.equal(assets(engine.state), INITIAL_WALLET + engine.state.totalEarned);
+  }
+});
+
+test('TC-3D-003 real route keeps identical state and cash-event order under split advance', () => {
+  const whole = createEngine(withPendingCash(30000, 30000)), split = createEngine(withPendingCash(30000, 30000));
+  whole.advance(72.137);
+  for (let i = 0; i < 720; i++) split.advance(.1);
+  split.advance(.137);
+  assert.deepEqual(split.snapshot(), whole.snapshot());
+  assert.deepEqual(split.drainEvents(), whole.drainEvents());
+});
+
+test('TC-3D-004 route resumes exactly after saving each moving, collecting and depositing leg', () => {
+  const checkpoints = [.137, 1.713, 2.137, 4.113, 5.137, 8.013];
+  for (const checkpoint of checkpoints) {
+    const uninterrupted = createEngine(withPendingCash(30000, 30000)); uninterrupted.advance(checkpoint); uninterrupted.drainEvents();
+    const before = uninterrupted.snapshot(), storage = createMemoryStorage(), repo = new LocalSaveRepository(storage);
+    assert.equal(repo.save(before, 1000).ok, true);
+    const loaded = new LocalSaveRepository(storage).load(1000);
+    assert.equal(loaded.status, 'loaded'); assert.deepEqual(loaded.state, before);
+    assert.equal(JSON.parse(storage.getItem(SAVE_KEY)).state.managerRouteVersion, 2);
+    const restored = createEngine(loaded.state);
+    uninterrupted.advance(26.413);
+    for (let i = 0; i < 264; i++) restored.advance(.1);
+    restored.advance(.013);
+    assert.deepEqual(restored.snapshot(), uninterrupted.snapshot(), `resume at ${checkpoint}s`);
+    assert.deepEqual(restored.drainEvents(), uninterrupted.drainEvents(), `events at ${checkpoint}s`);
+  }
+});
+
+test('TC-3D-004 explicit legacy migration preserves in-flight stops, timers, assets and once-only versioning', () => {
+  const fixtures = [
+    { manager: { phase: 'moving', target: 0, x: -4, timer: 0 }, x: 4.4, collected: ['counter-a', 'counter-b'] },
+    { manager: { phase: 'collecting', target: 0, x: 0, timer: .2 }, x: 0, collected: ['counter-a', 'counter-b'] },
+    { manager: { phase: 'moving', target: 1, x: 2.5, timer: 0, carrying: 600 }, x: 2.5, collected: ['counter-b'] },
+    { manager: { phase: 'collecting', target: 1, x: 5, timer: .2, carrying: 600 }, x: 5, collected: ['counter-b'] },
+    { manager: { phase: 'moving', target: 2, x: -1.5, timer: 0, carrying: 1200 }, x: 6.9, collected: [] },
+    { manager: { phase: 'depositing', target: 2, x: -8, timer: .25, carrying: 1200 }, x: 8.8, collected: [] }
+  ];
+  for (const fixture of fixtures) {
+    const source = legacyState(fixture.manager);
+    source.stepCarry = .027; source.eventSequence = 91; source.lastOfflineClaimId = 'already-claimed'; source.offlineClaimIds = ['older-claim', 'already-claimed'];
+    const original = structuredClone(source), checked = validateState(source);
+    assert.equal(checked.ok, true);
+    assert.deepEqual(source, original, 'validator never mutates archive input');
+    const migrated = checked.state;
+    assert.equal(migrated.managerRouteVersion, 2);
+    assert.ok(Math.abs(migrated.manager.x - fixture.x) < 1e-9);
+    assert.equal(migrated.manager.target, source.manager.target); assert.equal(migrated.manager.phase, source.manager.phase);
+    assert.equal(migrated.manager.timer, source.manager.timer); assert.equal(migrated.manager.carrying, source.manager.carrying);
+    for (const key of ['wallet', 'totalEarned', 'spend', 'elapsed', 'stepCarry', 'eventSequence', 'lastOfflineClaimId', 'offlineClaimIds', 'counters', 'customers']) assert.deepEqual(migrated[key], source[key], key);
+    assert.equal(validateState(migrated).ok, true);
+    assert.deepEqual(validateState(migrated).state, migrated, 'already-v2 archives are never mapped again');
+    const engine = createEngine(source); assert.deepEqual(engine.snapshot(), migrated);
+    const firstSweep = until(engine, (_, events) => cashEvents(events).some(event => event.type === 'deposited'));
+    assert.deepEqual(cashEvents(firstSweep).filter(event => event.type === 'collected').map(event => event.counterId), fixture.collected);
+    assert.equal(cashEvents(firstSweep).filter(event => event.type === 'deposited').length, 1);
+    assert.equal(engine.state.manager.finishLegacySweep, undefined); assert.equal(engine.state.manager.target, 1);
+    assert.equal(assets(engine.state), INITIAL_WALLET + engine.state.totalEarned);
+    const nextSweep = until(engine, (_, events) => cashEvents(events).some(event => event.type === 'collected'));
+    assert.equal(cashEvents(nextSweep)[0].counterId, 'counter-b', 'every subsequent sweep starts nearest the vault');
+    const frozen = engine.snapshot(); assert.equal(engine.applyOffline(60, 'already-claimed').accepted, false); assert.deepEqual(engine.snapshot(), frozen);
+  }
+  for (const explicitVersion of [undefined, 1]) {
+    const source = legacyState(); if (explicitVersion) source.managerRouteVersion = explicitVersion;
+    const migrated = validateState(source).state;
+    assert.equal(migrated.manager.x, 8.8); assert.equal(migrated.manager.target, 1); assert.equal(migrated.manager.finishLegacySweep, undefined);
+  }
+});
+
+test('TC-3D-004 legacy migration leaves active customers and frozen brew snapshots untouched', () => {
+  const live = createEngine(); live.advance(9.027);
+  const source = live.snapshot(); delete source.managerRouteVersion;
+  source.manager = { ...source.manager, x: -3, target: 0, phase: 'moving', timer: 0 };
+  assert.ok(source.customers.length && source.counters.some(counter => counter.brew));
+  const checked = validateState(source); assert.equal(checked.ok, true);
+  assert.deepEqual(checked.state.customers, source.customers); assert.deepEqual(checked.state.counters, source.counters);
+  assert.equal(checked.state.arrivalTimer, source.arrivalTimer); assert.equal(checked.state.nextCustomerId, source.nextCustomerId);
+  assert.equal(checked.state.stepCarry, source.stepCarry); assert.equal(checked.state.eventSequence, source.eventSequence);
+});
+
+test('TC-3D-004 a migrated sweep resumes without repeating stops after every in-flight save/reload', () => {
+  const checkpoints = [
+    [.137, 'moving', 0], [1.913, 'collecting', 0], [2.337, 'moving', 1],
+    [4.313, 'collecting', 1], [5.137, 'moving', 2], [6.313, 'depositing', 2]
+  ];
+  for (const [checkpoint, phase, target] of checkpoints) {
+    const original = legacyState({ x: -4 }, 5000, 5000);
+    const uninterrupted = createEngine(original); uninterrupted.advance(checkpoint); uninterrupted.drainEvents();
+    const before = uninterrupted.snapshot();
+    assert.equal(before.manager.finishLegacySweep, true); assert.equal(before.manager.phase, phase); assert.equal(before.manager.target, target);
+    const storage = createMemoryStorage(); storage.setItem(SAVE_KEY, rawEnvelope(original));
+    const repo = new LocalSaveRepository(storage); repo.load(1000); assert.equal(repo.save(before, 1000).ok, true);
+    const loaded = new LocalSaveRepository(storage).load(1000);
+    assert.deepEqual(loaded.state, before, 'version2 continuation must not be remapped or reset');
+    const restored = createEngine(loaded.state);
+    uninterrupted.advance(30.413); restored.advance(30.413);
+    assert.deepEqual(restored.snapshot(), uninterrupted.snapshot()); assert.deepEqual(restored.drainEvents(), uninterrupted.drainEvents());
+    assert.equal(restored.state.manager.finishLegacySweep, undefined);
+    assert.equal(assets(restored.state), INITIAL_WALLET + restored.state.totalEarned);
+  }
+});
+
+test('TC-3D-004 new route validator rejects off-stop actions, invalid segments and migration/version misuse', () => {
+  const mutations = [
+    s => s.managerRouteVersion = 0, s => s.managerRouteVersion = '2', s => s.managerRouteVersion = 3,
+    s => s.manager.finishLegacySweep = false, s => s.manager.finishLegacySweep = 'true',
+    s => { s.manager.phase = 'collecting'; s.manager.x = 0; },
+    s => { s.manager.phase = 'depositing'; s.manager.target = 2; s.manager.x = 0; },
+    s => s.manager.x = 4, s => { s.manager.target = 0; s.manager.x = 6; },
+    s => s.manager.timer = .1,
+    s => { s.manager.finishLegacySweep = true; s.manager.target = 1; s.manager.x = 6; },
+    s => { s.manager.finishLegacySweep = true; s.manager.target = 2; s.manager.x = 4; }
+  ];
+  for (const mutate of mutations) { const state = createInitialState(); mutate(state); assert.equal(validateState(state).ok, false); }
+  const invalidLegacyMarker = legacyState(); invalidLegacyMarker.manager.finishLegacySweep = true;
+  assert.equal(validateState(invalidLegacyMarker).ok, false);
+  // Previous validation accepted these unreachable coordinates/timers. Migration
+  // must return a physically safe v2 state that remains valid on its next save.
+  for (const manager of [{ phase: 'collecting', target: 1, x: -3, timer: .6 }, { phase: 'depositing', target: 2, x: 1, timer: .6 }, { phase: 'moving', target: 2, x: 0, timer: .2 }]) {
+    const source = legacyState(manager), checked = validateState(source);
+    assert.equal(checked.ok, true); assert.equal(validateState(checked.state).ok, true); assert.equal(checked.state.manager.timer, manager.timer);
+  }
+  for (const version of [3, 99]) {
+    const state = createInitialState(); state.managerRouteVersion = version;
+    const storage = createMemoryStorage(), raw = rawEnvelope(state); storage.setItem(SAVE_KEY, raw);
+    const repo = new LocalSaveRepository(storage); const load = repo.load(121000);
+    assert.equal(load.status, 'future'); assert.equal(load.protectedRaw, true); assert.equal(repo.save(load.state, 121000).ok, false); assert.equal(storage.getItem(SAVE_KEY), raw);
+  }
+  for (const mutate of [s => s.managerRouteVersion = '2', s => s.manager.finishLegacySweep = false, s => { s.manager.phase = 'depositing'; s.manager.target = 2; s.manager.x = 0; }]) {
+    const state = createInitialState(); mutate(state);
+    const storage = createMemoryStorage(), raw = rawEnvelope(state); storage.setItem(SAVE_KEY, raw);
+    const repo = new LocalSaveRepository(storage); const load = repo.load(121000);
+    assert.equal(load.status, 'corrupt'); assert.equal(load.protectedRaw, true); assert.equal(repo.save(load.state, 121000).ok, false); assert.equal(storage.getItem(SAVE_KEY), raw);
+  }
+});
+
+test('TC-3D-004 authentic legacy archives migrate offline only once and retain retries/CAS protection', () => {
+  const source = legacyState({ target: 1, x: 3, carrying: 600 }); source.stepCarry = .027; source.eventSequence = 42;
+  const raw = rawEnvelope(source), memory = createMemoryStorage(); memory.setItem(SAVE_KEY, raw);
+  const immediate = new LocalSaveRepository(memory).load(1000);
+  assert.equal(immediate.status, 'loaded'); assert.equal(immediate.state.managerRouteVersion, 2); assert.equal(memory.getItem(SAVE_KEY), raw);
+  const expected = createEngine(immediate.state); expected.advance(60);
+  const unavailable = { ...memory, setItem() { throw Error('quota'); } };
+  const failed = new LocalSaveRepository(unavailable).load(121000);
+  assert.equal(failed.status, 'offline-save-failed'); assert.equal(failed.offline.accepted, false); assert.deepEqual(failed.state, immediate.state); assert.equal(memory.getItem(SAVE_KEY), raw);
+  const recovered = new LocalSaveRepository(memory).load(121000);
+  assert.equal(recovered.offline.accepted, true); assert.equal(recovered.offline.seconds, 120);
+  const expectedSnapshot = expected.snapshot();
+  for (const key of ['lastOfflineClaimId', 'offlineClaimIds']) expectedSnapshot[key] = recovered.state[key];
+  assert.deepEqual(recovered.state, expectedSnapshot);
+  assert.deepEqual(new LocalSaveRepository(memory).load(121000).state, recovered.state);
+  assert.equal(new LocalSaveRepository(memory).load(121000).offline?.accepted ?? false, false);
+  const a = new LocalSaveRepository(memory), b = new LocalSaveRepository(memory); const sa = a.load(121000).state, sb = b.load(121000).state;
+  assert.equal(a.save(sa, 122000).ok, true); const won = memory.getItem(SAVE_KEY);
+  assert.equal(b.save(sb, 122000).status, 'conflict'); assert.equal(memory.getItem(SAVE_KEY), won);
+  const racedMemory = createMemoryStorage(); racedMemory.setItem(SAVE_KEY, raw);
+  let reads = 0; const winningRaw = rawEnvelope(createInitialState(), 121000, 'other-window-won');
+  const racingStorage = { ...racedMemory, getItem(key) { if (++reads === 2) racedMemory.setItem(SAVE_KEY, winningRaw); return racedMemory.getItem(key); } };
+  const conflicted = new LocalSaveRepository(racingStorage).load(121000);
+  assert.equal(conflicted.status, 'conflict'); assert.equal(conflicted.offline.accepted, false); assert.deepEqual(conflicted.state, immediate.state); assert.equal(racedMemory.getItem(SAVE_KEY), winningRaw);
+  const paused = legacyState({ phase: 'depositing', target: 2, x: -8, carrying: 1200, timer: .25 }); paused.paused = true;
+  const pausedMemory = createMemoryStorage(); pausedMemory.setItem(SAVE_KEY, rawEnvelope(paused));
+  const pausedLoad = new LocalSaveRepository(pausedMemory).load(121000);
+  assert.equal(pausedLoad.offline.amount, 0); assert.equal(pausedLoad.state.elapsed, 0); assert.equal(pausedLoad.state.manager.timer, .25); assert.equal(pausedLoad.state.manager.carrying, 1200);
+});
 
 test('TC-3D-001 cash stays conserved through visible customer and manager phases', () => {
   const engine = createEngine();
@@ -219,7 +450,10 @@ test('TC-3D-001 capped production exposes a real transport bottleneck removable 
   const faster = createEngine(fasterInitial); slow.advance(1200); faster.advance(1200);
   assert.equal(slow.state.totalEarned, faster.state.totalEarned);
   assert.ok(faster.state.wallet > slow.state.wallet);
-  assert.ok(slow.state.counters.reduce((sum, counter) => sum + counter.pendingCash, 0) > slow.state.wallet - INITIAL_WALLET);
+  const slowPending = slow.state.counters.reduce((sum, counter) => sum + counter.pendingCash, 0);
+  const fasterPending = faster.state.counters.reduce((sum, counter) => sum + counter.pendingCash, 0);
+  assert.ok(slowPending > managerCapacity(MAX_LEVEL) * 10, 'a substantial capped-production backlog remains under the shorter physical route');
+  assert.ok(fasterPending < slowPending / 10, 'manager upgrades remove the transport bottleneck without changing production');
   assert.equal(assets(slow.state), INITIAL_WALLET + slow.state.totalEarned);
   assert.equal(assets(faster.state), INITIAL_WALLET + faster.state.totalEarned);
 });

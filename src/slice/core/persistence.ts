@@ -1,4 +1,4 @@
-import { createEngine, createInitialState, INITIAL_WALLET, INVITE_COOLDOWN_SECONDS, MAX_LEVEL, QUEUE_CAPACITY, STEP_SECONDS, WORLD } from './engine';
+import { createEngine, createInitialState, INITIAL_WALLET, INVITE_COOLDOWN_SECONDS, MANAGER_ROUTE_VERSION, MAX_LEVEL, migrateManagerRoute, QUEUE_CAPACITY, STEP_SECONDS, WORLD } from './engine';
 import type { SliceState } from './types';
 
 export const SAVE_KEY = 'mellow-bean-3d-v1';
@@ -21,6 +21,8 @@ function tag(): string { return globalThis.crypto?.randomUUID?.() ?? `local-${Da
 export function validateState(value: unknown): { ok: true; state: SliceState } | { ok: false; message: string } {
   const fail = (message: string): { ok: false; message: string } => ({ ok: false, message });
   if (!object(value) || value.schemaVersion !== 1 || value.economyVersion !== 1) return fail('存档版本不受支持。');
+  if (value.managerRouteVersion !== undefined && value.managerRouteVersion !== 1 && value.managerRouteVersion !== MANAGER_ROUTE_VERSION) return fail('经理路线版本不受支持。');
+  const legacyRoute = value.managerRouteVersion === undefined || value.managerRouteVersion === 1;
   for (const key of ['wallet', 'totalEarned', 'totalServed', 'spend', 'nextCustomerId']) if (!integer(value[key], key === 'nextCustomerId' ? 1 : 0)) return fail(`存档数值 ${key} 无效。`);
   if (!number(value.elapsed, 0, 4e9) || Math.abs(value.elapsed / STEP_SECONDS - Math.round(value.elapsed / STEP_SECONDS)) > .0001) return fail('模拟时钟无效。');
   if (!number(value.arrivalTimer, 0, 3) || !number(value.inviteCooldown, 0, INVITE_COOLDOWN_SECONDS) || typeof value.paused !== 'boolean') return fail('客流或暂停状态无效。');
@@ -32,8 +34,19 @@ export function validateState(value: unknown): { ok: true; state: SliceState } |
   if (!Array.isArray(value.customers) || value.customers.length > 32) return fail('顾客数量无效。');
   if (!object(value.manager)) return fail('经理状态缺失。');
   const manager = value.manager;
-  if (!number(manager.x, WORLD.vaultX, 5) || manager.z !== WORLD.backZ || !integer(manager.carrying) || !integer(manager.level, 1, MAX_LEVEL) || !integer(manager.target, 0, 2) || !number(manager.timer, 0, .6) || !['moving', 'collecting', 'depositing'].includes(String(manager.phase))) return fail('经理坐标、等级或动作无效。');
+  if (!number(manager.x, legacyRoute ? -8 : 0, legacyRoute ? 5 : WORLD.vaultX) || manager.z !== WORLD.backZ || !integer(manager.carrying) || !integer(manager.level, 1, MAX_LEVEL) || !integer(manager.target, 0, 2) || !number(manager.timer, 0, .6) || !['moving', 'collecting', 'depositing'].includes(String(manager.phase))) return fail('经理坐标、等级或动作无效。');
+  if (manager.finishLegacySweep !== undefined && (legacyRoute || manager.finishLegacySweep !== true)) return fail('经理迁移路线标识无效。');
   if (manager.phase === 'collecting' && manager.target === 2 || manager.phase === 'depositing' && manager.target !== 2) return fail('经理路线关系无效。');
+  if (!legacyRoute) {
+    const targetX = manager.target === 2 ? WORLD.vaultX : manager.target === 0 ? 0 : 5;
+    if (manager.phase !== 'moving' && manager.x !== targetX) return fail('经理未抵达收款或存款位置。');
+    if (manager.phase === 'moving') {
+      const legacySweep = manager.finishLegacySweep === true;
+      const minX = (manager.target === 1 && !legacySweep) || (manager.target === 2 && legacySweep) ? 5 : 0;
+      const maxX = (manager.target === 0 && !legacySweep) || (manager.target === 1 && legacySweep) ? 5 : WORLD.vaultX;
+      if (!number(manager.x, minX, maxX) || !legacySweep && manager.timer !== 0) return fail('经理移动路线或计时无效。');
+    }
+  }
   const ids = new Set<number>();
   for (const entry of value.customers) {
     if (!object(entry) || !integer(entry.id, 1) || ids.has(entry.id) || !counterId(entry.counterId) || !number(entry.x, -9, 7) || !number(entry.z, 1.3, 7) || !['entering', 'queue', 'serving', 'receiving', 'leaving'].includes(String(entry.phase)) || !number(entry.timer, 0, 2) || typeof entry.hasCup !== 'boolean' || !integer(entry.skin, 0, 5)) return fail('顾客状态无效。');
@@ -63,13 +76,14 @@ export function validateState(value: unknown): { ok: true; state: SliceState } |
   if ((value.wallet as number) + (value.spend as number) + manager.carrying + pending !== INITIAL_WALLET + (value.totalEarned as number)) return fail('资金账本不守恒。');
   const state = clone(value) as unknown as SliceState;
   state.stepCarry ??= 0; state.eventSequence ??= 0; state.offlineClaimIds ??= state.lastOfflineClaimId ? [state.lastOfflineClaimId] : [];
+  migrateManagerRoute(state);
   return { ok: true, state };
 }
 
 function decode(raw: string): { ok: true; envelope: Envelope } | { ok: false; status: 'corrupt' | 'future'; message: string } {
   let value: unknown;
   try { value = JSON.parse(raw); } catch { return { ok: false, status: 'corrupt', message: '存档无法读取，原始内容已保留。请先备份或明确重置。' }; }
-  if (object(value) && (number(value.schemaVersion, 2) || object(value.state) && (number(value.state.schemaVersion, 2) || number(value.state.economyVersion, 2)))) return { ok: false, status: 'future', message: '这是较新版本的存档，当前版本不会覆盖它。请使用兼容的新版本。' };
+  if (object(value) && (number(value.schemaVersion, 2) || object(value.state) && (number(value.state.schemaVersion, 2) || number(value.state.economyVersion, 2) || number(value.state.managerRouteVersion, MANAGER_ROUTE_VERSION + 1)))) return { ok: false, status: 'future', message: '这是较新版本的存档，当前版本不会覆盖它。请使用兼容的新版本。' };
   if (!object(value) || value.schemaVersion !== 1 || !number(value.savedAt, 0, 8.64e15) || typeof value.recordChangeTag !== 'string' || !value.recordChangeTag || value.recordChangeTag.length > 256) return { ok: false, status: 'corrupt', message: '存档格式或结算时间无效，原始内容已保留。' };
   const checked = validateState(value.state);
   if (!checked.ok) return { ok: false, status: 'corrupt', message: `${checked.message} 原始内容已保留。` };

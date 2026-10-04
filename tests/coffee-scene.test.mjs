@@ -11,8 +11,8 @@ registerHooks({ resolve(specifier, context, nextResolve) {
     throw error;
   }
 } });
-const { CoffeeScene, managerPresentationX } = await import('../src/slice/render/CoffeeScene.ts');
-const { createEngine, createInitialState } = await import('../src/slice/core/engine.ts');
+const { CoffeeScene } = await import('../src/slice/render/CoffeeScene.ts');
+const { createEngine, createInitialState, WORLD, managerSpeed } = await import('../src/slice/core/engine.ts');
 const { validateState } = await import('../src/slice/core/persistence.ts');
 
 // These are CPU-side scene/state/input checks, not browser or pixel-render acceptance.
@@ -68,7 +68,7 @@ test('TC-3D-006 original reusable geometry presents snapshots without changing b
     const scene = f.renderer.scene;
     const initialMeshes = scene.meshes.length;
     const initialGeometries = scene.geometries.length;
-    assert.ok(initialMeshes > 350, 'complete original room geometry exists');
+    assert.ok(initialMeshes > 200, 'original furniture, machines, people and room geometry remain; surface patterns no longer need hundreds of duplicate tile meshes');
     assert.ok(initialGeometries < 25, 'hundreds of parts reuse a few geometries');
     assert.equal(scene.activeCamera.name, 'fixed-isometric-camera');
     const engine = createEngine();
@@ -546,7 +546,7 @@ test('TC-3D-008 world-oriented trolley clears wall, counters and baristas throug
     // All visible opaque room solids, including every physical label mount, wall panel,
     // wainscot rail, station, barista and plant. Only the trolley and its handler are excluded.
     const obstacles = scene.meshes.filter(mesh => mesh.isVisible && mesh.isEnabled() && mesh.material?.alpha === 1 && !parts.includes(mesh) && !managerParts.includes(mesh));
-    for (const [target, start, end] of [[0, -8, 0], [1, 0, 5], [2, 5, -8]]) {
+    for (const [target, start, end] of [[1, WORLD.vaultX, 5], [0, 5, 0], [2, 0, WORLD.vaultX]]) {
       const count = Math.ceil(Math.abs(end - start) * 2);
       for (let step = 0; step <= count; step++) {
         const x = start + (end - start) * step / count;
@@ -725,47 +725,51 @@ test('TC-3D-009 pending money tag shares the banknote cluster and cannot become 
   } finally { f.dispose(); }
 });
 
-test('TC-3D-009 render-only manager route is continuous at all stops with unchanged cash and logical timing', () => {
+test('TC-3D-010 rendered manager follows direct snapshots through B → A → vault and the deposit', () => {
   const f = fixture();
   try {
     const state = createInitialState();
     const scene = f.renderer.scene;
     const vaultX = scene.getTransformNodeByName('cash-vault').position.x;
     const manager = scene.getTransformNodeByName('manager');
-    for (const [target, logicalX, expectedX, phase] of [
-      [0, -8, vaultX, 'moving'], [0, -4, vaultX / 2, 'moving'], [0, 0, 0, 'collecting'],
-      [1, 0, 0, 'moving'], [1, 2.5, 2.5, 'moving'], [1, 5, 5, 'collecting'],
-      [2, 5, 5, 'moving'], [2, -1.5, (5 + vaultX) / 2, 'moving'], [2, -8, vaultX, 'depositing'],
-      [0, -8, vaultX, 'moving'],
+    assert.equal(vaultX, WORLD.vaultX);
+    assert.equal(state.manager.x, vaultX);
+    assert.equal(state.manager.target, 1, 'fresh departure targets the counter nearest the vault');
+    for (const [target, x, phase] of [
+      [1, vaultX, 'moving'], [1, (5 + vaultX) / 2, 'moving'], [1, 5, 'collecting'],
+      [0, 5, 'moving'], [0, 2.5, 'moving'], [0, 0, 'collecting'],
+      [2, 0, 'moving'], [2, vaultX / 2, 'moving'], [2, vaultX, 'depositing'],
+      [1, vaultX, 'moving'],
     ]) {
-      Object.assign(state.manager, { target, x: logicalX, phase });
-      state.manager.carrying = 700;
+      Object.assign(state.manager, { target, x, phase, carrying: 700 });
       const before = JSON.stringify(state);
       f.renderer.update(state, .1);
-      assert.equal(JSON.stringify(state), before, 'mapping never writes snapshot coordinates, phase, money or timers');
-      assert.ok(Math.abs(managerPresentationX(state.manager) - expectedX) < 1e-9);
-      assert.ok(Math.abs(manager.position.x - expectedX) < 1e-9, 'no interpolation lag at the actual handoff');
-      assert.equal(manager.position.z, -1.7);
+      assert.equal(JSON.stringify(state), before, 'renderer does not modify snapshot coordinates, phase, money or timers');
+      assert.equal(manager.position.x, x, 'no mapping or interpolation changes authoritative X');
+      assert.equal(manager.position.z, WORLD.backZ);
+      if (phase === 'collecting') {
+        const counter = state.counters[target];
+        assert.equal(manager.position.x, scene.getTransformNodeByName(`${counter.id}-station`).position.x, 'semantic target and visible counter agree');
+      }
       assert.equal(scene.getTransformNodeByName('cart-cash-0').isEnabled(), true);
     }
-    // The original core still deposits at logical -8 after exactly 0.6 simulated seconds.
-    Object.assign(state.manager, { target: 2, x: -8, phase: 'depositing', timer: 0, carrying: 700 });
+    Object.assign(state.manager, { target: 2, x: vaultX, phase: 'depositing', timer: 0, carrying: 700 });
     state.totalEarned = 700;
-    assert.equal(validateState(state).ok, true, 'authoritative timing starts from a conserved ledger');
+    assert.equal(validateState(state).ok, true);
     const engine = createEngine(state);
     engine.advance(.55);
     f.renderer.update(engine.state, 0);
     assert.equal(engine.state.wallet, 1200);
     assert.equal(engine.state.manager.carrying, 700);
-    assert.equal(manager.position.x, vaultX, 'pending deposit is underneath the moved physical vault');
+    assert.equal(manager.position.x, vaultX, 'pending deposit is actually underneath the physical vault');
     engine.advance(.05);
     f.renderer.update(engine.state, 0);
     assert.equal(engine.state.wallet, 1900);
-    assert.equal(validateState(engine.state).ok, true, 'deposit preserves the full persisted ledger');
-    assert.equal(engine.state.manager.x, -8, 'authoritative economy coordinates remain original');
-    assert.equal(engine.state.manager.target, 0);
+    assert.equal(validateState(engine.state).ok, true, 'deposit preserves the persisted ledger');
+    assert.equal(engine.state.manager.x, vaultX);
+    assert.equal(engine.state.manager.target, 1, 'the next sweep starts toward B');
     assert.equal(engine.state.manager.carrying, 0);
-    assert.equal(manager.position.x, vaultX, 'new outgoing segment starts at the same visual endpoint');
+    assert.equal(manager.position.x, vaultX, 'new outgoing segment starts at the same physical endpoint');
     assert.equal(scene.getTransformNodeByName('cart-cash-0').isEnabled(), false);
     assert.deepEqual(engine.drainEvents().map(event => [event.type, event.amount]), [['deposited', 700]]);
   } finally { f.dispose(); }
@@ -788,5 +792,194 @@ test('TC-3D-009 receipt ink fits long exact amounts without cropping or abbrevia
     assert.equal(drawn.length, 1);
     assert.equal(drawn[0].value, value, 'full integer-cent amount stays exact');
     assert.ok(drawn[0].width <= 484 + 1e-9, 'the measured glyph line fits the paper interior');
+  } finally { f.dispose(); }
+});
+
+
+function bounds(mesh) {
+  mesh.computeWorldMatrix(true);
+  return mesh.getBoundingInfo().boundingBox;
+}
+function projectedBounds(f, meshes) {
+  const scene = f.renderer.scene;
+  const scale = f.engine.getHardwareScalingLevel();
+  const points = meshes.flatMap(mesh => bounds(mesh).vectorsWorld.map(world => {
+    const p = Vector3.Project(world, Matrix.Identity(), scene.getTransformMatrix(), scene.activeCamera.viewport.toGlobal(f.engine.getRenderWidth(), f.engine.getRenderHeight()));
+    return { x: p.x * scale, y: p.y * scale };
+  }));
+  return { left: Math.min(...points.map(p => p.x)), right: Math.max(...points.map(p => p.x)), top: Math.min(...points.map(p => p.y)), bottom: Math.max(...points.map(p => p.y)) };
+}
+
+// Evaluate the actual box UV basis rather than trusting descriptive metadata. The repeating
+// ink can only follow the room axes if the face's UV edges map to those physical axes.
+function faceUVBasis(mesh, axis) {
+  const positions = mesh.getVerticesData('position');
+  const normals = mesh.getVerticesData('normal');
+  const uv = mesh.getVerticesData('uv');
+  mesh.computeWorldMatrix(true);
+  const vertices = [];
+  for (let i = 0; i < positions.length / 3; i++) {
+    if (normals[i * 3 + axis] < .99) continue;
+    vertices.push({ u: uv[i * 2], v: uv[i * 2 + 1], world: Vector3.TransformCoordinates(Vector3.FromArray(positions, i * 3), mesh.getWorldMatrix()) });
+  }
+  const origin = vertices.find(p => p.u === 0 && p.v === 0);
+  return {
+    u: vertices.find(p => p.u === 1 && p.v === 0).world.subtract(origin.world),
+    v: vertices.find(p => p.u === 0 && p.v === 1).world.subtract(origin.world),
+  };
+}
+
+test('TC-3D-010 continuous floor and wall carry aligned matte patterns with joined room surfaces', () => {
+  const f = fixture();
+  try {
+    const scene = f.renderer.scene;
+    const floor = scene.getMeshByName('continuous-shop-floor');
+    const wall = scene.getMeshByName('rear-wall');
+    const panels = scene.getMeshByName('rear-wainscot');
+    const rail = scene.getMeshByName('wall-chair-rail');
+    const base = scene.getMeshByName('wall-baseboard');
+    const floorBounds = bounds(floor), wallBounds = bounds(wall), panelBounds = bounds(panels);
+    assert.ok(Math.abs(floorBounds.maximumWorld.y) < 1e-7, 'tile ink is on the single true floor at y=0');
+    assert.ok(Math.abs(floorBounds.minimumWorld.z - wallBounds.maximumWorld.z) < 1e-5, 'floor begins at the rear wall plane');
+    assert.ok(Math.abs(panelBounds.minimumWorld.y - floorBounds.maximumWorld.y) < 1e-7, 'panelling has no floating gap at the floor');
+    assert.ok(Math.abs(panelBounds.minimumWorld.z - wallBounds.maximumWorld.z) < 1e-6, 'panelling is joined to the rear wall');
+    assert.ok(Math.abs(bounds(rail).minimumWorld.y - panelBounds.maximumWorld.y) < 1e-6, 'chair rail meets the panel top');
+    assert.ok(Math.abs(bounds(base).minimumWorld.y - floorBounds.maximumWorld.y) < 1e-6, 'baseboard closes the floor-wall joint');
+    for (const mesh of scene.meshes) {
+      assert.ok(!/^(pendant-|queue-position-|wall-panel-|floor-\d)/.test(mesh.name), `${mesh.name} is not a removed lamp, ring or raised patterned seam`);
+    }
+    const floorBasis = faceUVBasis(floor, 1);
+    const panelBasis = faceUVBasis(panels, 2);
+    assert.ok(Math.abs(floorBasis.u.y) < 1e-6 && Math.abs(floorBasis.v.y) < 1e-6, 'both grid axes lie on the physical horizontal plane');
+    assert.ok(Math.abs(floorBasis.u.x) < 1e-6 && Math.abs(floorBasis.v.z) < 1e-6, 'Babylon top UVs follow actual world +Z/−X, without screen-aligned overlay skew');
+    assert.ok(Math.abs(panelBasis.u.y) < 1e-6 && Math.abs(panelBasis.u.z) < 1e-6 && Math.abs(panelBasis.v.x) < 1e-6 && Math.abs(panelBasis.v.z) < 1e-6, 'wall UVs follow actual horizontal X and vertical Y');
+    for (const [mesh, uv, pitchX, pitchY] of [[floor, floorBasis, 2.4, 2.4], [panels, panelBasis, .72, 1.22]]) {
+      const pattern = mesh.material.metadata.coffeePattern;
+      assert.ok(Math.abs(uv.u.length() / pattern.repeatU - pitchX) < 1e-6);
+      assert.ok(Math.abs(uv.v.length() / pattern.repeatV - pitchY) < 1e-6);
+      assert.equal(mesh.receiveShadows, true);
+      assert.equal(mesh.billboardMode, 0);
+      assert.equal(mesh.renderingGroupId, 0);
+      assert.equal(mesh.material.disableLighting, false);
+      assert.equal(mesh.material.disableDepthWrite, false);
+      assert.equal(mesh.material.alpha, 1);
+      assert.deepEqual(mesh.material.specularColor.asArray(), [0, 0, 0]);
+      assert.deepEqual(mesh.material.emissiveColor.asArray(), [0, 0, 0]);
+    }
+    for (const x of [0, 5]) {
+      const rug = bounds(scene.getMeshByName(`queue-rug-${x}`));
+      const color = bounds(scene.getMeshByName(`queue-rug-color-${x}`));
+      assert.ok(Math.abs(rug.minimumWorld.y - floorBounds.maximumWorld.y) < 1e-6, 'rug rests on the same continuous floor');
+      assert.ok(Math.abs(color.minimumWorld.y - rug.maximumWorld.y) < 1e-6, 'rug color is seated on its backing');
+      assert.ok(Math.abs(bounds(scene.getMeshByName(`queue-arrow-l-${x}`)).minimumWorld.y - color.maximumWorld.y) < 1e-6, 'lane arrow touches the rug, with no raised seam');
+    }
+    assert.ok(scene.getMeshByName('entrance-pad-border'), 'the functional entrance remains unchanged by removing queue markers');
+    assert.equal(scene.activeCamera.mode, 1, 'the fixed orthographic room camera remains intentional');
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-010 pattern ink uses equal floor-axis strokes and diffuse contrast without self-light', () => {
+  const f = fixture();
+  try {
+    const painted = [];
+    const ctx = { fillStyle: '', fillRect(...rect) { painted.push({ fill: this.fillStyle, rect }); } };
+    const floor = f.renderer.scene.getMeshByName('continuous-shop-floor');
+    const pattern = floor.material.metadata.coffeePattern;
+    f.renderer.paintSurfacePattern(ctx, pattern.fill, pattern.seam, true);
+    assert.deepEqual(painted, [
+      { fill: '#e7ddc8', rect: [0, 0, 512, 512] },
+      { fill: '#b9ad95', rect: [0, 0, 3, 512] },
+      { fill: '#b9ad95', rect: [0, 0, 512, 3] },
+    ], 'one repeated texture has exactly the same muted seam color and thickness on both floor axes');
+    painted.length = 0;
+    f.renderer.paintSurfacePattern(ctx, '#286c67', '#205f5b', false);
+    assert.deepEqual(painted, [
+      { fill: '#286c67', rect: [0, 0, 512, 512] },
+      { fill: '#205f5b', rect: [0, 0, 8, 512] },
+    ], 'wall panel joints are vertical ink on the wall plane');
+    const ambient = f.renderer.scene.getLightByName('soft-skylight');
+    const sun = f.renderer.scene.getLightByName('warm-window-light');
+    assert.ok(ambient.intensity + sun.intensity * Math.abs(sun.direction.normalizeToNew().y) <= 1.05, 'pale horizontal surfaces avoid the previous diffuse-overexposure budget');
+    const channels = value => value.match(/[a-f\d]{2}/gi).map(v => parseInt(v, 16) / 255);
+    const fill = channels(pattern.fill.slice(1)), seam = channels(pattern.seam.slice(1));
+    assert.ok(fill.every((value, i) => value - seam[i] > .17), 'grout has a nontrivial diffuse contrast before actual browser/color-management QA');
+  } finally { f.dispose(); }
+});
+
+for (const [width, height] of [[1280, 900], [390, 844], [844, 390]]) {
+  for (const dpr of [1, 1.75]) {
+    test(`TC-3D-010 physical manager plaque clears the entire vault silhouette at ${width}×${height}, DPR ${dpr} (projection only)`, () => {
+      const f = fixture(width, height, 1 / dpr);
+      try {
+        const scene = f.renderer.scene;
+        const label = scene.getMeshByName('vault-bank-label');
+        const mount = scene.getMeshByName('vault-bank-label-mount');
+        const vault = scene.getTransformNodeByName('cash-vault');
+        const icon = vault.getChildMeshes().filter(mesh => mesh !== label && mesh !== mount);
+        assert.equal(label.metadata.coffeeSurface, 'vault-upgrade-plaque');
+        assert.ok(bounds(mount).minimumWorld.y > Math.max(...icon.map(mesh => bounds(mesh).maximumWorld.y)) + .5, 'the complete upgrade plaque is physically above every vault icon part');
+        for (const focus of [null, 'vault', 'menu-espresso', 'invite']) {
+          if (focus) f.renderer.focusAnchor(focus);
+          const plaqueScreen = projectedBounds(f, [label, mount]);
+          const iconScreen = projectedBounds(f, icon);
+          assert.ok(iconScreen.top - plaqueScreen.bottom >= 8, `plaque and the highest projected vault part are separated by ${Math.round(iconScreen.top - plaqueScreen.bottom)} CSS pixels in ${focus ?? 'initial'} view`);
+          assert.ok(plaqueScreen.right > iconScreen.left && plaqueScreen.left < iconScreen.right, 'the plaque still sits above the same vault, not beside it');
+        }
+        f.renderer.focusAnchor('vault');
+        assert.equal(f.renderer.projectAnchor('vault').visible, true);
+        assert.ok(surfaceDiameter(f, label.name) >= 44);
+        assert.equal(f.renderer.activateFocused(), true);
+        tap(f, label.name);
+        assert.deepEqual(f.actions, [{ type: 'vault' }, { type: 'vault' }]);
+        const rail = scene.getMeshByName('wall-picture-rail');
+        assert.ok(bounds(rail).minimumWorld.y > bounds(mount).maximumWorld.y + .15, 'high rail is physically above the plaque');
+        // A 144m rail has a huge diagonal screen AABB; test actual rays on the plaque's
+        // top edge instead of falsely equating those overlapping AABBs with occlusion.
+        for (const u of [-.45, 0, .45]) {
+          const point = screenPoint(f, label.name, new Vector3(u * 1.55, .49 * 1.04, 0));
+          const pick = scene.pick(point.x * f.engine.getHardwareScalingLevel(), point.y * f.engine.getHardwareScalingLevel());
+          assert.equal(pick?.pickedMesh?.name, label.name, 'the high rail cannot cover the actual plaque top edge');
+        }
+      } finally { f.dispose(); }
+    });
+  }
+}
+
+test('TC-3D-010 real core sweep collects visible B cash then A cash, and only deposits at the same vault', () => {
+  const f = fixture();
+  try {
+    const initial = createInitialState();
+    initial.counters[0].pendingCash = 220;
+    initial.counters[1].pendingCash = 330;
+    initial.totalEarned = 550;
+    const engine = createEngine(initial);
+    const manager = f.renderer.scene.getTransformNodeByName('manager');
+    const transfers = [];
+    let deposited = false;
+    const budget = Math.ceil((2 * WORLD.vaultX / managerSpeed(1) + .45 * 2 + .6 + .05 * 3) / .05);
+    for (let step = 0; step <= budget && !deposited; step++) {
+      engine.advance(.05);
+      f.renderer.update(engine.state, 0);
+      assert.equal(manager.position.x, engine.state.manager.x, 'every real core snapshot is rendered at its true coordinate');
+      for (const event of engine.drainEvents()) {
+        if (event.type === 'collected') {
+          const counter = engine.state.counters.find(counter => counter.id === event.counterId);
+          assert.equal(manager.position.x, counter.x, 'collected counter identity matches the manager at its physical station');
+          assert.equal(f.renderer.scene.getTransformNodeByName(`${counter.id}-cash-cluster`).isEnabled(), counter.pendingCash > 0);
+          assert.equal(f.renderer.scene.getTransformNodeByName('cart-cash-0').isEnabled(), true);
+          assert.equal(engine.state.wallet, initial.wallet, 'pickup alone cannot increase available money');
+          transfers.push([event.type, event.counterId, event.amount]);
+        } else if (event.type === 'deposited') {
+          assert.equal(manager.position.x, f.renderer.scene.getTransformNodeByName('cash-vault').position.x);
+          assert.equal(f.renderer.scene.getTransformNodeByName('cart-cash-0').isEnabled(), false);
+          assert.equal(engine.state.wallet, initial.wallet + 550);
+          transfers.push([event.type, event.amount]);
+          deposited = true;
+        }
+      }
+    }
+    assert.equal(deposited, true, 'one full true-world sweep reaches its bounded expected endpoint');
+    assert.deepEqual(transfers, [['collected', 'counter-b', 330], ['collected', 'counter-a', 220], ['deposited', 550]]);
+    assert.equal(validateState(engine.state).ok, true);
   } finally { f.dispose(); }
 });

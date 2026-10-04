@@ -8,7 +8,8 @@ export const QUEUE_CAPACITY = 8;
 export const INVITE_COOLDOWN_SECONDS = 18;
 export const OFFLINE_CAP_SECONDS = 7200;
 export const OFFLINE_EFFICIENCY = .5;
-export const WORLD = Object.freeze({ entryX: -8, entryZ: 5, serviceZ: 1.5, queueGap: .72, backZ: -1.7, vaultX: -8 });
+export const MANAGER_ROUTE_VERSION = 2;
+export const WORLD = Object.freeze({ entryX: -8, entryZ: 5, serviceZ: 1.5, queueGap: .72, backZ: -1.7, vaultX: 8.8 });
 export const recipes: readonly Recipe[] = Object.freeze([
   Object.freeze({ id: 'espresso', name: '浓缩咖啡', price: 110, brewSeconds: 3.6, color: '#a7693d', description: '出杯快、单价低，适合长队。' }),
   Object.freeze({ id: 'latte', name: '拿铁', price: 220, brewSeconds: 6.8, color: '#f0c793', description: '制作较慢、每杯收入更高。' })
@@ -22,22 +23,44 @@ export const managerCapacity = (level: number): number => 1200 + 180 * (level - 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const roundTime = (value: number): number => Math.round(value * 1e9) / 1e9;
 
+/** Narrow route migration, not an economy/schema migration. External states must be validated first. */
+export function migrateManagerRoute(state: SliceState): void {
+  if (state.managerRouteVersion === MANAGER_ROUTE_VERSION) return;
+  if (state.managerRouteVersion !== undefined && state.managerRouteVersion !== 1) throw new Error('Unsupported manager route version.');
+  const manager = state.manager;
+  const freshDeparture = manager.phase === 'moving' && manager.target === 0 && manager.x === -8 && manager.timer === 0 && manager.carrying === 0;
+  const clamp = (value: number): number => Math.max(0, Math.min(1, value));
+  // Match the previous visible leg progress once. Thereafter x is the actual
+  // world coordinate, including throughout a still-in-flight legacy sweep.
+  if (manager.target === 0) manager.x = WORLD.vaultX * (1 - clamp((manager.x + 8) / 8));
+  else if (manager.target === 1) manager.x = Math.max(0, Math.min(5, manager.x));
+  else manager.x = 5 + (WORLD.vaultX - 5) * (1 - clamp((manager.x + 8) / 13));
+  // The old validator allowed stationary coordinates away from the semantic
+  // stop. Live archives already match it; accepted old archives are now made
+  // physically safe without touching their money or in-progress dwell timer.
+  if (manager.phase !== 'moving') manager.x = manager.target === 2 ? WORLD.vaultX : state.counters[manager.target].x;
+  if (freshDeparture) manager.target = 1;
+  else if (manager.target !== 2 || manager.phase === 'moving' && manager.timer !== 0) manager.finishLegacySweep = true;
+  state.managerRouteVersion = MANAGER_ROUTE_VERSION;
+}
+
 export function createInitialState(): SliceState {
   return {
-    schemaVersion: 1, economyVersion: 1, elapsed: 0, wallet: INITIAL_WALLET,
+    schemaVersion: 1, economyVersion: 1, managerRouteVersion: MANAGER_ROUTE_VERSION, elapsed: 0, wallet: INITIAL_WALLET,
     totalEarned: 0, totalServed: 0, spend: 0, nextCustomerId: 1,
     arrivalTimer: 0, inviteCooldown: 0, paused: false, stepCarry: 0, eventSequence: 0, offlineClaimIds: [],
     counters: [
       { id: 'counter-a', x: 0, level: 1, recipe: 'espresso', pendingCash: 0, brewed: 0, brew: null },
       { id: 'counter-b', x: 5, level: 1, recipe: 'latte', pendingCash: 0, brewed: 0, brew: null }
     ],
-    customers: [], manager: { x: WORLD.vaultX, z: WORLD.backZ, carrying: 0, phase: 'moving', target: 0, timer: 0, level: 1 },
+    customers: [], manager: { x: WORLD.vaultX, z: WORLD.backZ, carrying: 0, phase: 'moving', target: 1, timer: 0, level: 1 },
     lastOfflineClaimId: null
   };
 }
 
 export function createEngine(initial: SliceState = createInitialState()): SliceEngine {
   const state = clone(initial);
+  migrateManagerRoute(state);
   state.stepCarry ??= 0;
   state.eventSequence ??= 0;
   state.offlineClaimIds ??= state.lastOfflineClaimId ? [state.lastOfflineClaimId] : [];
@@ -138,11 +161,14 @@ export function createEngine(initial: SliceState = createInitialState()): SliceE
       // Reserve half a bag for each counter, preventing high-level A from starving B.
       const amount = Math.min(counter.pendingCash, Math.floor(managerCapacity(manager.level) / 2), managerCapacity(manager.level) - manager.carrying);
       if (amount > 0) { counter.pendingCash -= amount; manager.carrying += amount; emit('collected', { counterId: counter.id, amount }); }
-      manager.target++;
+      // Targets keep their counter identity. Current sweeps visit the nearest
+      // counter B first; migrated sweeps finish only their remaining old stops.
+      manager.target = manager.finishLegacySweep ? (manager.target === 0 ? 1 : 2) : (manager.target === 1 ? 0 : 2);
     } else {
       const amount = manager.carrying;
       if (amount > 0) { state.wallet += amount; manager.carrying = 0; emit('deposited', { amount }); }
-      manager.target = 0;
+      delete manager.finishLegacySweep;
+      manager.target = 1;
     }
     manager.phase = 'moving'; manager.timer = 0;
   }

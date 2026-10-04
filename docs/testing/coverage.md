@@ -24,3 +24,7 @@ REQ-3D-013/014/015 → [TC-3D-008](cases/slice/TC-3D-008.md)，[计划](plans/em
 ## 用户指定金库和柜台前脸
 
 REQ-3D-016/017/018 → [TC-3D-009](cases/slice/TC-3D-009.md)，[计划](plans/vault-front-layout.md)。新的HUD/入口预期替代旧TC008对应静态数量，核心和生命周期保护继续回归。
+
+## 用户指定表面与近到远顺序
+
+REQ-3D-019/020/021 → [TC-3D-010](cases/slice/TC-3D-010.md)，[计划](plans/room-route-refinement.md)。真实core路径、当前两柜台存档路线迁移与图标间隔取代旧TC009对应的“core不改/仅渲染映射”；其余UI与保存保护继续回归。

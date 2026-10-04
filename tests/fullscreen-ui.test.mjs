@@ -601,6 +601,137 @@ function omitPauseClaims(state) {
   const copy = structuredClone(state); delete copy.paused; delete copy.lastOfflineClaimId; delete copy.offlineClaimIds; return copy;
 }
 
+// Write authentic pre-route-v2 bytes directly: repository.save would normalize them
+// before the app's loader sees them and would hide boot/reload migration regressions.
+function legacyRouteProgress(routeVersion) {
+  const state = createInitialState();
+  if (routeVersion === undefined) delete state.managerRouteVersion;
+  else state.managerRouteVersion = routeVersion;
+  state.paused = true;
+  state.stepCarry = .037;
+  state.eventSequence = 12;
+  state.lastOfflineClaimId = 'legacy-already-claimed';
+  state.offlineClaimIds = ['legacy-already-claimed'];
+  state.manager = { x: -4, z: -1.7, carrying: 70, phase: 'moving', target: 0, timer: 0, level: 1 };
+  state.counters[0].pendingCash = 200;
+  state.counters[1].pendingCash = 300;
+  state.totalEarned = 570;
+  return state;
+}
+
+test('TC-3D-010 legacy raw route saves resume once, finish their current sweep and persist the real B-first route (app harness)', () => {
+  for (const routeVersion of [undefined, 1]) for (const age of [10, 3600]) {
+    const initial = legacyRouteProgress(routeVersion);
+    const raw = JSON.stringify({ schemaVersion: 1, savedAt: Date.now() - age * 1000, recordChangeTag: `legacy-route-${routeVersion}-${age}`, state: initial });
+    const f = fixture({ raw });
+    try {
+      const expected = structuredClone(initial);
+      expected.managerRouteVersion = 2;
+      expected.manager.x = 4.4;
+      expected.manager.finishLegacySweep = true;
+      assert.equal(f.state().paused, false, 'only current play resumes after the old paused interval is settled');
+      assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(expected), 'boot changes route coordinates/version only; assets, timer, event sequence and partial fixed step survive');
+      assert.equal(f.renderer.updates.length, 0, 'the first real snapshot is delivered by the single RAF owner');
+      const wallet = f.state().wallet;
+      let safety = 0;
+      while (f.state().manager.finishLegacySweep && safety++ < 200) {
+        const before = f.state();
+        f.tick(.05);
+        if (f.state().manager.finishLegacySweep) assert.equal(f.state().wallet, wallet, 'legacy collection is still unavailable until the physical vault deposit');
+        else {
+          assert.equal(before.manager.phase, 'depositing');
+          assert.equal(before.manager.x, 8.8);
+        }
+      }
+      assert.ok(safety < 200, 'the in-flight legacy sweep reaches a terminating deposit');
+      assert.equal(f.state().wallet, wallet + 570, 'exactly the carried and pending money is credited once');
+      assert.equal(f.state().manager.carrying, 0);
+      assert.equal(f.state().manager.target, 1, 'the next real sweep leaves the left vault for nearest counter B');
+      assert.equal(f.state().manager.x, 8.8);
+      assert.equal(f.state().manager.finishLegacySweep, undefined);
+      f.click('#settings'); f.click('#save');
+      const saved = JSON.parse(f.memory.getItem(SAVE_KEY)).state;
+      assert.deepEqual(saved, f.state());
+      assert.equal(saved.managerRouteVersion, 2);
+      const reopened = fixture({ raw: f.memory.getItem(SAVE_KEY) });
+      try { assert.deepEqual(reopened.state(), saved, 'a route-v2 save is not remapped or deposited again on immediate reboot'); }
+      finally { reopened.dispose(); }
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-010 failed legacy-route offline settlement preserves bytes and freezes migrated assets until successful reload (app harness)', () => {
+  for (const mode of ['writeUnavailable', 'conflictDuringClaim']) {
+    const initial = legacyRouteProgress(1);
+    initial.paused = false;
+    initial.stepCarry = 0;
+    initial.manager = { x: -8, z: -1.7, carrying: 570, phase: 'depositing', target: 2, timer: .55, level: 1 };
+    initial.counters.forEach(counter => counter.pendingCash = 0);
+    const raw = JSON.stringify({ schemaVersion: 1, savedAt: Date.now() - 3600000, recordChangeTag: `legacy-failed-${mode}`, state: initial });
+    const f = fixture({ raw, [mode]: true });
+    try {
+      const protectedRaw = f.memory.getItem(SAVE_KEY), frozen = f.state();
+      assert.equal(frozen.paused, true);
+      assert.equal(frozen.managerRouteVersion, 2);
+      assert.equal(frozen.manager.x, 8.8);
+      assert.equal(frozen.manager.target, 2);
+      assert.equal(frozen.manager.timer, .55);
+      assert.equal(frozen.manager.carrying, 570);
+      assert.equal(frozen.wallet, 1200);
+      assert.equal(frozen.elapsed, 0);
+      assert.equal(f.element('#reload').hidden, false);
+      f.tick(20);
+      assert.deepEqual(f.state(), frozen, 'failed anchor settlement cannot grant partial offline progress or complete the pending deposit');
+      f.click('#settings'); f.click('#save');
+      assert.equal(f.memory.getItem(SAVE_KEY), protectedRaw, 'blocked manual/autosave keeps original or concurrent legacy bytes');
+      f.storageControl.writeUnavailable = false;
+      f.click('#reload');
+      assert.equal(f.state().paused, false);
+      assert.ok(f.state().elapsed >= 1800 && f.state().elapsed <= 1810, 'successful reload settles the single previously unpaid offline interval');
+      assert.equal(f.state().managerRouteVersion, 2);
+      const once = f.state(), onceRaw = f.memory.getItem(SAVE_KEY);
+      assert.ok(once.wallet > 1200);
+      f.click('#reload');
+      assert.deepEqual(f.state(), once, 'repeated reload cannot repeat migration or the credited offline interval');
+      assert.equal(f.memory.getItem(SAVE_KEY), onceRaw);
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-010 migration persists before a hidden first frame and BFCache/repeated saves cannot remap or claim twice (app harness)', () => {
+  const initial = legacyRouteProgress(undefined);
+  const raw = JSON.stringify({ schemaVersion: 1, savedAt: Date.now() - 10000, recordChangeTag: 'legacy-hidden-before-raf', state: initial });
+  const f = fixture({ raw });
+  try {
+    const first = f.state();
+    assert.equal(first.manager.x, 4.4);
+    assert.equal(first.managerRouteVersion, 2);
+    assert.equal(first.manager.finishLegacySweep, true);
+    assert.equal(f.renderer.updates.length, 0);
+    f.document.hidden = true; f.document.emit('visibilitychange');
+    assert.equal(f.frames.size, 0);
+    assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, first, 'hiding before the initial RAF persists the canonical route and unchanged assets');
+    f.clock.now += 45000; f.clock.performance += 45000;
+    f.document.hidden = false; f.document.emit('visibilitychange');
+    const resumed = f.state();
+    assert.equal(resumed.elapsed, 22.5, 'only the hidden45s interval is advanced at offline efficiency');
+    assert.equal(resumed.managerRouteVersion, 2);
+    assert.equal(resumed.manager.finishLegacySweep, undefined, 'the in-flight old sweep completes once and thereafter follows the real route');
+    assert.equal(f.frames.size, 1);
+    f.window.emit('pageshow', { persisted: true });
+    assert.deepEqual(f.state(), resumed, 'visibility and BFCache do not both claim the same interval');
+    assert.equal(f.frames.size, 1);
+    f.click('#settings'); f.click('#save'); f.click('#save');
+    assert.deepEqual(f.state(), resumed, 'manual saves cannot normalize canonical route-v2 coordinates again');
+    const saved = JSON.parse(f.memory.getItem(SAVE_KEY));
+    assert.deepEqual(saved.state, resumed);
+    assert.equal(saved.savedAt, f.clock.now);
+    const reopened = fixture({ raw: f.memory.getItem(SAVE_KEY) });
+    try { assert.deepEqual(reopened.state(), resumed, 'reopening already anchored hidden progress never repeats the migrated sweep or offline earnings'); }
+    finally { reopened.dispose(); }
+  } finally { f.dispose(); }
+});
+
 test('TC-3D-009 REQ-3D-016 valid previous paused saves resume current play without paused-interval income on boot (app harness)', () => {
   for (const savedAtAgoSeconds of [10, 3600]) {
     const initial = pausedProgress(), f = fixture({ initial, savedAtAgoSeconds });
@@ -675,10 +806,15 @@ test('TC-3D-009 REQ-3D-006 failed offline writes or a concurrent claim keep paus
 test('TC-3D-009 REQ-3D-006 bad, future and foreign saves preserve source bytes through HUD settings and reload (app harness)', async () => {
   const initial = createInitialState();
   const badLedger = structuredClone(initial); badLedger.wallet++;
+  const badDeposit = structuredClone(initial); Object.assign(badDeposit.manager, { x: 0, target: 2, phase: 'depositing' });
+  const badRouteSegment = structuredClone(initial); badRouteSegment.manager.x = 0;
   const cases = [
     '{ definitely not a save',
     JSON.stringify({ schemaVersion: 2, state: initial }),
+    JSON.stringify({ schemaVersion: 1, savedAt: Date.now(), recordChangeTag: 'future-manager-route', state: { ...initial, managerRouteVersion: 3 } }),
     JSON.stringify({ schemaVersion: 1, savedAt: Date.now(), recordChangeTag: 'bad-ledger', state: badLedger }),
+    JSON.stringify({ schemaVersion: 1, savedAt: Date.now(), recordChangeTag: 'bad-physical-deposit', state: badDeposit }),
+    JSON.stringify({ schemaVersion: 1, savedAt: Date.now(), recordChangeTag: 'bad-route-segment', state: badRouteSegment }),
     JSON.stringify({ schemaVersion: 1, savedAt: Date.now(), recordChangeTag: 'foreign-schema', state: { schemaVersion: 1, economyVersion: 1, paused: true } }),
   ];
   for (const raw of cases) {

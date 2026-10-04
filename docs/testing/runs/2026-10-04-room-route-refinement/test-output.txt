@@ -1,0 +1,172 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> idle-coffee-shop-prototype@0.2.0 test
+> node --test tests/*.test.mjs
+
+BJS - [17:41:35]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:36]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:36]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:36]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:36]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:37]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:37]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:37]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:38]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:38]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:38]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:38]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:38]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:39]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:39]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:39]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:39]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:39]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:40]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:40]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:40]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:40]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:40]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:41]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:41]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:41]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:41]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:41]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:42]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:42]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:43]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:43]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:44]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:44]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:44]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:44]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:45]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:45]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:45]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:45]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:45]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:46]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:46]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:46]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:46]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:46]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:47]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:47]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:47]: Babylon.js v9.29.0 - Null engine
+BJS - [17:41:47]: Babylon.js v9.29.0 - Null engine
+✔ TC-3D-006 original reusable geometry presents snapshots without changing business state (817.697826ms)
+✔ TC-3D-006 all physical room controls dispatch detail actions without mutating economy (254.511886ms)
+✔ TC-3D-006 panning, long holds, cancelled and secondary pointers cannot become taps (249.942442ms)
+✔ TC-3D-001 cups, brew progress, table money, manager cart and machine upgrades are state-driven (319.160229ms)
+✔ TC-3D-006 pause freezes animation, disposal removes listeners and late input is harmless (337.651747ms)
+✔ TC-3D-006 physical 1280×900 at DPR 1: close room, shared anchors and reachable controls (projection only) (265.067465ms)
+✔ TC-3D-006 physical 1280×900 at DPR 1.75: close room, shared anchors and reachable controls (projection only) (224.153292ms)
+✔ TC-3D-006 captured drag is bounded and scene surfaces fill 1280×900 (ray coverage only) (250.662086ms)
+✔ TC-3D-006 physical 390×844 at DPR 1: close room, shared anchors and reachable controls (projection only) (207.953495ms)
+✔ TC-3D-006 physical 390×844 at DPR 1.75: close room, shared anchors and reachable controls (projection only) (204.739058ms)
+✔ TC-3D-006 captured drag is bounded and scene surfaces fill 390×844 (ray coverage only) (230.685127ms)
+✔ TC-3D-006 physical 844×390 at DPR 1: close room, shared anchors and reachable controls (projection only) (208.912167ms)
+✔ TC-3D-006 physical 844×390 at DPR 1.75: close room, shared anchors and reachable controls (projection only) (213.916023ms)
+✔ TC-3D-006 captured drag is bounded and scene surfaces fill 844×390 (ray coverage only) (234.086682ms)
+✔ TC-3D-006 cancellation, capture loss and unrelated pointers preserve one drag owner (223.109757ms)
+✔ TC-3D-006 wall menus remain global recipe boards while each counter selector follows its recipe (205.666583ms)
+✔ TC-3D-008 actual control polygon accepts a 44px circle at 1280×900, DPR 1 (geometry only) (176.436938ms)
+✔ TC-3D-008 actual control polygon accepts a 44px circle at 1280×900, DPR 1.75 (geometry only) (180.243087ms)
+✔ TC-3D-008 actual control polygon accepts a 44px circle at 390×844, DPR 1 (geometry only) (174.874963ms)
+✔ TC-3D-008 actual control polygon accepts a 44px circle at 390×844, DPR 1.75 (geometry only) (163.547362ms)
+✔ TC-3D-008 actual control polygon accepts a 44px circle at 844×390, DPR 1 (geometry only) (197.155745ms)
+✔ TC-3D-008 actual control polygon accepts a 44px circle at 844×390, DPR 1.75 (geometry only) (172.205256ms)
+✔ TC-3D-008 every label is lit opaque depth-tested ink on a mounted non-billboard scene slab (174.341958ms)
+✔ TC-3D-008 front solid blocks pointer and keyboard; removing it restores real mesh picking (174.938407ms)
+✔ TC-3D-008 pointer start and release require the same visible physical mesh, exactly once (250.729717ms)
+✔ TC-3D-008 opening a modal cancels captured input; every interaction stays suspended until close (209.342835ms)
+✔ TC-3D-008 keyboard cycles every embodied control, preserves physical focus and is inert after disposal (224.315989ms)
+✔ TC-3D-008 side-front upgrade plaques remain hittable while a customer occupies the service point (226.35522ms)
+✔ TC-3D-008 small trolley cash table stays visible while manager turns without orbiting into furniture (223.828371ms)
+✔ TC-3D-008 world-oriented trolley clears wall, counters and baristas throughout the service route (1428.008197ms)
+✔ TC-3D-008 small pending cash stays physically visible beside its flat amount tag (165.718465ms)
+✔ TC-3D-009 refined physical layout at 1280×900, DPR 1: vault left and independent front controls (geometry only) (228.187174ms)
+✔ TC-3D-009 refined physical layout at 1280×900, DPR 1.75: vault left and independent front controls (geometry only) (226.304116ms)
+✔ TC-3D-009 refined physical layout at 390×844, DPR 1: vault left and independent front controls (geometry only) (232.261846ms)
+✔ TC-3D-009 refined physical layout at 390×844, DPR 1.75: vault left and independent front controls (geometry only) (204.068743ms)
+✔ TC-3D-009 refined physical layout at 844×390, DPR 1: vault left and independent front controls (geometry only) (215.134959ms)
+✔ TC-3D-009 refined physical layout at 844×390, DPR 1.75: vault left and independent front controls (geometry only) (233.345011ms)
+✔ TC-3D-009 vault owns manager level affordance and no removed scene action survives (192.296558ms)
+✔ TC-3D-009 pending money tag shares the banknote cluster and cannot become a raised register (237.971901ms)
+✔ TC-3D-010 rendered manager follows direct snapshots through B → A → vault and the deposit (274.931381ms)
+✔ TC-3D-009 receipt ink fits long exact amounts without cropping or abbreviation (canvas-context unit check) (213.828339ms)
+✔ TC-3D-010 continuous floor and wall carry aligned matte patterns with joined room surfaces (230.778982ms)
+✔ TC-3D-010 pattern ink uses equal floor-axis strokes and diffuse contrast without self-light (212.218188ms)
+✔ TC-3D-010 physical manager plaque clears the entire vault silhouette at 1280×900, DPR 1 (projection only) (182.757318ms)
+✔ TC-3D-010 physical manager plaque clears the entire vault silhouette at 1280×900, DPR 1.75 (projection only) (176.604427ms)
+✔ TC-3D-010 physical manager plaque clears the entire vault silhouette at 390×844, DPR 1 (projection only) (169.397967ms)
+✔ TC-3D-010 physical manager plaque clears the entire vault silhouette at 390×844, DPR 1.75 (projection only) (173.194425ms)
+✔ TC-3D-010 physical manager plaque clears the entire vault silhouette at 844×390, DPR 1 (projection only) (211.271774ms)
+✔ TC-3D-010 physical manager plaque clears the entire vault silhouette at 844×390, DPR 1.75 (projection only) (204.216076ms)
+✔ TC-3D-010 real core sweep collects visible B cash then A cash, and only deposits at the same vault (597.93381ms)
+(node:73) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ TC-3D-008 REQ-3D-015 full-viewport scene has no webpage frame or page scroll (static contract) (4.80479ms)
+✔ TC-3D-009 REQ-3D-016 permanent HUD contains only a noninteractive ¥ amount and accessible settings (static contract) (3.375412ms)
+✔ TC-3D-008 REQ-3D-013 all rendered amounts use ¥ with two fractional digits (app harness) (11.920626ms)
+✔ TC-3D-009 REQ-3D-016 scene actions and HUD settings open the correct details without hidden DOM anchors (app harness) (6.619888ms)
+✔ TC-3D-009 REQ-3D-016 removed pause/manager/settings scene routes and pause hotkeys cannot alter play (app harness) (6.751716ms)
+✔ TC-3D-009 REQ-3D-016 only HUD settings remains outside the closed native operation dialog (static contract) (0.675967ms)
+✔ TC-3D-008 REQ-3D-015 modal close/backdrop restore canvas focus and reject background scene actions (app harness) (5.186304ms)
+✔ TC-3D-008 REQ-3D-014 scene keyboard access is provided on the real canvas with instructions (static contract) (0.525954ms)
+✔ TC-3D-008 REQ-3D-014 actual canvas keys select, pan and activate scene objects once, with modal/modifier guards (app harness) (4.868273ms)
+✔ TC-3D-008 REQ-3D-015 dialog recipe/upgrade/navigation routes preserve core rules and visible close focus (app harness) (5.753436ms)
+✔ TC-3D-009 REQ-3D-017 manager grade, efficiency and upgrade belong to the vault and preserve the core quote (app harness) (6.149003ms)
+✔ TC-3D-009 REQ-3D-016 HUD settings uses the same modal input guard and restores its own visible focus (app harness) (3.87802ms)
+✔ TC-3D-008 REQ-3D-015 post-dialog navigation survives native asynchronous close-event ordering (app harness) (4.462669ms)
+✔ TC-3D-008 REQ-3D-015 a stale queued close cannot dismantle a newly reopened native dialog (app harness) (4.195949ms)
+✔ TC-3D-009 REQ-3D-016 physical invite remains cooldown/conflict guarded without duplicate DOM handlers (app harness) (3.836017ms)
+✔ TC-3D-008 REQ-3D-015 modal controls maintain 44px targets, safe-area and dynamic viewport hooks (static contract) (0.959411ms)
+✔ TC-3D-008 REQ-3D-006 HUD settings preserve manual save and export, with corrupt bytes protected (app harness) (12.373884ms)
+✔ TC-3D-008 REQ-3D-015 names and save feedback are transient; disabled browser storage still permits backup (app harness) (4.666505ms)
+✔ TC-3D-008 REQ-3D-006 external save conflict freezes and blocks removed pause routes and purchases (app harness) (3.410897ms)
+✔ TC-3D-010 legacy raw route saves resume once, finish their current sweep and persist the real B-first route (app harness) (91.722311ms)
+✔ TC-3D-010 failed legacy-route offline settlement preserves bytes and freezes migrated assets until successful reload (app harness) (180.063495ms)
+✔ TC-3D-010 migration persists before a hidden first frame and BFCache/repeated saves cannot remap or claim twice (app harness) (16.229516ms)
+✔ TC-3D-009 REQ-3D-016 valid previous paused saves resume current play without paused-interval income on boot (app harness) (17.010117ms)
+✔ TC-3D-009 REQ-3D-016 reading a valid external paused save resumes only current play after conflict recovery (app harness) (4.846637ms)
+✔ TC-3D-009 REQ-3D-006 failed offline writes or a concurrent claim keep paused valid saves conflict-protected (app harness) (8.664662ms)
+✔ TC-3D-009 REQ-3D-006 bad, future and foreign saves preserve source bytes through HUD settings and reload (app harness) (41.403405ms)
+✔ TC-3D-008 REQ-3D-004 hidden/BFCache resume applies elapsed time only once and retains one RAF owner (app harness) (5.619896ms)
+✔ TC-3D-008 REQ-3D-004 final disposal removes UI listeners, observer and RAF; late scene actions are harmless (app harness) (3.901663ms)
+✔ TC-3D-001 real manager route collects nearest B, farther A, then deposits at the shared vault (19.539785ms)
+✔ TC-3D-001 B-first collection preserves per-counter half-bag limits at every manager level (3.267706ms)
+✔ TC-3D-003 real route keeps identical state and cash-event order under split advance (11.472933ms)
+✔ TC-3D-004 route resumes exactly after saving each moving, collecting and depositing leg (16.429882ms)
+✔ TC-3D-004 explicit legacy migration preserves in-flight stops, timers, assets and once-only versioning (4.8147ms)
+✔ TC-3D-004 legacy migration leaves active customers and frozen brew snapshots untouched (1.050318ms)
+✔ TC-3D-004 a migrated sweep resumes without repeating stops after every in-flight save/reload (20.879056ms)
+✔ TC-3D-004 new route validator rejects off-stop actions, invalid segments and migration/version misuse (0.85864ms)
+✔ TC-3D-004 authentic legacy archives migrate offline only once and retain retries/CAS protection (12.14731ms)
+✔ TC-3D-001 cash stays conserved through visible customer and manager phases (10.832614ms)
+✔ TC-3D-003 fixed-step advance is independent of frame partition and save round trips (18.256901ms)
+✔ TC-3D-002 recipes and upgrades affect the next brew only (1.772282ms)
+✔ TC-3D-002 original counter affinities create a meaningful recipe tradeoff (14.300383ms)
+✔ TC-3D-003 repeated input is bounded by cooldown, capacity, cost and maximum level (121.724062ms)
+✔ TC-3D-003 paused time and invalid deltas cannot create progress (0.659096ms)
+✔ TC-3D-004 corrupt and future saves preserve original bytes and reject autosave (0.878587ms)
+✔ TC-3D-004 strict validation catches enums, non-finite values, bounds and broken ledgers (0.284889ms)
+✔ TC-3D-004 offline close-loop income is bounded and claimed only once (102.149365ms)
+✔ TC-3D-004 paused offline, storage errors and another client cannot overwrite valid progress (0.459079ms)
+✔ TC-3D-004 overlapping reload endpoints and backwards clocks never reclaim the same interval (1.880899ms)
+✔ TC-3D-004 failed offline anchor writes grant no income and remain retryable (2.555168ms)
+✔ TC-3D-004 save validator accepts every live phase under mixed deterministic actions (173.777464ms)
+✔ TC-3D-001 capped production exposes a real transport bottleneck removable by manager upgrades (44.886886ms)
+✔ TC-3D-005 opaque CAS tags, idempotent retry and offline two-client conflict (1.951462ms)
+ℹ tests 102
+ℹ suites 0
+ℹ pass 102
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 13640.207524
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+npm notice To update run: npm install -g npm@12.2.0
+npm notice

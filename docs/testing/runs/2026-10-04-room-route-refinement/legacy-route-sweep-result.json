@@ -1,0 +1,21 @@
+{
+  "result": "PASS",
+  "baseline": "2363c1276a01b0fdd1b5c3ea7a58ae570a3fb83d",
+  "generatedSnapshots": 10000,
+  "legacyVariantsPerSnapshot": [
+    "absent",
+    1
+  ],
+  "validatedLegacyStates": 20000,
+  "freshDepartureNormalizations": 110,
+  "simulatedSeconds": 500,
+  "phaseCounts": {
+    "0:collecting": 504,
+    "0:moving": 2596,
+    "1:collecting": 495,
+    "1:moving": 1621,
+    "2:depositing": 660,
+    "2:moving": 4124
+  },
+  "boundaries": "CPU core/persistence evidence only; no browser pixels, DOM, native dialogs or touch-device acceptance."
+}
