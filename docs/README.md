@@ -31,3 +31,5 @@
 存档恢复保护：[计划](testing/plans/save-recovery-safety.md)、[TC-3D-019](testing/cases/slice/TC-3D-019.md)。失败读取不能替换/解锁当前店，存储恢复也不能自行覆盖旧档；缺失需明确新店，原始档与有效当前副本可分别导出。
 
 当前离线策略：[无上限80%计划](testing/plans/offline-unlimited.md)、[TC-3D-020](testing/cases/slice/TC-3D-020.md)。整合已验场景和恢复保护，准确分批回放、旧区间原规则一次迁移、末尾原子保存；30分钟研究候选已被用户的新要求替代。
+
+无上限80%后续实机证据：[Mac短区间有限复测](testing/runs/2026-10-05-offline-unlimited/mac-limited-qa.md)。一次42.49秒→33.99秒显示符合80%；不代表长区间、迁移、取消或精确去重已通过，未知旧origin与4180失联原因如实保留。
