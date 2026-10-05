@@ -32,6 +32,8 @@ const html = runInNewContext(`${stripTypeScriptTypes(`globalThis.html = ${templa
 const modalStart = html.indexOf('<dialog '), modalEnd = html.indexOf('</dialog>') + '</dialog>'.length;
 const modal = html.slice(modalStart, modalEnd);
 const outsideModal = html.slice(0, modalStart) + html.slice(modalEnd);
+const permanentOutsideModal = outsideModal.replace(/<aside id="welcome-guide"[\s\S]*?<\/aside>/, "");
+const ONBOARDING_KEY = "mellow-bean:welcome-guide:v1";
 function rules(selector) {
   const found = [];
   css.walkRules(rule => { if (rule.selector.split(',').map(s => s.trim()).includes(selector)) found.push(rule); });
@@ -47,10 +49,15 @@ class FakeElement {
   attributes = new Map();
   dataset = {};
   style = {};
-  hidden = false;
+  _hidden = false;
+  get hidden() { return this._hidden; }
+  set hidden(value) { this._hidden = Boolean(value); if (value) this.attributes.set("hidden", ""); else this.attributes.delete("hidden"); }
   disabled = false;
   isConnected = true;
-  textContent = '';
+  _textContent = '';
+  textWrites = 0;
+  get textContent() { return this._textContent; }
+  set textContent(value) { this._textContent = value; this.textWrites++; }
   value = '';
   checked = false;
   files = null;
@@ -85,7 +92,7 @@ class FakeElement {
       return this.tagName.toLowerCase() === value;
     });
   }
-  closest(selector) { return this.matches(selector) ? this : null; }
+  closest(selector) { return this.matches(selector) ? this : this.parentElement?.closest(selector) ?? null; }
   addEventListener(type, listener, options = {}) {
     const set = this.listeners.get(type) ?? new Set(); set.add(listener); this.listeners.set(type, set);
     options.signal?.addEventListener('abort', () => set.delete(listener), { once: true });
@@ -99,14 +106,14 @@ class FakeElement {
   focus() { this.focused++; this.ownerDocument.activeElement = this; }
   getBoundingClientRect() { return { left: 100, right: 500, top: 100, bottom: 650, width: 400, height: 550 }; }
 }
-function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, storageUnavailable = false, readUnavailable = false, writeUnavailable = false, conflictDuringClaim = false, deferDialogClose = false, renderMode, query = '?qa=1', renderUnavailable = false, navigator = {}, portableOverrides = {}, now = Date.now() } = {}) {
+function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, storageUnavailable = false, readUnavailable = false, writeUnavailable = false, conflictDuringClaim = false, deferDialogClose = false, renderMode, query = '?qa=1', renderUnavailable = false, onboardingFlag, onboardingReadUnavailable = false, onboardingWriteUnavailable = false, initiallyHidden = false, navigator = {}, portableOverrides = {}, now = Date.now() } = {}) {
   const clock = { now, performance: 0 };
   const nodes = [], closeEvents = [];
   const document = new FakeElement('document', null);
   document.ownerDocument = document;
   document._nodes = nodes;
   document.activeElement = null;
-  document.hidden = false;
+  document.hidden = initiallyHidden;
   document.hasFocus = () => true;
   const root = new FakeElement('div', document);
   root.setAttribute('id', 'slice-root');
@@ -114,9 +121,19 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   root.querySelectorAll = selector => nodes.filter(node => node.matches(selector));
   Object.defineProperty(root, 'innerHTML', { set(markup) {
     nodes.length = 0;
-    for (const match of markup.matchAll(/<([a-z][\w-]*)\b([^>]*?)>/g)) {
-      const element = new FakeElement(match[1], document);
-      for (const attribute of match[2].matchAll(/([\w-]+)(?:="([^"]*)")?/g)) element.setAttribute(attribute[1], attribute[2] ?? '');
+    root.children = [];
+    const stack = [root];
+    for (const match of markup.matchAll(/<(\/?)([a-z][\w-]*)\b([^>]*?)>/g)) {
+      if (match[1]) {
+        const index = stack.findLastIndex(node => node.tagName === match[2].toUpperCase());
+        if (index > 0) stack.splice(index);
+        continue;
+      }
+      const element = new FakeElement(match[2], document);
+      element.parentElement = stack.at(-1);
+      element.parentElement.children.push(element);
+      if (!['input', 'path', 'br', 'hr', 'img'].includes(match[2])) stack.push(element);
+      for (const attribute of match[3].matchAll(/([\w-]+)(?:="([^"]*)")?/g)) element.setAttribute(attribute[1], attribute[2] ?? '');
       if (element.tagName === 'DIALOG') {
         element.open = false;
         element.showModalCalls = 0;
@@ -139,11 +156,13 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   const memory = createMemoryStorage();
   if (raw !== undefined) memory.setItem(SAVE_KEY, raw);
   else if (initial) { const repo = new LocalSaveRepository(memory); repo.load(clock.now); assert.equal(repo.save(initial, clock.now - savedAtAgoSeconds * 1000).ok, true); }
+  if (onboardingFlag !== undefined) memory.setItem(ONBOARDING_KEY, onboardingFlag);
   if (renderMode !== undefined) memory.setItem(RENDER_MODE_KEY, renderMode);
   const storageControl = { readUnavailable, writeUnavailable, removeUnavailable: false };
   let storageReads = 0;
   const storage = storageUnavailable ? { getItem() { throw new Error('storage unavailable'); }, setItem() { throw new Error('storage unavailable'); }, removeItem() { throw new Error('storage unavailable'); } } : {
     getItem(key) {
+      if (key === ONBOARDING_KEY && onboardingReadUnavailable) throw new Error("onboarding read unavailable");
       if (storageControl.readUnavailable) throw new Error('reads unavailable');
       if (key === SAVE_KEY && conflictDuringClaim && ++storageReads === 2) {
         const foreign = JSON.parse(memory.getItem(SAVE_KEY)); foreign.recordChangeTag = 'concurrent-offline-claim';
@@ -151,7 +170,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
       }
       return memory.getItem(key);
     },
-    setItem(key, value) { if (storageControl.writeUnavailable) throw new Error('writes unavailable'); memory.setItem(key, value); storageWrites.push({ key, value }); },
+    setItem(key, value) { if (key === ONBOARDING_KEY && onboardingWriteUnavailable) throw new Error("onboarding write unavailable"); if (storageControl.writeUnavailable) throw new Error('writes unavailable'); memory.setItem(key, value); storageWrites.push({ key, value }); },
     removeItem(key) { if (storageControl.writeUnavailable || storageControl.removeUnavailable) throw new Error('writes unavailable'); memory.removeItem(key); },
   };
   const window = new FakeElement('window', document);
@@ -244,7 +263,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
     assert.ok(pending, 'an actual pending offline macrotask exists');
     const [id, callback] = pending; timers.delete(id); timerDelays.delete(id); callback();
     await new Promise(resolve => setImmediate(resolve));
-  }, flushCloseEvents() { for (const callback of closeEvents.splice(0)) callback(); }, element: selector => root.querySelector(selector), action: action => renderer.action(action), click(selector, extra = {}) { const target = root.querySelector(selector); assert.ok(target, selector); if (!target.disabled) { const event = { target, detail: 1, ...extra }; target.emit('click', event); root.emit('click', event); } }, tick(seconds = .2) { clock.now += seconds * 1000; clock.performance += seconds * 1000; const pending = [...frames.values()]; frames.clear(); for (const callback of pending) callback(clock.performance); }, dispose() { hmrCleanup?.(); } };
+  }, flushCloseEvents() { for (const callback of closeEvents.splice(0)) callback(); }, element: selector => root.querySelector(selector), action: action => renderer.action(action), click(selector, extra = {}) { const target = root.querySelector(selector); assert.ok(target, selector); if (!target.disabled) { const event = { target, detail: 1, ...extra }; target.emit('click', event); root.emit('click', event); if (target.tagName === 'SUMMARY') target.parentElement.toggleAttribute('open'); } }, tick(seconds = .2) { clock.now += seconds * 1000; clock.performance += seconds * 1000; const pending = [...frames.values()]; frames.clear(); for (const callback of pending) callback(clock.performance); }, dispose() { hmrCleanup?.(); } };
 }
 
 test('TC-3D-008 REQ-3D-015 full-viewport scene has no webpage frame or page scroll (static contract)', () => {
@@ -259,7 +278,7 @@ test('TC-3D-008 REQ-3D-015 full-viewport scene has no webpage frame or page scro
   assert.equal(declarations('.coffee-world', 'border').length, 0);
   assert.equal(declarations('.coffee-world', 'border-radius').length, 0);
   assert.equal(declarations('#coffee-canvas', 'min-width').length, 0);
-  assert.doesNotMatch(outsideModal, /<aside\b|counter-card|station-card|save-panel|经营卡片/);
+  assert.doesNotMatch(permanentOutsideModal, /<aside\b|counter-card|station-card|save-panel|经营卡片/);
   assert.equal(openingTags(outsideModal, 'canvas').length, 1);
 });
 
@@ -276,7 +295,7 @@ test('TC-3D-009 REQ-3D-016 permanent HUD contains only a noninteractive ¥ amoun
   assert.deepEqual(declarations('.wallet-chip', 'pointer-events'), ['auto'], 'the visible amount blocks clicks on obscured scene pixels without becoming an action');
   assert.deepEqual(declarations('.wallet-chip', 'touch-action'), ['none']);
   assert.deepEqual(declarations('.wallet-chip', 'user-select'), ['none']);
-  assert.deepEqual(openingTags(outsideModal, 'button'), openingTags(hud, 'button'));
+  assert.deepEqual(openingTags(permanentOutsideModal, 'button'), openingTags(hud, 'button'));
   assert.doesNotMatch(outsideModal, /<nav\b|data-anchor=|world-controls|world-button|营业牌|暂停|经理推车/);
   assert.doesNotMatch(main, /positionControls|beginAnchorPointer|\.style\.transform\s*=\s*`translate\(/, 'no permanent screen-projected DOM controls remain');
   assert.equal(rules('.world-button').length, 0);
@@ -394,7 +413,7 @@ test('TC-3D-008 REQ-3D-014 scene keyboard access is provided on the real canvas 
   assert.match(canvas, /aria-describedby="[^"]+"/);
   assert.match(outsideModal, /键盘|Tab|Enter|方向键|空格/);
   assert.match(main, /keydown/);
-  assert.deepEqual(openingTags(outsideModal, 'button').map(tag => /id="([^"]+)"/.exec(tag)?.[1]), ['settings'], 'keyboard support cannot reintroduce offscreen duplicate scene buttons');
+  assert.deepEqual(openingTags(permanentOutsideModal, 'button').map(tag => /id="([^"]+)"/.exec(tag)?.[1]), ['settings'], 'keyboard support cannot reintroduce offscreen duplicate scene buttons');
   assert.ok(rules('#coffee-canvas:focus-visible').length, 'keyboard users can locate their scene focus');
   assert.ok(declarations('#coffee-canvas:focus-visible', 'outline-offset').some(value => Number.parseFloat(value) < 0), 'full-viewport focus ring must be inset so overflow:hidden does not clip it');
 });
@@ -470,8 +489,8 @@ test('TC-3D-008 REQ-3D-015 dialog recipe/upgrade/navigation routes preserve core
     assert.equal(f.element('#operation-dialog').open, false);
     assert.equal(f.document.activeElement, f.element('#coffee-canvas'));
     f.click('#settings');
-    const entryJump = f.nodes.find(node => node.dataset.focus === 'invite');
-    f.root.emit('click', { target: entryJump });
+    f.click("#dialog-close");
+    f.element("#coffee-canvas").emit("keydown", { key: "ArrowLeft" });
     assert.equal(f.element('#operation-dialog').open, false);
     assert.equal(f.renderer.focusCalls.at(-1), 'invite');
   } finally { f.dispose(); }
@@ -535,8 +554,9 @@ test('TC-3D-008 REQ-3D-015 post-dialog navigation survives native asynchronous c
   const f = fixture({ deferDialogClose: true });
   try {
     f.click('#settings');
-    const jump = f.nodes.find(node => node.dataset.focus === 'vault');
-    f.root.emit('click', { target: jump });
+    f.click('#dialog-close');
+    f.element('#coffee-canvas').emit('keydown', { key: 'ArrowLeft' });
+    f.element('#coffee-canvas').emit('keydown', { key: 'ArrowLeft' });
     assert.equal(f.element('#operation-dialog').open, false);
     f.flushCloseEvents();
     assert.equal(f.renderer.focusCalls.at(-1), 'vault', 'native close-event delay must not discard the pending scene navigation while input is suspended');
@@ -550,8 +570,11 @@ test('TC-3D-008 REQ-3D-015 post-dialog navigation survives native asynchronous c
     assert.deepEqual(f.state(), before, 'coffee dismissal and reopening recipe choice are read-only');
     f.click('#dialog-close'); f.flushCloseEvents();
     f.click('#settings');
-    const counterJump = f.nodes.find(node => node.dataset.focus === 'counter-b-recipe');
-    f.root.emit('click', { target: counterJump }); f.flushCloseEvents();
+    f.click('#dialog-close');
+    f.element('#coffee-canvas').emit('keydown', { key: 'Home' });
+    f.element('#coffee-canvas').emit('keydown', { key: 'ArrowRight' });
+    f.element('#coffee-canvas').emit('keydown', { key: 'ArrowRight' });
+    f.flushCloseEvents();
     assert.equal(f.renderer.focusCalls.at(-1), 'counter-b-recipe', 'settings navigation still reveals the physical counter after asynchronous dismissal');
     assert.equal(f.document.activeElement, f.element('#coffee-canvas'));
   } finally { f.dispose(); }
@@ -604,7 +627,7 @@ test('TC-3D-009 REQ-3D-016 physical invite remains cooldown/conflict guarded wit
 test('TC-3D-008 REQ-3D-015 modal controls maintain 44px targets, safe-area and dynamic viewport hooks (static contract)', () => {
   assert.match(index, /viewport-fit=cover/);
   for (const property of ['width', 'height']) for (const value of declarations('.dialog-close', property)) assert.ok(Number.parseFloat(value) >= 44, `.dialog-close ${property}: ${value}`);
-  for (const selector of ['.primary-button', '.secondary-button', '.settings-grid button', '.jump-grid button', '.recipe-picker button', '.quiet-details summary']) assert.ok(declarations(selector, 'min-height').some(value => Number.parseFloat(value) >= 44), selector);
+  for (const selector of ['.primary-button', '.secondary-button', '.settings-grid button', '.recipe-picker button', '.quiet-details summary']) assert.ok(declarations(selector, 'min-height').some(value => Number.parseFloat(value) >= 44), selector);
   for (const [property, inset] of [['left', 'left'], ['top', 'top']]) assert.ok(declarations('.hud', property).every(value => value.includes(`safe-area-inset-${inset}`)));
   assert.ok(declarations('.operation-dialog', 'max-height').every(value => value.includes('dvh') && value.includes('safe-area-inset-bottom')));
   assert.match(main, /sizeObserver\?\.observe\(\$\("#coffee-canvas"\)\)/);
@@ -2383,11 +2406,11 @@ test('TC-3D-022 panel controls keep unique accessible IDs and an enabled styled 
 });
 
 test('TC-3D-022 technical metadata and full ledger are closed disclosures while replacement safeguards remain visible (static contract)', () => {
-  assert.ok(detailsBlocks.length >= 6, 'secondary guidance remains available in native disclosures');
+  assert.equal(detailsBlocks.length, 5, 'only graphics and relevant vault/file detail disclosures remain');
   for (const block of detailsBlocks) {
     const tag = openingTags(block, 'details')[0];
     assert.doesNotMatch(tag, /\s(?:open|aria-hidden)(?:[\s=>])/);
-    assert.match(block, /^<details\b[^>]*>\s*<summary>[^<]+<\/summary>/, 'every disclosure has a native named summary');
+    assert.match(block, /^<details\b[^>]*>\s*<summary>[\s\S]+?<\/summary>/, 'every disclosure has a native named summary');
   }
   for (const id of ['file-current-details', 'file-incoming-details', 'pending', 'carrying']) {
     const disclosure = detailsBlocks.find(block => block.includes(`id="${id}"`));
@@ -2496,19 +2519,20 @@ test('TC-3D-022 an older file warns before replacement, equal/newer files clear 
   } finally { f.dispose(); }
 });
 
-test('TC-3D-022 blocked save recovery opens its disclosure automatically and retains frozen assets and recovery controls', async () => {
+test('TC-3D-024 blocked save recovery is contextual in 小店存档 and retains frozen assets and recovery controls', async () => {
   for (const cause of ['corrupt', 'unreadable', 'storage-conflict', 'cancel-offline']) {
     const f = fixture({ now: 130000, ...(cause === 'corrupt' ? { raw: '{invalid save' } : cause === 'unreadable' ? { readUnavailable: true } : cause === 'cancel-offline' ? { savedAtAgoSeconds: 60 } : {}) });
     try {
       if (cause === 'storage-conflict') {
         f.click('#settings');
-        assert.equal(f.element('#save-recovery').hasAttribute('open'), false, 'healthy settings keep advanced recovery collapsed');
+        assert.equal(f.element('#save-recovery').hidden, true, 'healthy saves hide contextual recovery');
         f.memory.setItem(SAVE_KEY, 'other-window-save');
         f.window.emit('storage', { key: SAVE_KEY, newValue: 'other-window-save' });
       }
       if (cause === 'cancel-offline') { f.click('#offline-cancel'); await f.flushOffline(); }
-      f.click('#settings');
-      assert.equal(f.element('#save-recovery').hasAttribute('open'), true, `${cause}: recovery is not left hidden`);
+      openFilePanel(f);
+      assert.equal(isVisible(f, '#save-recovery'), true);
+      assert.equal(f.element('#save-recovery').hidden, false, `${cause}: recovery is not left hidden`);
       assert.equal(f.element('#reload').hidden, false, cause);
       assert.equal(f.element('#save-status').textContent.length > 0, true, cause);
       const before = f.state(), raw = f.memory.getItem(SAVE_KEY);
@@ -2519,19 +2543,20 @@ test('TC-3D-022 blocked save recovery opens its disclosure automatically and ret
   }
 });
 
-test('TC-3D-022 a normal settings save failure exposes backup recovery immediately without replacing durable bytes', async () => {
+test('TC-3D-024 a normal file-panel save failure exposes backup recovery immediately without replacing durable bytes', async () => {
   const f = fixture();
   try {
-    f.click('#settings');
-    assert.equal(f.element('#save-recovery').hasAttribute('open'), false);
+    openFilePanel(f);
+    assert.equal(f.element('#save-recovery').hidden, true);
     const raw = f.memory.getItem(SAVE_KEY);
     f.tick(.25);
     const live = f.state();
     assert.notDeepEqual(live, JSON.parse(raw).state, 'there is real unsaved progress to protect');
     f.storageControl.writeUnavailable = true;
     f.click('#save');
-    assert.equal(f.element('#settings-panel').hidden, false);
-    assert.equal(f.element('#save-recovery').hasAttribute('open'), true, 'ordinary write/quota failure immediately reveals backups in the already-open panel');
+    assert.equal(f.element('#files-panel').hidden, false);
+    assert.equal(isVisible(f, '#save-recovery'), true);
+    assert.equal(f.element('#save-recovery').hidden, false, 'ordinary write/quota failure immediately reveals backups in the file panel');
     assert.match(f.element('#save-status').textContent, /保存失败.*导出备份/);
     assert.equal(f.memory.getItem(SAVE_KEY), raw);
     assert.deepEqual(f.state(), live);
@@ -2953,5 +2978,346 @@ test('TC-3D-023 REQ-3D-033 portable preview, cancellation, replacement and recov
     confirmPortable(f);
     assert.deepEqual(f.state(), before, 'the exported recovery file can restore both independent coffee levels through the real handler');
     assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, before);
+  } finally { f.dispose(); }
+});
+
+// TC-3D-024: DOM ancestry is used here so an enabled hidden control cannot
+// masquerade as a reachable recovery flow. This remains a simulated DOM check.
+function isVisible(f, selector) {
+  let node = f.element(selector);
+  if (!node) return false;
+  while (node) {
+    if (node.hidden || (node.tagName === 'DIALOG' && !node.open)) return false;
+    const parent = node.parentElement;
+    if (parent?.tagName === 'DETAILS' && !parent.hasAttribute('open') && node.tagName !== 'SUMMARY') return false;
+    node = parent;
+  }
+  return true;
+}
+function visibleClick(f, selector) {
+  assert.equal(isVisible(f, selector), true, `${selector} must be reachable through the visible UI`);
+  assert.equal(f.element(selector).disabled, false, `${selector} must be enabled`);
+  f.click(selector);
+}
+
+test('TC-3D-024 settings has exactly two primary entries and graphics expands without introducing save actions', () => {
+  const f = fixture();
+  try {
+    visibleClick(f, '#settings');
+    assert.deepEqual(f.element('#settings-panel').children.map(node => node.id), ['display-settings', 'save-files']);
+    assert.equal(f.element('#display-settings').hasAttribute('open'), false);
+    const summary = f.element('#display-settings').children[0];
+    assert.equal(summary.tagName, 'SUMMARY');
+    for (const button of f.nodes.filter(node => node.dataset.renderMode)) {
+      button.setAttribute('id', `graphics-${button.dataset.renderMode}-test`);
+      assert.equal(isVisible(f, `#${button.id}`), false);
+    }
+    // The native summary owns collapsed state; the fixture mirrors that default action.
+    summary.setAttribute('id', 'graphics-summary-test');
+    visibleClick(f, '#graphics-summary-test');
+    assert.equal(f.element('#display-settings').hasAttribute('open'), true);
+    const balanced = f.nodes.find(node => node.dataset.renderMode === 'balanced');
+    balanced.setAttribute('id', 'balanced-test');
+    visibleClick(f, '#balanced-test');
+    assert.equal(f.memory.getItem(RENDER_MODE_KEY), 'balanced');
+    assert.equal(f.element('#render-mode-current').textContent, '平衡');
+    visibleClick(f, '#graphics-summary-test');
+    assert.equal(isVisible(f, '#balanced-test'), false);
+    visibleClick(f, '#save-files');
+    assert.equal(isVisible(f, '#save'), true);
+    assert.equal(isVisible(f, '#save-recovery'), false);
+    visibleClick(f, '#file-back');
+    assert.equal(f.element('#display-settings').hasAttribute('open'), false);
+    assert.equal(isVisible(f, '#save'), false);
+    assert.equal(f.element('#render-mode-current').textContent, '平衡');
+    for (const old of ['逛逛小店', '怎么玩', '<summary>备份与恢复</summary>', 'data-focus=']) assert.equal(html.includes(old), false);
+    assert.equal(f.element('#save-recovery').tagName, 'SECTION', 'recovery is a contextual card rather than a duplicate submenu');
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-024 quota failure surfaces on the save entry and clears only after a successful durable retry', async () => {
+  const f = fixture();
+  try {
+    const raw = f.memory.getItem(SAVE_KEY);
+    f.storageControl.writeUnavailable = true;
+    f.tick(9); // Real autosave path, without a manual-save button in settings.
+    assert.equal(f.memory.getItem(SAVE_KEY), raw);
+    visibleClick(f, '#settings');
+    assert.match(f.element('#save-entry-summary').textContent, /需要处理/);
+    assert.equal(isVisible(f, '#save-recovery'), false, 'the settings screen remains two entries');
+    visibleClick(f, '#save-files');
+    assert.equal(isVisible(f, '#save-recovery'), true);
+    visibleClick(f, '#export');
+    assert.deepEqual(JSON.parse(await f.blobs[0].text()).state, f.state());
+    f.storageControl.writeUnavailable = false;
+    visibleClick(f, '#save');
+    assert.equal(isVisible(f, '#save-recovery'), false);
+    assert.match(f.element('#save-entry-summary').textContent, /自动保存/);
+    assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, f.state());
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-024 corrupt and future saves expose original bytes and protected new-shop confirmation inside files', async () => {
+  for (const raw of ['{broken original', JSON.stringify({ schemaVersion: 9876, untouched: 'future save' })]) {
+    const f = fixture({ raw });
+    try {
+      visibleClick(f, '#settings'); visibleClick(f, '#save-files');
+      assert.equal(isVisible(f, '#save-recovery'), true);
+      assert.equal(f.element('#save').disabled, true);
+      assert.equal(f.element('#file-prepare').disabled, true);
+      assert.equal(f.element('#export-current').hidden, true);
+      visibleClick(f, '#export');
+      assert.equal(await f.blobs[0].text(), raw);
+      assert.equal(f.memory.getItem(SAVE_KEY), raw);
+      f.window.confirm = () => false;
+      visibleClick(f, '#new-shop');
+      assert.equal(f.memory.getItem(SAVE_KEY), raw);
+      f.window.confirm = () => true;
+      visibleClick(f, '#new-shop');
+      assert.equal(f.state().paused, false);
+      assert.equal(isVisible(f, '#save-recovery'), false);
+      assert.equal(isVisible(f, '#welcome-guide'), false, 'recovery/new-shop is not newcomer onboarding');
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-024 missing or unreadable sources stay frozen and retryable through the save panel', () => {
+  for (const failure of ['missing', 'read']) {
+    const f = fixture();
+    try {
+      visibleClick(f, '#settings'); visibleClick(f, '#save-files');
+      f.memory.removeItem(SAVE_KEY);
+      if (failure === 'read') f.storageControl.readUnavailable = true;
+      f.window.emit('storage', { key: SAVE_KEY, newValue: null });
+      visibleClick(f, '#reload');
+      assert.equal(f.state().paused, true);
+      assert.equal(isVisible(f, '#save-recovery'), true);
+      assert.equal(f.element('#save').disabled, true);
+      assert.equal(f.memory.getItem(SAVE_KEY), null);
+      assert.equal(isVisible(f, '#export'), true, 'previously valid current state is still recoverable');
+      if (failure === 'missing') assert.equal(isVisible(f, '#new-shop'), true);
+      assert.equal(isVisible(f, '#reload'), true);
+      f.tick(10); assert.equal(f.memory.getItem(SAVE_KEY), null);
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-024 first exposure is four skippable scene steps with no modal or saved pause mutation', () => {
+  const f = fixture({ initial: null }), oracle = fixture({ initial: null, onboardingFlag: 'completed' });
+  try {
+    assert.equal(isVisible(f, '#welcome-guide'), true);
+    assert.equal(f.element('#operation-dialog').open, false);
+    assert.equal(f.state().paused, false);
+    assert.equal(f.memory.getItem(SAVE_KEY), null, 'starting guidance never writes game data');
+    assert.deepEqual(f.storageWrites.map(item => item.key), [ONBOARDING_KEY]);
+    assert.equal(f.memory.getItem(ONBOARDING_KEY), 'shown');
+    assert.equal(f.renderer.focusCalls.at(-1), 'counter-a-recipe');
+    for (const anchor of ['counter-a-upgrade', 'menu-espresso', 'vault']) {
+      visibleClick(f, '#guide-next');
+      assert.equal(f.renderer.focusCalls.at(-1), anchor);
+      assert.equal(f.renderer.interactionEnabled, true);
+      f.tick(.5); oracle.tick(.5);
+      assert.deepEqual(f.state(), oracle.state(), 'the guide cannot pause, advance or reset simulation time');
+    }
+    assert.equal(f.element('#guide-next').textContent, '开始营业');
+    visibleClick(f, '#guide-next');
+    assert.equal(isVisible(f, '#welcome-guide'), false);
+    assert.equal(f.memory.getItem(ONBOARDING_KEY), 'completed');
+    assert.equal(f.document.activeElement, f.element('#coffee-canvas'));
+    f.click('#guide-next'); f.click('#guide-skip');
+    assert.equal(f.memory.getItem(ONBOARDING_KEY), 'completed', 'late repeated clicks cannot rewrite completion');
+    assert.deepEqual(f.state(), oracle.state());
+  } finally { f.dispose(); oracle.dispose(); }
+});
+
+test('TC-3D-024 skip, finish and interrupted refresh never automatically repeat first-entry guidance', () => {
+  for (const action of ['skip', 'finish', 'interrupt']) {
+    const f = fixture({ initial: null });
+    let fresh;
+    try {
+      if (action === 'skip') visibleClick(f, '#guide-skip');
+      if (action === 'finish') for (let i = 0; i < 4; i++) visibleClick(f, '#guide-next');
+      fresh = fixture({ initial: null, onboardingFlag: f.memory.getItem(ONBOARDING_KEY) });
+      assert.equal(isVisible(fresh, '#welcome-guide'), false, `${action}: refresh before first autosave does not repeat`);
+      assert.equal(fresh.renderer.focusCalls.length, 0);
+      assert.equal(fresh.memory.getItem(SAVE_KEY), null);
+    } finally { f.dispose(); fresh?.dispose(); }
+  }
+});
+
+test('TC-3D-024 existing pristine, developed, paused and legacy saves are never mistaken for newcomers', async () => {
+  const developed = createEngine(); developed.advance(50);
+  const paused = createInitialState(); paused.paused = true;
+  const legacy = createInitialState(); delete legacy.coffeeLevels; legacy.economyVersion = 1;
+  for (const initial of [createInitialState(), developed.snapshot(), paused, legacy]) {
+    const f = fixture({ initial });
+    try {
+      await f.flushOffline();
+      assert.equal(isVisible(f, '#welcome-guide'), false);
+      assert.equal(f.memory.getItem(ONBOARDING_KEY), null);
+      assert.equal(f.renderer.focusCalls.length, 0);
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-024 guide preference failures never interfere with game persistence or recovery', () => {
+  for (const failure of ['read', 'write', 'all-storage', 'webgl']) {
+    const f = fixture({ initial: null, onboardingReadUnavailable: failure === 'read', onboardingWriteUnavailable: failure === 'write', storageUnavailable: failure === 'all-storage', renderUnavailable: failure === 'webgl' });
+    try {
+      assert.equal(isVisible(f, '#welcome-guide'), false);
+      if (failure === 'read' || failure === 'write') {
+        f.tick(9);
+        assert.ok(f.memory.getItem(SAVE_KEY), 'preference storage errors never turn off autosave');
+        assert.equal(f.state().paused, false);
+      } else if (failure === 'all-storage') {
+        visibleClick(f, '#settings'); visibleClick(f, '#save-files');
+        assert.equal(isVisible(f, '#save-recovery'), true);
+        assert.equal(f.state().paused, true);
+      }
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-024 modal interruption hides then resumes the same guide step and restores visible focus', () => {
+  const f = fixture({ initial: null, deferDialogClose: true });
+  try {
+    visibleClick(f, '#guide-next'); f.element('#guide-next').focus();
+    visibleClick(f, '#settings');
+    assert.equal(isVisible(f, '#welcome-guide'), false);
+    f.click('#guide-next');
+    visibleClick(f, '#dialog-close'); f.flushCloseEvents();
+    assert.equal(isVisible(f, '#welcome-guide'), true);
+    assert.match(f.element('#guide-progress').textContent, /2 \/ 4/);
+    assert.equal(f.document.activeElement?.id, 'guide-next');
+    f.element('#guide-next').emit('keydown', { key: 'ArrowRight' });
+    assert.equal(f.renderer.focusCalls.at(-1), 'counter-a-upgrade', 'guide buttons do not capture canvas keyboard routes');
+    f.action({ type: 'vault' });
+    assert.equal(isVisible(f, '#welcome-guide'), false);
+    visibleClick(f, '#dialog-close'); f.flushCloseEvents();
+    assert.match(f.element('#guide-progress').textContent, /2 \/ 4/);
+    visibleClick(f, '#guide-skip');
+    visibleClick(f, '#settings'); visibleClick(f, '#dialog-close'); f.flushCloseEvents();
+    assert.equal(isVisible(f, '#welcome-guide'), false);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-024 first-visit guide gives way to offline settlement and resumes without changing credited state', async () => {
+  const f = fixture({ initial: null }), oracle = fixture({ initial: null, onboardingFlag: 'completed' });
+  try {
+    for (const app of [f, oracle]) {
+      app.tick(1); app.document.hidden = true; app.document.emit('visibilitychange');
+      assert.equal(isVisible(app, '#welcome-guide'), false);
+      app.clock.now += 35000; app.clock.performance += 35000;
+      app.document.hidden = false; app.document.emit('visibilitychange');
+      await app.flushOffline({ dismissResult: false });
+      assert.equal(isVisible(app, '#offline-result'), true);
+      assert.equal(isVisible(app, '#welcome-guide'), false);
+      assert.equal(app.state().offlineClaimIds.length, 1);
+      assert.equal(app.state().offlineClaimIds[0], app.state().lastOfflineClaimId);
+      assert.deepEqual(JSON.parse(app.memory.getItem(SAVE_KEY)).state, app.state());
+    }
+    assert.deepEqual({ ...f.state(), lastOfflineClaimId: null, offlineClaimIds: [] }, { ...oracle.state(), lastOfflineClaimId: null, offlineClaimIds: [] });
+    assert.equal(f.state().paused, false);
+    visibleClick(f, '#offline-done'); visibleClick(oracle, '#offline-done');
+    assert.equal(isVisible(f, '#welcome-guide'), true);
+    assert.match(f.element('#guide-progress').textContent, /1 \/ 4/);
+    assert.equal(f.memory.getItem(ONBOARDING_KEY), 'shown');
+    assert.deepEqual({ ...f.state(), lastOfflineClaimId: null, offlineClaimIds: [] }, { ...oracle.state(), lastOfflineClaimId: null, offlineClaimIds: [] });
+    visibleClick(f, '#guide-skip');
+    f.window.emit('pagehide', { persisted: true });
+    f.window.emit('pageshow', { persisted: true });
+    await f.flushOffline();
+    assert.equal(isVisible(f, '#welcome-guide'), false, 'BFCache return does not restart dismissed guidance');
+  } finally { f.dispose(); oracle.dispose(); }
+});
+
+test('TC-3D-024 import cancellation retains guidance, confirmed import retires it and never recreates it on reload', async () => {
+  const incoming = await portableFixture();
+  const f = fixture({ initial: null, now: 130000 });
+  try {
+    f.element('#guide-next').focus();
+    openFilePanel(f); f.chooseFile({ text: incoming.text }); await f.flushFiles();
+    visibleClick(f, '#file-cancel'); visibleClick(f, '#dialog-close');
+    assert.equal(isVisible(f, '#welcome-guide'), true);
+    openFilePanel(f); f.chooseFile({ text: incoming.text }); await f.flushFiles();
+    confirmPortable(f);
+    visibleClick(f, '#dialog-close');
+    assert.equal(isVisible(f, '#welcome-guide'), false);
+    assert.equal(f.memory.getItem(ONBOARDING_KEY), 'skipped');
+    assert.equal(f.document.activeElement?.id, 'coffee-canvas', 'focus never returns to a retired guide button');
+    assert.deepEqual(f.state(), incoming.payload.state);
+    const reload = fixture({ raw: f.memory.getItem(SAVE_KEY), now: 130000 });
+    try { assert.equal(isVisible(reload, '#welcome-guide'), false, 'a portable import is an existing shop even without the browser flag'); }
+    finally { reload.dispose(); }
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-024 adopting another window progress retires an interrupted newcomer guide', async () => {
+  const now = 130000, f = fixture({ initial: null, now });
+  const developed = createEngine(); developed.advance(45);
+  const storage = createMemoryStorage(), repo = new LocalSaveRepository(storage);
+  repo.load(now); assert.equal(repo.save(developed.snapshot(), now).ok, true);
+  try {
+    visibleClick(f, '#guide-next');
+    const incoming = storage.getItem(SAVE_KEY);
+    f.memory.setItem(SAVE_KEY, incoming);
+    f.window.emit('storage', { key: SAVE_KEY, newValue: incoming });
+    assert.equal(isVisible(f, '#welcome-guide'), false);
+    visibleClick(f, '#settings'); visibleClick(f, '#save-files');
+    visibleClick(f, '#reload'); await f.flushOffline();
+    visibleClick(f, '#dialog-close');
+    assert.deepEqual(f.state(), developed.snapshot());
+    assert.equal(isVisible(f, '#welcome-guide'), false);
+    assert.equal(f.memory.getItem(ONBOARDING_KEY), 'skipped');
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-024 stable guide steps never repeatedly mutate the polite live region during play', () => {
+  const f = fixture({ initial: null });
+  try {
+    const title = f.element('#guide-title'), copy = f.element('#guide-copy');
+    const titleWrites = title.textWrites, copyWrites = copy.textWrites;
+    for (let n = 0; n < 12; n++) f.tick(.25);
+    assert.equal(title.textWrites, titleWrites);
+    assert.equal(copy.textWrites, copyWrites);
+    visibleClick(f, '#guide-next');
+    assert.equal(title.textWrites, titleWrites + 1);
+    assert.equal(copy.textWrites, copyWrites + 1);
+    visibleClick(f, '#settings'); visibleClick(f, '#dialog-close');
+    assert.equal(title.textWrites, titleWrites + 1);
+    assert.equal(copy.textWrites, copyWrites + 1);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-024 files already open reflect a new conflict without leaving current export apparently available', () => {
+  const f = fixture();
+  try {
+    visibleClick(f, '#settings'); visibleClick(f, '#save-files');
+    assert.equal(f.element('#file-prepare').disabled, false);
+    f.window.emit('storage', { key: SAVE_KEY, newValue: 'foreign revision' });
+    assert.equal(isVisible(f, '#save-recovery'), true);
+    assert.equal(f.element('#file-prepare').disabled, true);
+    assert.equal(f.element('#save').disabled, true);
+    assert.equal(isVisible(f, '#reload'), true);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-024 hidden first entry and disposal never force a modal, keyboard capture or replayed tutorial', async () => {
+  const f = fixture({ initial: null, initiallyHidden: true });
+  try {
+    assert.equal(isVisible(f, '#welcome-guide'), false);
+    assert.equal(f.element('#operation-dialog').open, false);
+    assert.equal(f.window.listeners.has('keydown'), false);
+    assert.equal(f.document.listeners.has('keydown'), false);
+    f.clock.now += 1000; f.clock.performance += 1000;
+    f.document.hidden = false; f.document.emit('visibilitychange'); await f.flushOffline();
+    assert.equal(isVisible(f, '#welcome-guide'), true);
+    assert.equal(f.state().paused, false);
+    f.dispose();
+    assert.equal(isVisible(f, '#welcome-guide'), false);
+    const focusCalls = f.renderer.focusCalls.length;
+    f.click('#guide-next'); f.click('#guide-skip');
+    assert.equal(f.renderer.focusCalls.length, focusCalls);
+    assert.equal(f.memory.getItem(ONBOARDING_KEY), 'shown');
   } finally { f.dispose(); }
 });

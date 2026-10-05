@@ -1,0 +1,24 @@
+✔ TC-FILE-001 synthetic generation has fixed payload and exact five fields; revision does not mutate source (2.578776ms)
+✔ TC-FILE-002 absent APIs, insecure contexts, unsupported sharing and throwing canShare fall back safely (0.460806ms)
+✔ TC-FILE-003 safe valid JSON reads exact bytes and independently verified SHA-256 (5.85122ms)
+✔ TC-FILE-004 malformed, wrong version, unsupported fields/payload, bad IDs/dates/revisions are rejected (1.555079ms)
+✔ TC-FILE-005 bounded file name and size reject before reading; actual UTF-8 length checked too (0.720088ms)
+✔ TC-FILE-006 open is selected-file-only and picker invoked synchronously; no createWritable call (2.353205ms)
+✔ TC-FILE-007 cancel and denial remain errors with honest user messages; no fallback permission request (0.611614ms)
+✔ TC-FILE-008 save-as uses a fresh name, rejects renamed or nonempty targets before createWritable (0.4764ms)
+✔ TC-FILE-009 a fresh synthetic copy closes and verifies exact readback; no handle persistence (2.50864ms)
+✔ TC-FILE-010 failed writes attempt abort, close/readback failures never report success (0.82771ms)
+✔ TC-FILE-011 compare ID, revision AND exact hash; a valid file from another device has no local baseline (0.7681ms)
+✔ TC-FILE-012 standalone source has no game imports, stored handles, directory picker, network or permission requests (1.344551ms)
+✔ TC-FILE-013 raw-byte checksum distinguishes UTF-8 BOM and strict decoder rejects invalid encoding (1.324081ms)
+(node:145) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ TC-FILE-014 fresh phone-like UI imports revision 1, exports revision 2, and preserves valid content on cancel/error (7.990973ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 168.308062

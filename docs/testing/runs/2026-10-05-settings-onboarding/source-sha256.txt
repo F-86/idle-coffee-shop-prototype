@@ -1,0 +1,3 @@
+bca8ac3b6a5a0b687c728dbdc6f53127d1f789718104f3be77a5f8e0ec6c8866  src/slice/main.ts
+a72f2f774eaf6edd7098be350cc04fe98b89267e481226e8336b20e19c47b944  src/slice/style.css
+ee500211e3a9b8b5f088f55bd990b150746004fa8cbf25df275bdecb688d0b60  tests/fullscreen-ui.test.mjs

@@ -39,3 +39,5 @@
 游戏面板重设计：[规格](product/specs/game-panel-redesign.md)、[计划](testing/plans/game-panel-redesign.md)、[TC-3D-022](testing/cases/slice/TC-3D-022.md)。升级/设置/存档采用游戏卡片，技术细节按需展开；离线结果只显示离开时长与实际金库到账，不改变结算或保存协议。
 
 咖啡独立升级与柜台双入口：[规格](product/specs/coffee-upgrades-and-counter-controls.md)、[计划](testing/plans/coffee-upgrades-and-counter-controls.md)、[TC-3D-023](testing/cases/slice/TC-3D-023.md)。咖啡墙升级配方，柜台左选咖啡/右升级分别开面板；经济2与文件2保留等级并兼容旧档读入。数值暂定，平衡延后。
+
+设置与首次开店引导：[规格](product/specs/settings-onboarding.md)、[计划](testing/plans/settings-onboarding.md)、[TC-3D-024](testing/cases/slice/TC-3D-024.md)。设置只有收起的画面与小店存档，故障恢复并入存档情境；新店四步可跳过引导只在当前浏览器首次出现，不改变经营/文件版本。

@@ -76,3 +76,7 @@ REQ-3D-032 → [TC-3D-022](cases/slice/TC-3D-022.md)、[计划](plans/game-panel
 ## 咖啡独立升级与柜台双入口
 
 REQ-3D-033 → [TC-3D-023](cases/slice/TC-3D-023.md)、[计划](plans/coffee-upgrades-and-counter-controls.md)。独立实体拾取/面板/购买、配方等级与制作快照、在线离线同核心、经济2和文件2迁移/拒绝未知版本、旧实现拒绝新档；保持恢复/离线/文件安全回归，像素/真机独立验收。
+
+## 简洁设置与首次引导
+
+REQ-3D-034 → [TC-3D-024](cases/slice/TC-3D-024.md)、[计划](plans/settings-onboarding.md)。两入口/折叠/偏好，祖先可见性的恢复流程，首次/跳过/完成/刷新/旧档/偏好故障，引导与导入、跨窗、离线/BFCache、焦点和播报隔离；模拟handler不冒充像素/原生UI证据。
