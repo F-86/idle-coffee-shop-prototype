@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mellow Bean · 文件往返验证</title></head>
+<body>
+<main>
+  <header><p class="eyebrow">MELLOW BEAN / 独立 QA</p><h1>文件往返验证</h1><p>用一份合成 JSON，验证浏览器与“文件 / iCloud Drive”的手动传递。</p></header>
+  <aside class="boundary"><strong>只验证选中的测试文件</strong><p>不读取游戏存档，不登录 iCloud，不自动访问目录。浏览器无法判断文件来自哪个云盘，也无法确认云端同步完成。</p></aside>
+  <section aria-labelledby="environment-title"><h2 id="environment-title">1. 当前浏览器能力</h2><dl id="capabilities"></dl><p class="hint">localhost 可作为安全上下文；手机访问普通 HTTP 局域网地址通常不可以。缺少增强选择器时，仍可尝试基础文件选择与下载。</p></section>
+  <section aria-labelledby="actions-title"><h2 id="actions-title">2. 生成或读取测试文件</h2><div class="actions"><button id="generate">生成新测试</button><button id="revise" disabled>revision +1，准备新副本</button></div><div class="actions"><label class="file-label" for="file-input">选择测试文件（通用）<input type="file" id="file-input" accept=".json,application/json"></label><button id="open-picker" disabled>增强读取选择器</button></div><p class="hint">只接受本工具生成的 JSON，最大 16 KiB。选择器里的 iCloud Drive 由系统提供，请手动选择测试文件。读取不会改写原文件。</p></section>
+  <section aria-labelledby="export-title"><h2 id="export-title">3. 导出新的测试副本</h2><div class="actions"><button id="download" disabled>下载新副本</button><button id="save-picker" disabled>增强另存为新副本</button><button id="share" disabled>系统分享文件（可选）</button></div><p class="hint">保存位置由浏览器或系统决定。Safari 可将下载位置设为 iCloud Drive，也可在支持时通过分享菜单“存储到文件”。增强另存为请保留随机新文件名；不选择已有文件。若浏览器提供“每次访问都允许”，本测试不需要，请仅允许这一次。</p></section>
+  <section aria-labelledby="result-title"><h2 id="result-title">4. 读回证据</h2><p id="status" role="status" aria-live="polite">尚未生成或读取文件。</p><dl id="evidence"></dl><details><summary>查看当前合成 JSON</summary><pre id="preview">无内容</pre></details></section>
+  <section aria-labelledby="steps-title"><h2 id="steps-title">如何验证 iCloud 文件路径</h2><ol><li>生成新测试，导出到系统中可见的 iCloud Drive 测试位置。</li><li>重新“选择测试文件”，核对 probeId、revision 与 SHA-256。本页保存的比较基准只存在当前标签页内存中。</li><li>在另一台设备打开这个独立测试页，从该设备“文件 → iCloud Drive”选同一副本，人工核对相同 ID、revision 和完整 SHA-256。</li><li>可在第二台设备点击 revision +1 后另存新副本，再回第一台设备读取；原文件保持不变。</li></ol><p class="hint">本机读回一致只能证明文件往返；第二设备读到相同内容才是跨设备到达的人工证据。下载发起、系统分享返回、文件写入完成都不等于 iCloud 同步完成。</p></section>
+  <footer>独立测试页 · 不进入游戏入口或默认生产包 · 不保存文件句柄</footer>
+</main><script type="module" src="./main.ts"></script>
+</body></html>

@@ -33,3 +33,5 @@
 当前离线策略：[无上限80%计划](testing/plans/offline-unlimited.md)、[TC-3D-020](testing/cases/slice/TC-3D-020.md)。整合已验场景和恢复保护，准确分批回放、旧区间原规则一次迁移、末尾原子保存；30分钟研究候选已被用户的新要求替代。
 
 无上限80%后续实机证据：[Mac短区间有限复测](testing/runs/2026-10-05-offline-unlimited/mac-limited-qa.md)。一次42.49秒→33.99秒显示符合80%；不代表长区间、迁移、取消或精确去重已通过，未知旧origin与4180失联原因如实保留。
+
+独立文件 / iCloud 路径验证：[探针运行说明](../qa/file-probe/README.md)、[规格](product/specs/icloud-file-probe.md)、[测试计划](testing/plans/icloud-file-probe.md)、[执行边界](testing/runs/2026-10-05-icloud-file-probe/report.md)。仅合成 JSON，独立构建；真实 Safari 与双设备到达须另行实测，不接入游戏存档。
