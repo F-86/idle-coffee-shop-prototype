@@ -47,7 +47,7 @@ function activeState({ stored = false } = {}) {
   // Synthetic already-earned balance and served count keep this fixture short;
   // actual purchases and layout activation go through the public engine API.
   const state = createInitialState(); state.wallet += 30000; state.totalEarned = 30000; state.totalServed = 40; state.counters[0].brewed = 40; state.nextCustomerId = 41;
-  const engine = createEngine(state); assert.equal(engine.beginLayoutEdit(), true);
+  const engine = createEngine(state); engine.togglePause(); assert.equal(engine.beginLayoutEdit(), true);
   for (let i = 0; i < 4000 && engine.layoutEditStatus() !== 'ready'; i++) engine.advance(.05);
   assert.equal(engine.layoutEditStatus(), 'ready');
   const draft = engine.createLayoutDraft(); assert.ok(draft); draft.expanded = true;
@@ -55,15 +55,16 @@ function activeState({ stored = false } = {}) {
   if (stored) draft.furniture.find(item => item.id === 'counter-d').stored = true;
   assert.equal(validateLayout(draft).ok, true, validateLayout(draft).message);
   const result = engine.commitLayout(draft); assert.equal(result.ok, true, result.message); assert.equal(result.cost, 11400);
-  const snapshot = engine.snapshot(); assert.equal(validateState(snapshot).ok, true, JSON.stringify(validateState(snapshot)));
+  engine.togglePause(); const snapshot = engine.snapshot(); assert.equal(validateState(snapshot).ok, true, JSON.stringify(validateState(snapshot)));
   return snapshot;
 }
 function assertMoney(state) { assert.equal(state.wallet + state.spend + state.manager.carrying + state.counters.reduce((sum, counter) => sum + counter.pendingCash, 0), INITIAL_WALLET + state.totalEarned); }
 
 for (const version of [1, 2]) test(`TC-3D-025 economy${version} migration preserves exact old coordinates, snapshots, assets and fractional clock`, () => {
   const old = legacyState(version), before = copy(old), checked = validateState(old); assert.equal(checked.ok, true, checked.message);
-  assert.deepEqual(old, before); assert.equal(checked.state.economyVersion, 3); assert.deepEqual(checked.state.layout, initialLayout());
-  for (const key of ['counters', 'customers', 'manager', 'wallet', 'totalEarned', 'totalServed', 'spend', 'elapsed', 'stepCarry', 'eventSequence', 'nextCustomerId']) assert.deepEqual(checked.state[key], old[key], key);
+  assert.deepEqual(old, before); assert.equal(checked.state.economyVersion, 4); assert.equal(checked.state.layout.version, 2); assert.equal(checked.state.layout.active, false); assert.ok(checked.state.layout.coffeeSigns.every(sign => sign.stored));
+  assert.equal(checked.state.wallet, old.wallet + 123); assert.equal(checked.state.manager.carrying, 0); assert.deepEqual(checked.state.counters, old.counters.map(counter => ({ ...counter, pendingCash: 0 })));
+  for (const key of ['customers', 'totalEarned', 'totalServed', 'spend', 'elapsed', 'stepCarry', 'eventSequence', 'nextCustomerId']) assert.deepEqual(checked.state[key], old[key], key);
   assert.deepEqual(validateState(checked.state).state, checked.state); assert.deepEqual(createEngine(old).snapshot(), checked.state);
   const storage = createMemoryStorage(), raw = rawEnvelope(old); storage.setItem(SAVE_KEY, raw); const repo = new LocalSaveRepository(storage);
   const loaded = repo.load(100000); assert.equal(loaded.status, 'loaded'); assert.deepEqual(loaded.state, checked.state); assert.equal(storage.getItem(SAVE_KEY), raw);
@@ -71,13 +72,13 @@ for (const version of [1, 2]) test(`TC-3D-025 economy${version} migration preser
   assertMoney(replay.state); assert.equal(validateState(replay.snapshot()).ok, true);
 });
 
-for (const version of [1, 2]) test(`TC-3D-025 original portable${version} bytes retain their fingerprint while normalizing to portable3`, async () => {
+for (const version of [1, 2]) test(`TC-3D-025 original portable${version} bytes retain their fingerprint while normalizing to portable4`, async () => {
   const old = legacyState(version), source = { saveId: 'old-layout-source', revision: 4, gameSchemaVersion: 1, economyVersion: version, offlinePolicyVersion: 3, savedAt: 100000, exportedAt: 100123, overview: oldOverview(old), state: old };
   const { text, payloadText } = independentFile(source, version), parsed = await parsePortableSave(text);
   assert.equal(parsed.ok, true, parsed.message); assert.equal(parsed.file.text, text); assert.equal(parsed.file.fingerprint, sha256(payloadText));
-  assert.equal(parsed.file.payload.economyVersion, 3); assert.deepEqual(parsed.file.payload.state.layout, initialLayout()); assert.deepEqual(parsed.file.payload.state.counters, old.counters); assert.deepEqual(parsed.file.payload.state.customers, old.customers);
-  assert.deepEqual(parsed.file.payload.overview, { ...oldOverview({ ...old, economyVersion: 2, coffeeLevels: { espresso: 1, latte: 1 } }), placedCounters: 2, placedSeats: 0, expanded: false });
-  const written = await createPortableSave(parsed.file.payload); assert.equal(JSON.parse(written.text).formatVersion, 3); assert.notEqual(written.fingerprint, parsed.file.fingerprint);
+  assert.equal(parsed.file.payload.economyVersion, 4); assert.equal(parsed.file.payload.state.layout.version, 2); assert.deepEqual(parsed.file.payload.state.counters, old.counters.map(counter => ({ ...counter, pendingCash: 0 }))); assert.deepEqual(parsed.file.payload.state.customers, old.customers);
+  assert.deepEqual(parsed.file.payload.overview, { ...oldOverview({ ...old, economyVersion: 2, coffeeLevels: { espresso: 1, latte: 1 }, wallet: old.wallet + 123, counters: old.counters.map(counter => ({ ...counter, pendingCash: 0 })) }), placedCounters: 2, placedSeats: 0, expanded: false });
+  const written = await createPortableSave(parsed.file.payload); assert.equal(JSON.parse(written.text).formatVersion, 4); assert.notEqual(written.fingerprint, parsed.file.fingerprint);
   assert.deepEqual((await parsePortableSave(written.text)).file.payload, parsed.file.payload);
   const storage = createMemoryStorage(), repo = new LocalSaveRepository(storage); repo.load(100000);
   const imported = repo.importSnapshot(parsed.file.payload.state, { expectedRaw: null, currentState: createInitialState(), fingerprint: parsed.file.fingerprint, otherTabsClosed: true }, 101000);
@@ -86,8 +87,8 @@ for (const version of [1, 2]) test(`TC-3D-025 original portable${version} bytes 
 });
 
 test('TC-3D-025 new layout/economy/route versions protect original bytes until explicit recovery', () => {
-  assert.equal(ECONOMY_VERSION, 3); assert.equal(PORTABLE_VERSION, 3);
-  for (const mutate of [state => { state.economyVersion = 4; }, state => { state.layout.version = 3; }, state => { state.managerRouteVersion = 3; }, state => { state.customerRouteVersion = 4; }]) {
+  assert.equal(ECONOMY_VERSION, 4); assert.equal(PORTABLE_VERSION, 4);
+  for (const mutate of [state => { state.economyVersion = 5; }, state => { state.layout.version = 4; }, state => { state.managerRouteVersion = 3; }, state => { state.customerRouteVersion = 5; }]) {
     const state = createInitialState(); mutate(state); const raw = rawEnvelope(state), storage = createMemoryStorage(); storage.setItem(SAVE_KEY, raw);
     const repo = new LocalSaveRepository(storage), loaded = repo.load(999999); assert.equal(loaded.status, 'future'); assert.equal(loaded.protectedRaw, true); assert.equal(repo.save(createInitialState(), 999999).ok, false); assert.equal(repo.reset().ok, false); assert.equal(storage.getItem(SAVE_KEY), raw);
     const reset = repo.reset({ confirmProtected: true }); assert.equal(reset.ok, true); assert.equal(storage.getItem(reset.backupKey), raw);
@@ -95,7 +96,7 @@ test('TC-3D-025 new layout/economy/route versions protect original bytes until e
 });
 
 test('TC-3D-025 missing and malformed modern layouts fail closed without silently restoring default furniture', () => {
-  const cases = [state => { delete state.layout; }, state => { state.layout = null; }, state => { state.layout.active = 'false'; }, state => { state.layout.furniture = []; }, state => { state.layout.furniture[0].rotation = 4; }, state => { state.layout.furniture[0].x = .5; }, state => { state.layout.furniture[1].x = 0; }, state => { state.layout.furniture[0].stored = true; }, state => { state.layout.expanded = true; }];
+  const cases = [state => { delete state.layout; }, state => { state.layout = null; }, state => { state.layout.active = 'false'; }, state => { state.layout.furniture = []; }, state => { state.layout.furniture[0].rotation = 4; }, state => { state.layout.furniture[0].x = .5; }, state => { state.layout.furniture[1].x = 0; }, state => { state.layout.furniture.forEach(item => item.stored = true); }, state => { state.layout.expanded = true; }];
   for (const mutate of cases) {
     const state = createInitialState(); mutate(state); const before = copy(state), raw = rawEnvelope(state), storage = createMemoryStorage(); storage.setItem(SAVE_KEY, raw);
     assert.equal(validateState(state).ok, false, mutate.toString()); assert.deepEqual(state, before); const repo = new LocalSaveRepository(storage); assert.equal(repo.load(100000).status, 'corrupt'); assert.equal(repo.save(createInitialState(), 100000).ok, false); assert.equal(storage.getItem(SAVE_KEY), raw);
@@ -111,10 +112,10 @@ test('TC-3D-025 active counters, seats, expansion and exact live paths survive f
   const replay = createEngine(parsed.file.payload.state); replay.advance(120.013); engine.advance(120.013); assert.deepEqual(replay.snapshot(), engine.snapshot()); assertMoney(replay.state);
 });
 
-test('TC-3D-025 stored counters retain upgraded assets, pending cash and lifetime cup counts', async () => {
-  const state = activeState({ stored: true }), counter = state.counters[3]; counter.level = 5; counter.recipe = 'latte'; counter.pendingCash = 246; counter.brewed = 2; state.totalEarned += 246; state.totalServed += 2;
+test('TC-3D-025 stored counters retain upgraded assets and lifetime cup counts while receipts are already in wallet', async () => {
+  const state = activeState({ stored: true }), counter = state.counters[3]; counter.level = 5; counter.recipe = 'latte'; counter.brewed = 2; state.totalEarned += 246; state.wallet += 246; state.totalServed += 2;
   assert.equal(validateState(state).ok, true, JSON.stringify(validateState(state))); const file = await createPortableSave(payload(state)), parsed = await parsePortableSave(file.text); assert.equal(parsed.ok, true); assert.deepEqual(parsed.file.payload.state.counters[3], counter);
-  assert.equal(parsed.file.payload.overview.placedCounters, 3); assert.equal(parsed.file.payload.overview.counterLevels[3], 5); assert.equal(parsed.file.payload.overview.pendingCash, 246);
+  assert.equal(parsed.file.payload.overview.placedCounters, 3); assert.equal(parsed.file.payload.overview.counterLevels[3], 5); assert.equal(parsed.file.payload.overview.pendingCash, 0);
   const replay = createEngine(parsed.file.payload.state); replay.advance(60); assert.deepEqual(replay.state.counters[3], counter); assertMoney(replay.state); assert.equal(validateState(replay.snapshot()).ok, true);
 });
 
@@ -191,32 +192,23 @@ test('TC-3D-025 malformed active waypoint geometry, phase destinations and seat 
   mutateCustomer('dining', (state, customer) => { state.customers.push({ ...copy(customer), id: state.nextCustomerId++ }); });
 });
 
-test('TC-3D-025 active manager route targets, action positions and collection cursors fail closed', () => {
-  const engine = createEngine(activeState()); let moving;
-  for (let i = 0; i < 30000 && !moving; i++) { engine.advance(.05); if (engine.state.manager.nav?.length > 2) moving = engine.snapshot(); }
-  assert.ok(moving, 'manager has a genuine in-flight route');
+test('TC-3D-027 retired manager tombstone rejects resurrected navigation, cash or collection actions', () => {
+  const original = activeState();
   const cases = [
-    state => { state.manager.nav[1].x += 2; },
-    state => { state.manager.nav = state.manager.nav.slice(0, -1); },
-    state => { state.manager.target = 999; },
-    state => { state.manager.timer = .5; },
-    state => { state.manager.collectionCursor = -1; },
-    state => { state.manager.collectionCursor = 4; },
-    state => { state.manager.collectionCursor = .5; },
-    state => { state.manager.finishLegacySweep = true; },
-    state => { state.manager.phase = 'collecting'; },
+    state => { state.manager.nav = [{ x: 9, z: -2 }]; }, state => { state.manager.target = 999; },
+    state => { state.manager.timer = .5; }, state => { state.manager.collectionCursor = 0; },
+    state => { state.manager.finishLegacySweep = true; }, state => { state.manager.phase = 'collecting'; },
+    state => { state.manager.x = 9; }, state => { state.manager.carrying = 1; state.wallet--; },
   ];
-  for (const mutate of cases) { const state = copy(moving); mutate(state); assert.equal(validateState(state).ok, false, mutate.toString()); }
-  const vault = activeState(); Object.assign(vault.manager, { x: 9, z: -2, target: vault.counters.length, phase: 'collecting', timer: 0 }); delete vault.manager.nav;
-  assert.equal(validateState(vault).ok, false, 'collecting is never a vault action');
+  for (const mutate of cases) { const state = copy(original); mutate(state); assert.equal(validateState(state).ok, false, mutate.toString()); }
 });
 
-test('TC-3D-025 portable3 rejects future layout data and forged placed-furniture previews with valid checksums', async () => {
+test('TC-3D-027 portable4 rejects future layout data and forged placed-furniture previews with valid checksums', async () => {
   const original = payload(activeState({ stored: true }));
-  for (const mutate of [value => { value.state.layout.version = 3; }, value => { value.state.economyVersion = 4; value.economyVersion = 4; }, value => { value.overview.placedCounters++; }, value => { value.overview.placedSeats++; }, value => { value.overview.expanded = false; }, value => { delete value.state.layout; }]) {
-    const value = copy(original); mutate(value); assert.equal((await parsePortableSave(independentFile(value, 3).text)).ok, false, mutate.toString());
+  for (const mutate of [value => { value.state.layout.version = 4; }, value => { value.state.economyVersion = 5; value.economyVersion = 5; }, value => { value.overview.placedCounters++; }, value => { value.overview.placedSeats++; }, value => { value.overview.expanded = false; }, value => { delete value.state.layout; }]) {
+    const value = copy(original); mutate(value); assert.equal((await parsePortableSave(independentFile(value, 4).text)).ok, false, mutate.toString());
   }
-  assert.equal((await parsePortableSave(independentFile(original, 4).text)).ok, false);
+  assert.equal((await parsePortableSave(independentFile(original, 5).text)).ok, false);
   const disguised = copy(original); disguised.economyVersion = 2; disguised.state.economyVersion = 2; delete disguised.overview.placedCounters; delete disguised.overview.placedSeats; delete disguised.overview.expanded;
   assert.equal((await parsePortableSave(independentFile(disguised, 2).text)).ok, false, 'active furniture cannot masquerade as an old economy2 file');
 });
@@ -226,4 +218,36 @@ test('TC-3D-025 active offline competing writes cannot partially persist cash or
   const repo = new LocalSaveRepository(storage), prepared = repo.load(175000, { deferOffline: true }), competing = rawEnvelope(state, { recordChangeTag: 'competing-layout-writer', revision: 4 }); let injected = false;
   const result = await repo.finishOffline(prepared.pending, { yieldControl: async () => { if (!injected) { injected = true; storage.setItem(SAVE_KEY, competing); } } });
   assert.equal(result.status, 'conflict'); assert.equal(result.offline.accepted, false); assert.equal(storage.getItem(SAVE_KEY), competing); assert.deepEqual(result.state, state);
+});
+
+test('TC-3D-027 economy3 missing layout fails closed instead of restoring starter furniture', () => {
+  const source = legacyState(2); source.economyVersion = 3; const storage = createMemoryStorage(), raw = rawEnvelope(source); storage.setItem(SAVE_KEY, raw);
+  assert.equal(validateState(source).ok, false); const repo = new LocalSaveRepository(storage); assert.equal(repo.load(100000).status, 'corrupt'); assert.equal(repo.save(createInitialState()).ok, false); assert.equal(storage.getItem(SAVE_KEY), raw);
+});
+
+function oldEmptyLayout() {
+  const state = createInitialState(); state.economyVersion = 3; state.customerRouteVersion = 3; state.layout.version = 2;
+  state.layout.coffeeSigns.forEach(sign => { sign.stored = false; }); state.manager = { x: 9, z: -2, carrying: 0, phase: 'moving', target: 2, timer: 0, level: 4 };
+  return state;
+}
+
+test('TC-3D-027 old furniture blocking the opposite door is stored once, retaining ownership, money and notice', async () => {
+  const source = oldEmptyLayout(); addFurniture(source.layout, 'table', 10, 6); source.spend = 600; source.wallet -= 600;
+  assert.equal(validateLayout(source.layout).ok, true); const checked = validateState(source); assert.equal(checked.ok, true, checked.message);
+  const next = checked.state; assert.equal(next.layout.version, 3); assert.equal(next.layout.furniture.find(item => item.kind === 'table').stored, true); assert.equal(next.doorMigrationNotice, true);
+  for (const key of ['wallet', 'spend', 'totalEarned', 'coffeeLevels']) assert.deepEqual(next[key], source[key]); assert.equal(next.manager.level, 4);
+  const file = await createPortableSave(payload(next)); assert.equal((await parsePortableSave(file.text)).file.payload.state.doorMigrationNotice, true);
+  assert.deepEqual(validateState(next).state, next); delete next.doorMigrationNotice; assert.equal(validateState(next).state.doorMigrationNotice, undefined);
+});
+
+test('TC-3D-027 last legacy counter blocking exit repositions to safe owned anchors and reports it once', () => {
+  const source = oldEmptyLayout(); source.layout.furniture[0].stored = true; Object.assign(source.layout.furniture[1], { x: 8, z: 6 }); source.counters[1].x = 8; source.counters[1].level = 7;
+  assert.equal(validateLayout(source.layout).ok, true); const checked = validateState(source); assert.equal(checked.ok, true, checked.message);
+  assert.equal(checked.state.doorMigrationNotice, true); assert.equal(validateLayout(checked.state.layout).ok, true); assert.equal(checked.state.counters[1].level, 7); assert.equal(checked.state.wallet, source.wallet); assert.equal(checked.state.totalEarned, source.totalEarned);
+  assert.deepEqual(validateState(checked.state).state, checked.state);
+});
+
+test('TC-3D-027 already safe old geometry needs no furniture move or migration notice', () => {
+  const source = oldEmptyLayout(); const checked = validateState(source); assert.equal(checked.ok, true, checked.message);
+  assert.deepEqual(checked.state.layout.furniture, source.layout.furniture); assert.equal(checked.state.doorMigrationNotice, undefined);
 });

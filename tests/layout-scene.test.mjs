@@ -9,7 +9,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 const { CoffeeScene } = await import('../src/slice/render/CoffeeScene.ts');
 const { createInitialState } = await import('../src/slice/core/engine.ts');
-const { initialLayout, interactionPoint, COFFEE_WALL, coffeeWallSlots } = await import('../src/slice/core/layout.ts');
+const { initialLayout, interactionPoint } = await import('../src/slice/core/layout.ts');
 
 // Structural CPU evidence only. Browser/pixel/input-device acceptance is separate.
 class Canvas {
@@ -44,23 +44,23 @@ function clientWorld(f, position) {
 }
 function clientMesh(f, name) { return clientWorld(f, world(f.scene.getMeshByName(name))); }
 
-test('TC-3D-025 legacy room keeps physical controls and adds embodied renovation/expansion entrances', () => {
+test('TC-3D-025 cutaway keeps counter controls and an embodied expansion entrance', () => {
   const f = fixture();
   try {
-    assert.equal(f.scene.meshes.filter(mesh => mesh.metadata?.coffeeLabel).length, 11);
+    assert.equal(f.scene.meshes.filter(mesh => mesh.metadata?.coffeeLabel).length, 7);
     assert.equal(f.scene.getMeshByName('queue-rug-0'), null);
-    for (const key of ['renovate', 'expansion']) {
+    for (const key of ['expansion']) {
       f.renderer.focusAnchor(key);
       assert.equal(f.renderer.projectAnchor(key).visible, true);
       assert.equal(f.renderer.activateFocused(), true, key);
     }
-    assert.deepEqual(f.actions, [{ type: 'renovate' }, { type: 'renovate' }]);
+    assert.deepEqual(f.actions, [{ type: 'renovate' }]);
     assert.equal(f.scene.getTransformNodeByName('expansion-locked-divider').isEnabled(), true);
     assert.equal(f.scene.getMeshByName('expansion-floor').metadata.coffeeExpansion, 'locked');
   } finally { f.dispose(); }
 });
 
-test('TC-3D-025 counter body, staff, money and both plaques follow one moved 90-degree footprint', () => {
+test('TC-3D-025 counter body, staff and both plaques follow one moved 90-degree footprint', () => {
   const f = fixture();
   try {
     const layout = active(f.state);
@@ -73,7 +73,7 @@ test('TC-3D-025 counter body, staff, money and both plaques follow one moved 90-
     close(root.rotation.y, -Math.PI / 2);
     for (const [name, x, z] of [
       ['counter-a-body', -4, 2], ['counter-a-countertop', -4, 2],
-      ['counter-a-barista', -3.11, 2.2], ['counter-a-cash-cluster', -4.04, .92],
+      ['counter-a-barista', -3.11, 2.2],
       ['counter-a-upgrade-plaque', -3.235, 3.01], ['counter-a-recipe-selector', -3.235, .99],
     ]) {
       const mesh = f.scene.getNodeByName(name), position = world(mesh);
@@ -82,9 +82,9 @@ test('TC-3D-025 counter body, staff, money and both plaques follow one moved 90-
     const body = f.scene.getMeshByName('counter-a-body');
     body.computeWorldMatrix(true);
     close(body.getBoundingInfo().boundingBox.maximumWorld.z - body.getBoundingInfo().boundingBox.minimumWorld.z, 3.4);
-    assert.equal(f.scene.getTransformNodeByName('counter-a-cash-cluster').isEnabled(), true);
+    assert.equal(f.scene.getTransformNodeByName('counter-a-cash-cluster'), null);
     assert.equal(f.scene.getMeshByName('queue-rug-0'), null);
-    assert.equal(f.scene.getTransformNodeByName('left-waiting-bench').isEnabled(), false);
+    assert.equal(f.scene.getTransformNodeByName('left-waiting-bench'), null);
     assert.equal(f.scene.getMeshByName('manager-route'), null);
     const shadow = f.scene.getMeshByName('counter-a-barista-contact-shadow');
     close(shadow.position.x, -3.11); close(shadow.position.z, 2.2);
@@ -110,7 +110,7 @@ test('TC-3D-025 new C/D counters reconcile, stored furniture disappears and owne
     const wood = f.scene.getMeshByName('counter-c-body').material;
     layout.furniture.find(item => item.id === 'counter-c').stored = true;
     f.renderer.update(f.state, 0);
-    assert.equal(disposedInk, 3);
+    assert.equal(disposedInk, 2);
     assert.equal(f.scene.getNodeByName('counter-c-station'), null);
     assert.equal(f.scene.getMeshByName('counter-c-barista-contact-shadow'), null);
     assert.equal(f.renderer.projectAnchor('counter-c-upgrade').visible, false);
@@ -263,7 +263,7 @@ test('TC-3D-025 topology edits invalidate cached furniture shadows while identic
       removeShadowCaster(mesh) { map.renderList = map.renderList.filter(item => item !== mesh); },
       dispose() {},
     };
-    const draft = structuredClone(f.state.layout); draft.active = true;
+    const draft = structuredClone(f.state.layout); draft.active = true; draft.furniture[0].rotation = 1;
     f.renderer.setRenovationPreview(draft, 'counter-a');
     assert.equal(invalidations, 1);
     assert.equal(map.refreshRate, 0);
@@ -280,74 +280,6 @@ test('TC-3D-025 topology edits invalidate cached furniture shadows while identic
     assert.equal(invalidations, 3);
     assert.ok(map.renderList.every(mesh => !mesh.isDisposed()));
     assert.ok(map.renderList.every(mesh => !mesh.name.startsWith('counter-b-')));
-    draft.coffeeSigns[0].x = -2;
-    f.renderer.setRenovationPreview(draft, 'menu-espresso');
-    assert.equal(invalidations, 4, 'moving the complete wall sign dirties its cached shadow');
-    f.renderer.setRenovationPreview(draft, 'menu-espresso');
-    assert.equal(invalidations, 4);
-    draft.coffeeSigns[0].stored = true;
-    f.renderer.setRenovationPreview(draft, 'menu-espresso');
-    assert.equal(invalidations, 5, 'stored wall sign removes its shadow on the next render');
-  } finally { f.dispose(); }
-});
-
-test('TC-3D-025 active manager and close-in trolley fit the reserved half-metre radius through turns and handoffs', () => {
-  const f = fixture();
-  try {
-    active(f.state);
-    f.state.manager.carrying = 9999;
-    f.renderer.update(f.state, .016);
-    const person = f.scene.getTransformNodeByName('manager');
-    const cart = f.scene.getTransformNodeByName('manager-cash-cart');
-    let radius = 0;
-    for (const phase of ['moving', 'collecting', 'depositing']) for (let turn = 0; turn < 16; turn++) {
-      f.state.manager.phase = phase;
-      const angle = turn * Math.PI / 8;
-      f.state.manager.x += Math.sin(angle) * .05;
-      f.state.manager.z += Math.cos(angle) * .05;
-      f.state.manager.nav = [{ x: f.state.manager.x + Math.sin(angle), z: f.state.manager.z + Math.cos(angle) }];
-      f.renderer.animationTime = turn * .17;
-      f.renderer.update(f.state, .016);
-      for (const mesh of [...person.getChildMeshes(), ...cart.getChildMeshes()]) {
-        if (!mesh.isEnabled()) continue;
-        mesh.computeWorldMatrix(true);
-        for (const point of mesh.getBoundingInfo().boundingBox.vectorsWorld) {
-          const distance = Math.hypot(point.x - person.position.x, point.z - person.position.z);
-          radius = Math.max(radius, distance);
-          assert.ok(distance < .5, `${phase} turn ${turn} ${mesh.name}: radius ${distance}`);
-        }
-      }
-    }
-    assert.ok(radius > .3, 'the assertion measures actual solids rather than an empty hierarchy');
-    assert.equal(cart.scaling.x, .43);
-    assert.equal(person.scaling.x, .8);
-  } finally { f.dispose(); }
-});
-
-test('TC-3D-025 active waiting manager stops walking without changing legacy animation or cart proportions', () => {
-  const f = fixture();
-  try {
-    active(f.state);
-    f.state.manager.phase = 'moving';
-    f.state.manager.nav = [{ x: 8, z: -2 }];
-    f.renderer.animationTime = .1;
-    f.renderer.update(f.state, .016);
-    const leftLeg = f.scene.getTransformNodeByName('manager-left-hip');
-    const rightLeg = f.scene.getTransformNodeByName('manager-right-hip');
-    assert.notEqual(leftLeg.rotation.x, 0);
-    delete f.state.manager.nav;
-    const position = [f.state.manager.x, f.state.manager.z];
-    f.renderer.update(f.state, .016);
-    assert.equal(leftLeg.rotation.x, 0);
-    close(rightLeg.rotation.x, 0);
-    assert.equal(f.scene.getTransformNodeByName('manager').position.y, 0);
-    assert.deepEqual([f.state.manager.x, f.state.manager.z], position);
-    f.state.layout = initialLayout();
-    f.renderer.update(f.state, .016);
-    assert.notEqual(leftLeg.rotation.x, 0, 'legacy moving phase retains its original gait');
-    const manager = f.scene.getTransformNodeByName('manager'), cart = f.scene.getTransformNodeByName('manager-cash-cart');
-    assert.equal(manager.scaling.x, .97); assert.equal(cart.scaling.x, 1);
-    close(cart.position.x - manager.position.x, .7); close(cart.position.z - manager.position.z, -.55);
   } finally { f.dispose(); }
 });
 
@@ -453,97 +385,5 @@ test('TC-3D-026 empty floor still pans and foreign pointers cannot steal an obje
     assert.notDeepEqual(f.scene.activeCamera.position.asArray(), camera);
     f.canvas.emit('pointerup', { clientX: cell.x + 40, clientY: cell.y + 25 });
     assert.deepEqual(f.actions, []);
-  } finally { f.dispose(); }
-});
-
-for (const [width, height] of [[1280, 900], [390, 844], [844, 390]]) {
-  test(`TC-3D-026 coffee sign ray uses its wall band and preserves illegal anchors at ${width}×${height}`, () => {
-    const f = fixture(width, height, 1 / 1.75, 35, 80);
-    try {
-      const draft = active(f.state, true);
-      f.renderer.setRenovationPreview(draft, 'menu-espresso');
-      f.renderer.focusAnchor('menu-espresso');
-      for (const x of [-.35, .35]) {
-        const p = clientWorld(f, new Vector3(x, COFFEE_WALL.y, COFFEE_WALL.z));
-        const placement = f.renderer.pickLayoutPlacement(p.clientX, p.clientY, 'menu-espresso');
-        assert.equal(Math.abs(placement.x), 0); assert.equal(placement.z, COFFEE_WALL.z);
-      }
-      const board = clientMesh(f, 'menu-espresso');
-      f.canvas.emit('pointerdown', board); f.canvas.emit('pointerup', { ...board, timeStamp: 200 });
-      assert.deepEqual(f.actions.pop(), { type: 'layout-select', id: 'menu-espresso' });
-      const up = clientWorld(f, new Vector3(0, 4.2, COFFEE_WALL.z));
-      assert.equal(f.renderer.pickLayoutPlacement(up.clientX, up.clientY, 'menu-espresso'), null, 'floor/above-wall movement cannot be accepted by proximity to a slot');
-      const floor = clientWorld(f, new Vector3(0, 0, 0));
-      assert.equal(f.renderer.pickLayoutPlacement(floor.clientX, floor.clientY, 'menu-espresso'), null, 'a drop on the true floor never projects back onto a wall slot');
-      for (const x of [-3, 12, 14]) {
-        draft.coffeeSigns[0].x = x;
-        f.renderer.setRenovationPreview(draft, 'menu-espresso', coffeeWallSlots(draft).includes(x));
-        f.renderer.focusAnchor('menu-espresso');
-        const p = clientWorld(f, new Vector3(x, COFFEE_WALL.y, COFFEE_WALL.z));
-        assert.deepEqual(f.renderer.pickLayoutPlacement(p.clientX, p.clientY, 'menu-espresso'), { x, z: COFFEE_WALL.z });
-      }
-      assert.equal(f.renderer.wallCells.size, 12);
-    } finally { f.dispose(); }
-  });
-}
-
-test('TC-3D-026 whole wall sign follows its root, stores without resource growth, and keeps recipe progression/actions', () => {
-  const f = fixture();
-  try {
-    const layout = active(f.state);
-    f.state.coffeeLevels.espresso = 7;
-    f.renderer.update(f.state, 0);
-    const root = f.scene.getTransformNodeByName('menu-espresso-furniture');
-    const parts = ['menu-espresso-frame', 'menu-espresso-hanger--1.15', 'menu-espresso-hanger-1.15', 'menu-espresso-mount', 'menu-espresso'].map(name => f.scene.getMeshByName(name));
-    assert.ok(parts.every(mesh => mesh.parent === root));
-    const initial = parts.map(mesh => world(mesh).clone());
-    f.renderer.focusAnchor('menu-espresso');
-    const baseline = counts(f);
-    layout.coffeeSigns[0].x = -2;
-    f.renderer.update(f.state, 0);
-    parts.forEach((mesh, i) => { close(world(mesh).x, initial[i].x - 2); close(world(mesh).y, initial[i].y); close(world(mesh).z, initial[i].z); });
-    assert.equal(f.scene.getMeshByName('menu-espresso').metadata.coffeeMenu.level, 7);
-    f.renderer.focusAnchor('menu-espresso');
-    const point = clientMesh(f, 'menu-espresso');
-    f.canvas.emit('pointerdown', point); f.canvas.emit('pointerup', { ...point, timeStamp: 200 });
-    assert.deepEqual(f.actions.pop(), { type: 'menu', recipe: 'espresso' });
-    for (let i = 0; i < 12; i++) {
-      layout.coffeeSigns[0].stored = true; f.renderer.update(f.state, 0);
-      assert.ok(parts.every(mesh => !mesh.isEnabled()));
-      assert.equal(f.renderer.projectAnchor('menu-espresso').visible, false);
-      assert.equal(f.renderer.activateFocused(), false);
-      layout.coffeeSigns[0].stored = false; f.renderer.update(f.state, 0);
-      assert.ok(parts.every(mesh => mesh.isEnabled()));
-      assert.deepEqual(counts(f), baseline);
-    }
-    f.renderer.setRenovationPreview(layout, 'menu-espresso', true);
-    const ghost = f.scene.getMeshByName('renovation-footprint-ghost');
-    assert.equal(ghost.metadata.coffeePlacementSurface, 'wall');
-    close(ghost.position.x, -2); close(ghost.position.y, COFFEE_WALL.y);
-    const freeWall = clientWorld(f, new Vector3(2, COFFEE_WALL.y, COFFEE_WALL.z - .095));
-    f.canvas.emit('pointerdown', freeWall); f.canvas.emit('pointerup', { ...freeWall, timeStamp: 200 });
-    assert.deepEqual(f.actions.pop(), { type: 'layout-wall', x: 2 }, 'uncovered physical slot is tap-selectable');
-    f.renderer.setRenovationPreview(layout, 'menu-espresso', false);
-    assert.equal(ghost.metadata.coffeePlacementValid, false);
-    const dragFrom = clientMesh(f, 'menu-espresso');
-    f.canvas.emit('pointerdown', dragFrom);
-    f.canvas.emit('pointermove', { clientX: dragFrom.clientX + 20, clientY: dragFrom.clientY });
-    f.canvas.emit('pointerup', { clientX: dragFrom.clientX + 20, clientY: dragFrom.clientY, timeStamp: 300 });
-    assert.deepEqual(f.actions.map(action => [action.type, action.phase, action.id]), [
-      ['layout-drag', 'start', 'menu-espresso'], ['layout-drag', 'move', 'menu-espresso'], ['layout-drag', 'end', 'menu-espresso'],
-    ], 'wall signs use the same real geometry drag lifecycle');
-    f.renderer.setRenovationPreview(null);
-    assert.equal(f.renderer.wallCells.size, 0);
-    assert.equal(f.scene.getMeshByName('renovation-footprint-ghost'), null);
-    assert.equal(f.scene.getMeshByName('menu-espresso').metadata.coffeeMenu.level, 7);
-    const warmed = counts(f);
-    for (let i = 0; i < 16; i++) {
-      const draft = structuredClone(layout);
-      draft.coffeeSigns[0].x = i % 2 ? -2 : 0;
-      f.renderer.setRenovationPreview(draft, i % 2 ? 'menu-espresso' : 'counter-a', i % 3 > 0);
-      f.renderer.update(f.state, 0);
-      f.renderer.setRenovationPreview(null);
-      assert.deepEqual(counts(f), warmed, 'wall/floor preview cycles dispose temporary meshes and reuse bounded materials');
-    }
   } finally { f.dispose(); }
 });

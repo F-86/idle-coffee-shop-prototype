@@ -17,9 +17,9 @@ const { FrameInterpolator } = await import('../src/slice/render/FrameInterpolato
 const { RouteDiagnostics, isRouteQA } = await import('../src/slice/qa/RouteDiagnostics.ts');
 const { RouteQAPanel } = await import('../src/slice/qa/RouteQAPanel.ts');
 const { PerformanceQAPanel } = await import('../src/slice/qa/PerformanceQAPanel.ts');
-const { createEngine, createInitialState, recipeById, counterPrice, counterBrewSeconds, coffeePrice, coffeeBrewSeconds, COFFEE_MAX_LEVEL, managerSpeed } = await import('../src/slice/core/engine.ts');
+const { createEngine, createInitialState, recipeById, counterPrice, counterBrewSeconds, coffeePrice, coffeeBrewSeconds, COFFEE_MAX_LEVEL } = await import('../src/slice/core/engine.ts');
 const { LocalSaveRepository, SAVE_KEY, createMemoryStorage } = await import('../src/slice/core/persistence.ts');
-const { addFurniture, coffeeWallSlots, getCoffeeSigns, getLayout, GRID, LAYOUT_PRICES, layoutCost, MAX_COUNTERS, MAX_TABLES, moveCoffeeSign, moveFurniture, rotateFurniture, storeCoffeeSign, storeFurniture, validateLayout } = await import('../src/slice/core/layout.ts');
+const { addFurniture, getLayout, GRID, LAYOUT_PRICES, layoutCost, MAX_COUNTERS, MAX_TABLES, moveFurniture, rotateFurniture, storeFurniture, validateLayout } = await import('../src/slice/core/layout.ts');
 const { createPortableSave, parsePortableSave, overviewOf, portableFilename, MAX_PORTABLE_BYTES } = await import('../src/slice/core/portableSave.ts');
 
 // These checks inspect actual markup/CSS and execute actual app handlers with a fake
@@ -33,7 +33,7 @@ const html = runInNewContext(`${stripTypeScriptTypes(`globalThis.html = ${templa
 const modalStart = html.indexOf('<dialog '), modalEnd = html.indexOf('</dialog>') + '</dialog>'.length;
 const modal = html.slice(modalStart, modalEnd);
 const outsideModal = html.slice(0, modalStart) + html.slice(modalEnd);
-const permanentOutsideModal = outsideModal.replace(/<aside id="(?:welcome-guide|renovation-panel)"[\s\S]*?<\/aside>/g, "");
+const permanentOutsideModal = outsideModal.replace(/<aside id="(?:welcome-guide|renovation-panel)"[\s\S]*?<\/aside>/g, "").replace(/<section id="migration-notice"[\s\S]*?<\/section>/g, "");
 const ONBOARDING_KEY = "mellow-bean:welcome-guide:v1";
 function rules(selector) {
   const found = [];
@@ -71,7 +71,7 @@ class FakeElement {
   get className() { return this.getAttribute('class') ?? ''; }
   set className(value) { this.setAttribute('class', value); }
   append(...nodes) { for (const node of nodes) { this.children.push(node); node.parentElement = this; if (!this.ownerDocument._nodes.includes(node)) this.ownerDocument._nodes.push(node); } }
-  remove() { for (const child of this.children) child.remove(); const index = this.ownerDocument._nodes.indexOf(this); if (index >= 0) this.ownerDocument._nodes.splice(index, 1); if (this.parentElement) { const childIndex = this.parentElement.children.indexOf(this); if (childIndex >= 0) this.parentElement.children.splice(childIndex, 1); } this.isConnected = false; }
+  remove() { for (const child of [...this.children]) child.remove(); const index = this.ownerDocument._nodes.indexOf(this); if (index >= 0) this.ownerDocument._nodes.splice(index, 1); if (this.parentElement) { const childIndex = this.parentElement.children.indexOf(this); if (childIndex >= 0) this.parentElement.children.splice(childIndex, 1); } this.isConnected = false; }
   constructor(tag, document) {
     this.tagName = tag.toUpperCase(); this.ownerDocument = document;
     const classes = new Set();
@@ -111,7 +111,7 @@ class FakeElement {
   focus() { this.focused++; this.ownerDocument.activeElement = this; }
   getBoundingClientRect() { return { left: 100, right: 500, top: 100, bottom: 650, width: 400, height: 550 }; }
 }
-function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, storageUnavailable = false, readUnavailable = false, writeUnavailable = false, conflictDuringClaim = false, deferDialogClose = false, renderMode, query = '?qa=1', renderUnavailable = false, onboardingFlag, onboardingReadUnavailable = false, onboardingWriteUnavailable = false, initiallyHidden = false, navigator = {}, portableOverrides = {}, now = Date.now() } = {}) {
+function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, storageUnavailable = false, readUnavailable = false, writeUnavailable = false, conflictDuringClaim = false, deferDialogClose = false, renderMode, backdropPreference, query = '?qa=1', renderUnavailable = false, onboardingFlag, onboardingReadUnavailable = false, onboardingWriteUnavailable = false, initiallyHidden = false, navigator = {}, portableOverrides = {}, now = Date.now() } = {}) {
   const clock = { now, performance: 0 };
   const nodes = [], closeEvents = [];
   const document = new FakeElement('document', null);
@@ -163,6 +163,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   else if (initial) { const repo = new LocalSaveRepository(memory); repo.load(clock.now); assert.equal(repo.save(initial, clock.now - savedAtAgoSeconds * 1000).ok, true); }
   if (onboardingFlag !== undefined) memory.setItem(ONBOARDING_KEY, onboardingFlag);
   if (renderMode !== undefined) memory.setItem(RENDER_MODE_KEY, renderMode);
+  if (backdropPreference !== undefined) memory.setItem('mellow-bean:backdrop:v1', backdropPreference);
   const storageControl = { readUnavailable, writeUnavailable, removeUnavailable: false };
   let storageReads = 0;
   const storage = storageUnavailable ? { getItem() { throw new Error('storage unavailable'); }, setItem() { throw new Error('storage unavailable'); }, removeItem() { throw new Error('storage unavailable'); } } : {
@@ -188,6 +189,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
     statsReads = 0; poseReads = 0;
     updates = []; focusCalls = []; selection = []; interactionCalls = []; interactionEnabled = true; panCalls = []; focused = null; activationCalls = 0; disposed = false; resizeCalls = 0;
     constructor(canvas, action, options) { if (renderUnavailable) throw Error('WebGL unavailable in test fixture'); this.canvas = canvas; this.action = action; this.renderMode = options.renderMode; renderer = this; }
+    setBackdrop(value) { this.backdrop = value; }
     setRenderMode(mode) { this.renderMode = mode; this.resize(); }
     update(state, dt) { this.updates.push({ state: structuredClone(state), dt }); }
     readRenderStats() { this.statsReads++; return { targetFps: this.renderMode === 'smooth' ? null : this.renderMode === 'low-power' ? 30 : 60, renderWidth: 800, renderHeight: 1100, meshCount: 200, renderedFrames: this.updates.length }; }
@@ -197,10 +199,10 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
     cancelLayoutDrag() { this.cancelDragCalls = (this.cancelDragCalls ?? 0) + 1; }
     selectedCounter(id) { this.selection.push(id); }
     resize() { this.resizeCalls++; }
-    focusAnchor(key) { if (!this.interactionEnabled || !['counter-a-recipe', 'counter-a-upgrade', 'counter-b-recipe', 'counter-b-upgrade', 'menu-espresso', 'menu-latte', 'vault', 'invite'].includes(key)) return; this.focusCalls.push(key); this.focused = key; }
+    focusAnchor(key) { if (!this.interactionEnabled || !['counter-a-recipe', 'counter-a-upgrade', 'counter-b-recipe', 'counter-b-upgrade', 'invite'].includes(key)) return; this.focusCalls.push(key); this.focused = key; }
     getFocus() { return this.focused; }
     focusNext(direction) {
-      const keys = ['counter-a-recipe', 'counter-a-upgrade', 'counter-b-recipe', 'counter-b-upgrade', 'menu-espresso', 'menu-latte', 'vault', 'invite'];
+      const keys = ['counter-a-recipe', 'counter-a-upgrade', 'counter-b-recipe', 'counter-b-upgrade', 'invite'];
       const current = this.focused ? keys.indexOf(this.focused) : -1;
       this.focusAnchor(keys[current < 0 ? (direction < 0 ? keys.length - 1 : 0) : (current + direction + keys.length) % keys.length]);
       return this.focused;
@@ -213,7 +215,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
     getAnchorFootprint() { return { width: 60, height: 60 }; }
     dispose() { this.disposed = true; }
     activateAnchor(key) {
-      const actions = { invite: { type: 'invite' }, vault: { type: 'vault' }, 'menu-espresso': { type: 'menu', recipe: 'espresso' }, 'menu-latte': { type: 'menu', recipe: 'latte' }, 'counter-a-recipe': { type: 'recipe', id: 'counter-a' }, 'counter-b-recipe': { type: 'recipe', id: 'counter-b' }, 'counter-a-upgrade': { type: 'counter', id: 'counter-a' }, 'counter-b-upgrade': { type: 'counter', id: 'counter-b' } };
+      const actions = { invite: { type: 'invite' }, 'counter-a-recipe': { type: 'recipe', id: 'counter-a' }, 'counter-b-recipe': { type: 'recipe', id: 'counter-b' }, 'counter-a-upgrade': { type: 'counter', id: 'counter-a' }, 'counter-b-upgrade': { type: 'counter', id: 'counter-b' } };
       if (actions[key]) this.action(actions[key]);
     }
   }
@@ -225,7 +227,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   }
   class FakeDate extends Date { constructor(...args) { super(...(args.length ? args : [clock.now])); } static now() { return clock.now; } }
   const source = main.replace(/^import\s[\s\S]*?;\n/gm, '').replace(/if \(import\.meta\.hot\) import\.meta\.hot\.dispose\(\(\) => cleanup\(\)\);/, 'captureCleanup(() => cleanup());');
-  const context = { document, window, location: { search: query }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, HTMLInputElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, RouteDiagnostics, isRouteQA, RouteQAPanel, PerformanceQAPanel, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, createEngine, recipeById, counterPrice, counterBrewSeconds, coffeePrice, coffeeBrewSeconds, COFFEE_MAX_LEVEL, managerSpeed, addFurniture, coffeeWallSlots, getCoffeeSigns, getLayout, GRID, LAYOUT_PRICES, layoutCost, MAX_COUNTERS, MAX_TABLES, moveCoffeeSign, moveFurniture, rotateFurniture, storeCoffeeSign, storeFurniture, validateLayout, LocalSaveRepository, SAVE_KEY, createPortableSave: trackFileTask(portableOverrides.createPortableSave ?? createPortableSave), parsePortableSave: trackFileTask(portableOverrides.parsePortableSave ?? parsePortableSave), overviewOf, portableFilename, MAX_PORTABLE_BYTES, crypto: globalThis.crypto, TextEncoder, File, navigator, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL: url => revokedUrls.push(url) }, Blob, console, setTimeout: (callback, delay = 0) => { const id = ++nextId; timers.set(id, callback); timerDelays.set(id, delay); return id; }, clearTimeout: id => { timers.delete(id); timerDelays.delete(id); }, requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
+  const context = { document, window, location: { search: query }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, HTMLInputElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, RouteDiagnostics, isRouteQA, RouteQAPanel, PerformanceQAPanel, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, createEngine, recipeById, counterPrice, counterBrewSeconds, coffeePrice, coffeeBrewSeconds, COFFEE_MAX_LEVEL, addFurniture, getLayout, GRID, LAYOUT_PRICES, layoutCost, MAX_COUNTERS, MAX_TABLES, moveFurniture, rotateFurniture, storeFurniture, validateLayout, LocalSaveRepository, SAVE_KEY, createPortableSave: trackFileTask(portableOverrides.createPortableSave ?? createPortableSave), parsePortableSave: trackFileTask(portableOverrides.parsePortableSave ?? parsePortableSave), overviewOf, portableFilename, MAX_PORTABLE_BYTES, crypto: globalThis.crypto, TextEncoder, File, navigator, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL: url => revokedUrls.push(url) }, Blob, console, setTimeout: (callback, delay = 0) => { const id = ++nextId; timers.set(id, callback); timerDelays.set(id, delay); return id; }, clearTimeout: id => { timers.delete(id); timerDelays.delete(id); }, requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
   runInNewContext(stripTypeScriptTypes(source), context, { timeout: 1500 });
   const debug = window.__coffeeSliceDebug;
   const state = () => structuredClone(debug.readState());
@@ -275,6 +277,23 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   }, flushCloseEvents() { for (const callback of closeEvents.splice(0)) callback(); }, element: selector => root.querySelector(selector), action: action => renderer.action(action), click(selector, extra = {}) { const target = root.querySelector(selector); assert.ok(target, selector); if (!target.disabled) { const event = { target, detail: 1, ...extra }; target.emit('click', event); root.emit('click', event); if (target.tagName === 'SUMMARY') target.parentElement.toggleAttribute('open'); } }, tick(seconds = .2) { clock.now += seconds * 1000; clock.performance += seconds * 1000; const pending = [...frames.values()]; frames.clear(); for (const callback of pending) callback(clock.performance); }, dispose() { hmrCleanup?.(); } };
 }
 
+function openCoffee(f, recipe = 'espresso') {
+  f.click('#dock-coffee');
+  const tab = f.nodes.find(node => node.dataset.viewCoffee === recipe);
+  assert.ok(tab, `coffee tab ${recipe}`);
+  f.root.emit('click', { target: tab });
+}
+function openAction(f, action) {
+  if (action.type === 'menu') openCoffee(f, action.recipe);
+  else if (action.type === 'background') f.click('#dock-background');
+  else f.action(action);
+}
+function assertProtected(f, paused = false) {
+  assert.equal(f.state().paused, paused, 'recovery freeze preserves the durable business pause');
+  assert.equal(f.element('#business-toggle').disabled, true);
+  assert.equal(f.element('#business-status').textContent, '进度已保护');
+}
+
 test('TC-3D-008 REQ-3D-015 full-viewport scene has no webpage frame or page scroll (static contract)', () => {
   assert.deepEqual(declarations('.coffee-world', 'position'), ['fixed']);
   assert.deepEqual(declarations('.coffee-world', 'inset'), ['0']);
@@ -291,27 +310,24 @@ test('TC-3D-008 REQ-3D-015 full-viewport scene has no webpage frame or page scro
   assert.equal(openingTags(outsideModal, 'canvas').length, 1);
 });
 
-test('TC-3D-009 REQ-3D-016 permanent HUD contains only a noninteractive ¥ amount and accessible settings (static contract)', () => {
+test('TC-3D-009 REQ-3D-016 compact HUD exposes money, durable pause and settings while pictured dock owns everyday actions', () => {
   const hud = html.match(/<header\b[^>]*class="hud"[\s\S]*?<\/header>/)?.[0];
   assert.ok(hud);
-  assert.equal(openingTags(hud, 'button').length, 1);
-  assert.match(openingTags(hud, 'button')[0], /id="settings"/);
-  assert.match(openingTags(hud, 'button')[0], /aria-label="[^"]*设置[^"]*"/);
-  assert.equal(openingTags(hud, 'strong').length, 1);
-  assert.match(hud, /id="wallet"/);
-  assert.doesNotMatch(hud, /open-status|coin-mark|hud-actions|id="pause"|咖啡币|营业中|休息中|¤|<small\b/);
+  assert.deepEqual(openingTags(hud, 'button').map(tag => /id="([^"]+)"/.exec(tag)?.[1]), ['business-toggle', 'settings']);
+  assert.match(hud, /id="wallet"/); assert.match(hud, /id="business-status"/);
+  assert.match(hud, /aria-pressed="false"/);
   assert.deepEqual(declarations('.hud', 'pointer-events'), ['none']);
-  assert.deepEqual(declarations('.wallet-chip', 'pointer-events'), ['auto'], 'the visible amount blocks clicks on obscured scene pixels without becoming an action');
+  assert.deepEqual(declarations('.wallet-chip', 'pointer-events'), ['auto']);
   assert.deepEqual(declarations('.wallet-chip', 'touch-action'), ['none']);
   assert.deepEqual(declarations('.wallet-chip', 'user-select'), ['none']);
-  assert.deepEqual(openingTags(permanentOutsideModal, 'button'), openingTags(hud, 'button'));
-  assert.doesNotMatch(outsideModal, /<nav\b|data-anchor=|world-controls|world-button|营业牌|暂停|经理推车/);
-  assert.doesNotMatch(main, /positionControls|beginAnchorPointer|\.style\.transform\s*=\s*`translate\(/, 'no permanent screen-projected DOM controls remain');
+  const dock = outsideModal.match(/<nav id="action-dock"[\s\S]*?<\/nav>/)?.[0];
+  assert.ok(dock);
+  assert.deepEqual(openingTags(dock, 'button').map(tag => /id="([^"]+)"/.exec(tag)?.[1]), ['dock-coffee', 'dock-background', 'dock-furniture', 'dock-invite']);
+  assert.equal(openingTags(dock, 'img').length, 4);
+  for (const tag of openingTags(dock, 'button')) assert.match(tag, /aria-label="[^"]+"/);
+  assert.doesNotMatch(main, /positionControls|beginAnchorPointer/);
   assert.equal(rules('.world-button').length, 0);
-  assert.ok(declarations('.settings-button', 'pointer-events').includes('auto'));
-  for (const property of ['width', 'height']) assert.ok(declarations('.settings-button', property).some(value => Number.parseFloat(value) >= 44), `HUD settings ${property} is at least 44px`);
-  assert.doesNotMatch(main, /function togglePause\(|action\.type === "(?:pause|manager|settings)"/);
-  assert.doesNotMatch(modal, /id="manager-panel"|data-open-manager|data-focus="(?:pause|manager|settings)"/);
+  assert.doesNotMatch(modal, /id="(?:vault-panel|manager-panel|manager-upgrade)"/);
 });
 
 test('TC-3D-008 REQ-3D-013 all rendered amounts use ¥ with two fractional digits (app harness)', () => {
@@ -323,8 +339,8 @@ test('TC-3D-008 REQ-3D-013 all rendered amounts use ¥ with two fractional digit
     wallet.emit('pointerdown'); f.root.emit('click', { target: wallet });
     assert.deepEqual(f.state(), beforeWallet);
     assert.equal(f.element('#operation-dialog').open, false, 'amount display has no action route');
-    for (const [action, amountIds] of [[{ type: 'counter', id: 'counter-a' }, ['counter-price', 'counter-next-price', 'counter-upgrade']], [{ type: 'menu', recipe: 'latte' }, ['coffee-price', 'coffee-next-price', 'coffee-upgrade']], [{ type: 'vault' }, ['vault-total', 'pending', 'carrying', 'manager-upgrade']]]) {
-      f.action(action);
+    for (const [action, amountIds] of [[{ type: 'counter', id: 'counter-a' }, ['counter-price', 'counter-next-price', 'counter-upgrade']], [{ type: 'menu', recipe: 'latte' }, ['coffee-price', 'coffee-next-price', 'coffee-upgrade']]]) {
+      openAction(f, action);
       for (const id of amountIds) {
         const text = f.element(`#${id}`).textContent;
         assert.doesNotMatch(text, /¤|\d\.\d{2}\s*币/);
@@ -338,9 +354,9 @@ test('TC-3D-008 REQ-3D-013 all rendered amounts use ¥ with two fractional digit
 test('TC-3D-009 REQ-3D-016 scene actions and HUD settings open the correct details without hidden DOM anchors (app harness)', () => {
   const f = fixture();
   try {
-    for (const [action, expected] of [[{ type: 'counter', id: 'counter-b' }, 'counter-panel'], [{ type: 'recipe', id: 'counter-a' }, 'recipe-panel'], [{ type: 'menu', recipe: 'latte' }, 'coffee-panel'], [{ type: 'vault' }, 'vault-panel']]) {
+    for (const [action, expected] of [[{ type: 'counter', id: 'counter-b' }, 'counter-panel'], [{ type: 'recipe', id: 'counter-a' }, 'recipe-panel'], [{ type: 'menu', recipe: 'latte' }, 'coffee-panel'], [{ type: 'background' }, 'background-panel']]) {
       const before = f.state();
-      f.action(action);
+      openAction(f, action);
       assert.equal(f.element('#operation-dialog').open, true);
       assert.deepEqual(f.nodes.filter(node => node.classList.contains('operation-panel') && !node.hidden).map(node => node.id), [expected]);
       assert.deepEqual(f.state(), before, 'opening scene detail does not alter economy');
@@ -354,23 +370,28 @@ test('TC-3D-009 REQ-3D-016 scene actions and HUD settings open the correct detai
   } finally { f.dispose(); }
 });
 
-test('TC-3D-009 REQ-3D-016 removed pause/manager/settings scene routes and pause hotkeys cannot alter play (app harness)', () => {
+test('TC-3D-009 REQ-3D-016 only the explicit HUD pause changes business state; retired routes remain inert', () => {
   const f = fixture();
   try {
-    assert.equal(f.element('#pause'), null);
-    assert.ok(f.element('#settings'));
     const before = f.state();
-    for (const type of ['pause', 'manager', 'settings']) f.action({ type });
+    for (const type of ['pause', 'manager', 'settings', 'vault', 'menu']) f.action({ type, recipe: 'latte' });
     for (const key of ['p', 'P', 'Pause', 'Escape']) f.element('#coffee-canvas').emit('keydown', { key, repeat: false });
     assert.deepEqual(f.state(), before);
     assert.equal(f.element('#operation-dialog').open, false);
+    f.click('#business-toggle');
+    assert.equal(f.state().paused, true);
+    assert.equal(f.element('#business-toggle').getAttribute('aria-pressed'), 'true');
+    assert.equal(f.element('#business-toggle').textContent, '恢复营业');
+    assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).state.paused, true);
+    const paused = f.state(); f.tick(5); assert.deepEqual(f.state(), paused);
+    f.click('#business-toggle');
     assert.equal(f.state().paused, false);
-    f.tick(.5);
-    assert.ok(f.state().elapsed > before.elapsed, 'current play continues without a user pause route');
+    assert.equal(f.element('#business-toggle').getAttribute('aria-pressed'), 'false');
+    f.tick(.5); assert.ok(f.state().elapsed > before.elapsed);
   } finally { f.dispose(); }
 });
 
-test('TC-3D-009 REQ-3D-016 only HUD settings remains outside the closed native operation dialog (static contract)', () => {
+test('TC-3D-009 REQ-3D-016 HUD and dock remain outside the closed native operation dialog (static contract)', () => {
   assert.ok(modalStart >= 0);
   assert.doesNotMatch(openingTags(modal, 'dialog')[0], /\bopen(?:\s|=|>)/);
   const panels = openingTags(modal, 'div').filter(tag => tag.includes('class="operation-panel"'));
@@ -403,10 +424,10 @@ test('TC-3D-008 REQ-3D-015 modal close/backdrop restore canvas focus and reject 
     assert.equal(f.renderer.interactionEnabled, true);
     assert.deepEqual(f.renderer.interactionCalls, [false, true]);
     assert.equal(f.document.activeElement, canvas, 'scene detail close returns to the actual canvas');
-    f.action({ type: 'vault' });
+    f.click('#dock-background');
     dialog.emit('click', { target: dialog, clientX: 90, clientY: 90 });
     assert.equal(dialog.open, false, 'click outside the dialog rectangle closes it');
-    f.action({ type: 'vault' });
+    f.click('#dock-background');
     dialog.emit('click', { target: dialog, clientX: 150, clientY: 150 });
     assert.equal(dialog.open, true, 'click in the dialog content does not dismiss it');
     dialog.close(); // Simulates the close event native Escape supplies; not proof of browser Escape.
@@ -422,7 +443,7 @@ test('TC-3D-008 REQ-3D-014 scene keyboard access is provided on the real canvas 
   assert.match(canvas, /aria-describedby="[^"]+"/);
   assert.match(outsideModal, /键盘|Tab|Enter|方向键|空格/);
   assert.match(main, /keydown/);
-  assert.deepEqual(openingTags(permanentOutsideModal, 'button').map(tag => /id="([^"]+)"/.exec(tag)?.[1]), ['settings'], 'keyboard support cannot reintroduce offscreen duplicate scene buttons');
+  assert.deepEqual(openingTags(permanentOutsideModal, 'button').map(tag => /id="([^"]+)"/.exec(tag)?.[1]), ['business-toggle', 'settings', 'dock-coffee', 'dock-background', 'dock-furniture', 'dock-invite'], 'all permanent buttons are visible business or dock controls');
   assert.ok(rules('#coffee-canvas:focus-visible').length, 'keyboard users can locate their scene focus');
   assert.ok(declarations('#coffee-canvas:focus-visible', 'outline-offset').some(value => Number.parseFloat(value) < 0), 'full-viewport focus ring must be inset so overflow:hidden does not clip it');
 });
@@ -459,9 +480,9 @@ test('TC-3D-008 REQ-3D-014 actual canvas keys select, pan and activate scene obj
     assert.equal(f.renderer.getFocus(), 'counter-a-recipe', 'inert modal background cannot change selected scene object');
     assert.equal(f.renderer.activationCalls, 1);
     f.click('#dialog-close');
-    f.renderer.focusAnchor('vault');
+    f.renderer.focusAnchor('counter-b-upgrade');
     canvas.emit('keydown', { key: ' ', repeat: false });
-    assert.equal(f.element('#vault-panel').hidden, false);
+    assert.equal(f.element('#counter-panel').hidden, false);
     canvas.emit('keydown', { key: ' ', repeat: true });
     assert.equal(f.state().paused, false, 'Space operates focused geometry and never hides a pause toggle');
     f.click('#dialog-close');
@@ -484,14 +505,14 @@ test('TC-3D-008 REQ-3D-015 dialog recipe/upgrade/navigation routes preserve core
     assert.equal(f.state().counters[0].level, beforeUpgrade.counters[0].level + 1);
     assert.ok(f.state().wallet < beforeUpgrade.wallet);
     f.click('#dialog-close');
-    f.action({ type: 'vault' });
+    f.click('#dock-background');
     assert.equal(f.element('#manager-panel'), null);
-    assert.equal(f.element('#manager-upgrade').disabled, true, 'vault owns the manager upgrade and uses its existing quote');
-    assert.match(f.element('#manager-rank').textContent, /^Lv\. 1$/);
+    assert.equal(f.element('#manager-upgrade'), null);
+    assert.equal(f.element('#background-panel').hidden, false);
     assert.equal(f.document.activeElement, f.element('#dialog-close'));
     f.click('#dialog-close');
     const beforeCoffee = f.state();
-    f.action({ type: 'menu', recipe: 'espresso' });
+    openCoffee(f, 'espresso');
     assert.equal(f.element('#coffee-panel').hidden, false);
     assert.deepEqual(f.state(), beforeCoffee, 'opening coffee details cannot assign it to a counter');
     f.click('#dialog-close');
@@ -505,31 +526,21 @@ test('TC-3D-008 REQ-3D-015 dialog recipe/upgrade/navigation routes preserve core
   } finally { f.dispose(); }
 });
 
-test('TC-3D-009 REQ-3D-017 manager grade, efficiency and upgrade belong to the vault and preserve the core quote (app harness)', () => {
-  const vaultMarkup = modal.slice(modal.indexOf('id="vault-panel"'), modal.indexOf('id="settings-panel"'));
-  for (const id of ['manager-rank', 'manager-speed', 'manager-status', 'manager-preview', 'manager-upgrade']) assert.match(vaultMarkup, new RegExp(`id="${id}"`));
-  assert.equal(openingTags(modal, 'button').filter(tag => tag.includes('id="manager-upgrade"')).length, 1);
-  assert.doesNotMatch(html, /manager-panel|data-open-manager|经理推车|米\/秒/);
+test('TC-3D-009 REQ-3D-017 handover credits income directly with no vault or manager operation', () => {
+  assert.doesNotMatch(html, /id="(?:vault-panel|manager-panel|manager-upgrade|manager-rank|pending|carrying)"/);
   const f = fixture();
   try {
-    const expected = createEngine(f.state()), quote = expected.managerQuote();
-    f.action({ type: 'vault' });
-    assert.equal(f.element('#vault-panel').hidden, false);
-    assert.match(f.element('#manager-rank').textContent, /^Lv\. 1$/);
-    assert.equal(f.element('#manager-speed').textContent, '100%');
-    assert.match(f.element('#manager-preview').textContent, /107%/);
-    assert.match(f.element('#manager-upgrade').textContent, /¥10\.00/);
-    assert.equal(f.element('#manager-upgrade').disabled, false);
-    assert.equal(expected.upgradeManager(), true);
-    f.click('#manager-upgrade');
-    assert.deepEqual(f.state(), expected.snapshot(), 'the vault purchase has exactly the core cost, rank and event changes');
-    assert.equal(f.state().wallet, 1200 - quote.cost);
-    assert.equal(f.element('#manager-rank').textContent, 'Lv. 2');
-    assert.equal(f.element('#manager-speed').textContent, '107%');
-    assert.equal(f.element('#manager-upgrade').disabled, true, 'a repeated purchase cannot exceed the current wallet');
-    f.click('#manager-upgrade');
-    assert.deepEqual(f.state(), expected.snapshot());
-    assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, f.state());
+    let before = f.state();
+    for (let steps = 0; !f.state().totalServed && steps < 2000; steps++) { before = f.state(); f.tick(.05); }
+    const served = f.state();
+    assert.ok(served.totalServed > 0, 'a real customer reaches handover');
+    assert.ok(served.wallet > before.wallet, 'handover credits the wallet immediately');
+    assert.equal(served.wallet - before.wallet, served.totalEarned - before.totalEarned);
+    assert.ok(served.counters.every(counter => counter.pendingCash === 0));
+    assert.equal(served.manager.carrying, 0);
+    assert.deepEqual(served.manager, createInitialState().manager, 'the compatibility manager never moves');
+    f.tick(.15);
+    assert.equal(f.element('#wallet').textContent, centsLabel(f.state().wallet), 'HUD reflects direct credit on its next bounded refresh');
   } finally { f.dispose(); }
 });
 
@@ -542,7 +553,7 @@ test('TC-3D-009 REQ-3D-016 HUD settings uses the same modal input guard and rest
     assert.equal(f.renderer.interactionEnabled, false);
     assert.equal(f.document.activeElement, f.element('#dialog-close'));
     const before = f.state();
-    f.action({ type: 'invite' }); f.action({ type: 'vault' }); f.click('#settings');
+    f.action({ type: 'invite' }); f.click('#dock-background'); f.click('#settings');
     assert.deepEqual(f.state(), before);
     assert.equal(f.element('#settings-panel').hidden, false);
     assert.equal(dialog.showModalCalls, 1, 'a repeated HUD click cannot reopen or replace the current modal');
@@ -568,9 +579,9 @@ test('TC-3D-008 REQ-3D-015 post-dialog navigation survives native asynchronous c
     f.element('#coffee-canvas').emit('keydown', { key: 'ArrowLeft' });
     assert.equal(f.element('#operation-dialog').open, false);
     f.flushCloseEvents();
-    assert.equal(f.renderer.focusCalls.at(-1), 'vault', 'native close-event delay must not discard the pending scene navigation while input is suspended');
+    assert.equal(f.renderer.focusCalls.at(-1), 'counter-b-upgrade', 'native close-event delay must not discard the pending scene navigation while input is suspended');
     const before = f.state();
-    f.action({ type: 'menu', recipe: 'espresso' });
+    openCoffee(f, 'espresso');
     f.click('#dialog-close');
     f.action({ type: 'recipe', id: 'counter-b' });
     f.flushCloseEvents();
@@ -596,18 +607,18 @@ test('TC-3D-008 REQ-3D-015 a stale queued close cannot dismantle a newly reopene
     f.click('#settings');
     f.click('#dialog-close');
     assert.equal(f.renderer.interactionEnabled, true);
-    f.action({ type: 'vault' });
+    f.click('#dock-background');
     assert.equal(f.renderer.interactionEnabled, false);
     f.flushCloseEvents();
     assert.equal(f.element('#operation-dialog').open, true);
-    assert.equal(f.element('#vault-panel').hidden, false);
+    assert.equal(f.element('#background-panel').hidden, false);
     assert.equal(f.renderer.interactionEnabled, false, 'an older close event must not unlock a new modal background');
     const focus = f.document.activeElement, before = f.state();
     f.action({ type: 'pause' });
     assert.deepEqual(f.state(), before);
     assert.equal(f.document.activeElement, focus);
     f.tick(.5);
-    assert.match(f.element('#dialog-title').textContent, /金库/);
+    assert.match(f.element('#dialog-title').textContent, /店外景色/);
     f.click('#dialog-close');
     f.flushCloseEvents();
     assert.equal(f.renderer.interactionEnabled, true);
@@ -615,21 +626,22 @@ test('TC-3D-008 REQ-3D-015 a stale queued close cannot dismantle a newly reopene
   } finally { f.dispose(); }
 });
 
-test('TC-3D-009 REQ-3D-016 physical invite remains cooldown/conflict guarded without duplicate DOM handlers (app harness)', () => {
+test('TC-3D-009 REQ-3D-016 physical and dock invites share cooldown and conflict protection (app harness)', () => {
   const f = fixture();
   try {
     const expected = createEngine(f.state()); expected.invite(); expected.invite();
-    f.action({ type: 'invite' }); f.action({ type: 'invite' });
+    f.click('#dock-invite'); f.action({ type: 'invite' }); f.click('#dock-invite');
     assert.deepEqual(f.state(), expected.snapshot(), 'one accepted invite keeps the existing three-guest core rule; immediate repeat is rejected');
     assert.ok(f.state().inviteCooldown > 0);
     const foreign = JSON.parse(f.memory.getItem(SAVE_KEY)); foreign.recordChangeTag = 'invite-conflict';
     f.memory.setItem(SAVE_KEY, JSON.stringify(foreign));
     f.window.emit('storage', { key: SAVE_KEY, newValue: JSON.stringify(foreign) });
     const paused = f.state();
-    assert.equal(paused.paused, true);
-    f.action({ type: 'invite' });
+    assertProtected(f);
+    f.action({ type: 'invite' }); f.click('#dock-invite'); f.element('#dock-invite').emit('click');
     assert.deepEqual(f.state(), paused);
-    assert.equal(f.element('#invite'), null, 'no parallel DOM invite can duplicate a geometry tap');
+    assert.equal(f.element('#dock-invite').disabled, true);
+    assert.equal(f.element('#invite'), null, 'the removed duplicate scene button stays absent');
   } finally { f.dispose(); }
 });
 
@@ -686,7 +698,7 @@ test('TC-3D-008 REQ-3D-015 names and save feedback are transient; unreadable sta
     assert.equal(f.element('#toast').classList.contains('visible'), false, 'feedback does not become permanent HUD');
     f.click('#export');
     assert.equal(f.element('#export').disabled, true); assert.equal(f.downloads.length, 0);
-    assert.equal(f.state().paused, true); assert.equal(f.element('#reload').hidden, false);
+    assertProtected(f); assert.equal(f.element('#reload').hidden, false);
     assert.doesNotMatch(outsideModal, /pan-hint|open-status/);
     assert.match(main, /setTimeout\([\s\S]*?#toast[\s\S]*?classList\.remove\("visible"\)[\s\S]*?3500\)/);
   } finally { f.dispose(); }
@@ -698,9 +710,9 @@ test('TC-3D-008 REQ-3D-006 external save conflict freezes and blocks removed pau
     const newer = JSON.parse(f.memory.getItem(SAVE_KEY)); newer.recordChangeTag = 'other-client';
     f.memory.setItem(SAVE_KEY, JSON.stringify(newer));
     f.window.emit('storage', { key: SAVE_KEY, newValue: JSON.stringify(newer) });
-    assert.equal(f.state().paused, true);
+    assertProtected(f);
     f.action({ type: 'pause' });
-    assert.equal(f.state().paused, true, 'removed pause callback must not bypass conflict protection');
+    assertProtected(f);
     f.action({ type: 'counter', id: 'counter-a' });
     assert.equal(f.element('#counter-upgrade').disabled, true);
     f.click('#dialog-close');
@@ -715,14 +727,15 @@ test('TC-3D-008 REQ-3D-006 external save conflict freezes and blocks removed pau
 function pausedProgress() {
   const engine = createEngine(); engine.advance(22); engine.togglePause(); return engine.snapshot();
 }
-function omitPauseClaims(state) {
-  const copy = structuredClone(state); delete copy.paused; delete copy.lastOfflineClaimId; delete copy.offlineClaimIds; return copy;
+function omitOfflineClaims(state) {
+  const copy = structuredClone(state); delete copy.lastOfflineClaimId; delete copy.offlineClaimIds; return copy;
 }
 
 // Write authentic pre-route-v2 bytes directly: repository.save would normalize them
 // before the app's loader sees them and would hide boot/reload migration regressions.
 function legacyRouteProgress(routeVersion) {
   const state = createInitialState();
+  state.economyVersion = 2; delete state.layout; state.customerRouteVersion = 2;
   if (routeVersion === undefined) delete state.managerRouteVersion;
   else state.managerRouteVersion = routeVersion;
   state.paused = true;
@@ -737,165 +750,118 @@ function legacyRouteProgress(routeVersion) {
   return state;
 }
 
-test('TC-3D-010 legacy raw route saves resume once, finish their current sweep and persist the real B-first route (app harness)', async () => {
+test('TC-3D-010 legacy raw route saves transfer pending and carried receipts once while keeping user pause', async () => {
   for (const routeVersion of [undefined, 1]) for (const age of [10, 3600]) {
     const initial = legacyRouteProgress(routeVersion);
     const raw = JSON.stringify({ schemaVersion: 1, savedAt: Date.now() - age * 1000, recordChangeTag: `legacy-route-${routeVersion}-${age}`, state: initial });
     const f = fixture({ raw });
     await f.flushOffline();
     try {
-      const expected = structuredClone(initial);
-      expected.managerRouteVersion = 2;
-      expected.manager.x = 4.4;
-      expected.manager.finishLegacySweep = true;
-      assert.equal(f.state().paused, false, 'only current play resumes after the old paused interval is settled');
-      assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(expected), 'boot changes route coordinates/version only; assets, timer, event sequence and partial fixed step survive');
-      assert.equal(f.renderer.updates.length, 0, 'the first real snapshot is delivered by the single RAF owner');
-      const wallet = f.state().wallet;
-      let safety = 0;
-      while (f.state().manager.finishLegacySweep && safety++ < 200) {
-        const before = f.state();
-        f.tick(.05);
-        if (f.state().manager.finishLegacySweep) assert.equal(f.state().wallet, wallet, 'legacy collection is still unavailable until the physical vault deposit');
-        else {
-          assert.equal(before.manager.phase, 'depositing');
-          assert.equal(before.manager.x, 8.8);
-        }
-      }
-      assert.ok(safety < 200, 'the in-flight legacy sweep reaches a terminating deposit');
-      assert.equal(f.state().wallet, wallet + 570, 'exactly the carried and pending money is credited once');
-      assert.equal(f.state().manager.carrying, 0);
-      assert.equal(f.state().manager.target, 1, 'the next real sweep leaves the left vault for nearest counter B');
-      assert.equal(f.state().manager.x, 8.8);
-      assert.equal(f.state().manager.finishLegacySweep, undefined);
+      const migrated = f.state();
+      assert.equal(migrated.paused, true);
+      assert.equal(migrated.economyVersion, 4);
+      assert.equal(migrated.wallet, initial.wallet + 570);
+      assert.equal(migrated.totalEarned, initial.totalEarned, 'legacy receipts were already minted');
+      assert.equal(migrated.spend, initial.spend); assert.equal(migrated.elapsed, initial.elapsed);
+      assert.equal(migrated.eventSequence, initial.eventSequence); assert.equal(migrated.stepCarry, initial.stepCarry);
+      assert.deepEqual(migrated.coffeeLevels, initial.coffeeLevels);
+      assert.ok(migrated.counters.every(counter => counter.pendingCash === 0));
+      assert.deepEqual(migrated.manager, createInitialState().manager);
+      assert.equal(f.renderer.updates.length, 0);
+      f.tick(10); assert.deepEqual(f.state(), migrated, 'paused migration cannot operate or credit receipts again');
       f.click('#settings'); f.click('#save');
       const saved = JSON.parse(f.memory.getItem(SAVE_KEY)).state;
-      assert.deepEqual(saved, f.state());
-      assert.equal(saved.managerRouteVersion, 2);
-      const reopened = fixture({ raw: f.memory.getItem(SAVE_KEY) });
-      await reopened.flushOffline();
-      try { assert.deepEqual(reopened.state(), saved, 'a route-v2 save is not remapped or deposited again on immediate reboot'); }
+      assert.deepEqual(saved, migrated);
+      const reopened = fixture({ raw: f.memory.getItem(SAVE_KEY), now: f.clock.now });
+      try { await reopened.flushOffline(); assert.deepEqual(reopened.state(), saved, 'a canonical save never repeats the receipt transfer'); }
       finally { reopened.dispose(); }
     } finally { f.dispose(); }
   }
 });
 
-test('TC-3D-010 failed legacy-route offline settlement preserves bytes and freezes migrated assets until successful reload (app harness)', async () => {
+test('TC-3D-010 failed legacy settlement protects original bytes and transferred assets until successful recovery', async () => {
   for (const mode of ['writeUnavailable', 'conflictDuringClaim']) {
-    const initial = legacyRouteProgress(1);
-    initial.paused = false;
-    initial.stepCarry = 0;
+    const initial = legacyRouteProgress(1); initial.paused = false; initial.stepCarry = 0;
     initial.manager = { x: -8, z: -1.7, carrying: 570, phase: 'depositing', target: 2, timer: .55, level: 1 };
     initial.counters.forEach(counter => counter.pendingCash = 0);
     const raw = JSON.stringify({ schemaVersion: 1, savedAt: Date.now() - 3600000, recordChangeTag: `legacy-failed-${mode}`, state: initial });
-    const f = fixture({ raw, [mode]: true });
-    await f.flushOffline();
+    const f = fixture({ raw, [mode]: true }); await f.flushOffline();
     try {
       const protectedRaw = f.memory.getItem(SAVE_KEY), frozen = f.state();
-      assert.equal(frozen.paused, true);
-      assert.equal(frozen.managerRouteVersion, 2);
-      assert.equal(frozen.manager.x, 8.8);
-      assert.equal(frozen.manager.target, 2);
-      assert.equal(frozen.manager.timer, .55);
-      assert.equal(frozen.manager.carrying, 570);
-      assert.equal(frozen.wallet, 1200);
-      assert.equal(frozen.elapsed, 0);
-      assert.equal(f.element('#reload').hidden, false);
-      f.tick(20);
-      assert.deepEqual(f.state(), frozen, 'failed anchor settlement cannot grant partial offline progress or complete the pending deposit');
-      f.click('#settings'); f.click('#save');
-      assert.equal(f.memory.getItem(SAVE_KEY), protectedRaw, 'blocked manual/autosave keeps original or concurrent legacy bytes');
-      f.storageControl.writeUnavailable = false;
-      f.click('#reload'); await f.flushOffline();
-      assert.equal(f.state().paused, false);
-      assert.ok(f.state().elapsed >= 1800 && f.state().elapsed <= 1810, 'successful reload settles the single previously unpaid offline interval');
-      assert.equal(f.state().managerRouteVersion, 2);
+      assertProtected(f); assert.equal(frozen.managerRouteVersion, 2);
+      assert.equal(frozen.wallet, 1770); assert.equal(frozen.totalEarned, 570);
+      assert.equal(frozen.manager.carrying, 0); assert.equal(frozen.elapsed, 0);
+      assert.ok(frozen.counters.every(counter => counter.pendingCash === 0));
+      f.tick(20); assert.deepEqual(f.state(), frozen, 'failed claim cannot publish partial offline earnings');
+      f.click('#settings'); f.click('#save'); assert.equal(f.memory.getItem(SAVE_KEY), protectedRaw);
+      f.storageControl.writeUnavailable = false; f.click('#reload'); await f.flushOffline();
+      assert.equal(f.state().paused, false); assert.equal(f.element('#business-toggle').disabled, false);
+      assert.ok(f.state().elapsed >= 1800 && f.state().elapsed <= 1810);
       const once = f.state(), onceRaw = f.memory.getItem(SAVE_KEY);
-      assert.ok(once.wallet > 1200);
-      f.click('#reload'); await f.flushOffline();
-      assert.deepEqual(f.state(), once, 'repeated reload cannot repeat migration or the credited offline interval');
-      assert.equal(f.memory.getItem(SAVE_KEY), onceRaw);
+      assert.ok(once.wallet > 1770);
+      f.click('#reload'); await f.flushOffline(); assert.deepEqual(f.state(), once); assert.equal(f.memory.getItem(SAVE_KEY), onceRaw);
     } finally { f.dispose(); }
   }
 });
 
-test('TC-3D-010 migration persists before a hidden first frame and BFCache/repeated saves cannot remap or claim twice (app harness)', async () => {
+test('TC-3D-010 migration before a hidden first frame and repeated BFCache events never repay legacy receipts', async () => {
   const initial = legacyRouteProgress(undefined);
   const raw = JSON.stringify({ schemaVersion: 1, savedAt: Date.now() - 10000, recordChangeTag: 'legacy-hidden-before-raf', state: initial });
-  const f = fixture({ raw });
-  await f.flushOffline();
+  const f = fixture({ raw }); await f.flushOffline();
   try {
-    const first = f.state();
-    assert.equal(first.manager.x, 4.4);
-    assert.equal(first.managerRouteVersion, 2);
-    assert.equal(first.manager.finishLegacySweep, true);
-    assert.equal(f.renderer.updates.length, 0);
-    f.document.hidden = true; f.document.emit('visibilitychange');
-    assert.equal(f.frames.size, 0);
-    assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, first, 'hiding before the initial RAF persists the canonical route and unchanged assets');
+    const first = f.state(); assert.equal(first.wallet, 1770); assert.equal(first.paused, true);
+    assert.equal(first.manager.carrying, 0); assert.equal(f.renderer.updates.length, 0);
+    f.document.hidden = true; f.document.emit('visibilitychange'); assert.equal(f.frames.size, 0);
+    assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, first);
     f.clock.now += 45000; f.clock.performance += 45000;
     f.document.hidden = false; f.document.emit('visibilitychange'); await f.flushOffline();
     const resumed = f.state();
-    assert.equal(resumed.elapsed, 36, 'only the hidden45s interval is advanced at 80% offline efficiency');
-    assert.equal(resumed.managerRouteVersion, 2);
-    assert.equal(resumed.manager.finishLegacySweep, undefined, 'the in-flight old sweep completes once and thereafter follows the real route');
-    assert.equal(f.frames.size, 1);
-    f.window.emit('pageshow', { persisted: true }); await f.flushOffline();
-    assert.deepEqual(f.state(), resumed, 'visibility and BFCache do not both claim the same interval');
-    assert.equal(f.frames.size, 1);
-    f.click('#settings'); f.click('#save'); f.click('#save');
-    assert.deepEqual(f.state(), resumed, 'manual saves cannot normalize canonical route-v2 coordinates again');
-    const saved = JSON.parse(f.memory.getItem(SAVE_KEY));
-    assert.deepEqual(saved.state, resumed);
-    assert.equal(saved.savedAt, f.clock.now);
-    const reopened = fixture({ raw: f.memory.getItem(SAVE_KEY) });
-    await reopened.flushOffline();
-    try { assert.deepEqual(reopened.state(), resumed, 'reopening already anchored hidden progress never repeats the migrated sweep or offline earnings'); }
+    assert.deepEqual(omitOfflineClaims(resumed), omitOfflineClaims(first), 'closed shop gets no hidden-interval time, movement or earnings');
+    assert.equal(resumed.paused, true); assert.equal(f.frames.size, 1);
+    f.window.emit('pageshow', { persisted: true }); await f.flushOffline(); assert.deepEqual(f.state(), resumed);
+    f.click('#settings'); f.click('#save'); f.click('#save'); assert.deepEqual(f.state(), resumed);
+    const saved = JSON.parse(f.memory.getItem(SAVE_KEY)); assert.deepEqual(saved.state, resumed); assert.equal(saved.savedAt, f.clock.now);
+    const reopened = fixture({ raw: f.memory.getItem(SAVE_KEY), now: f.clock.now });
+    try { await reopened.flushOffline(); assert.deepEqual(reopened.state(), resumed); }
     finally { reopened.dispose(); }
   } finally { f.dispose(); }
 });
 
-test('TC-3D-009 REQ-3D-016 valid previous paused saves resume current play without paused-interval income on boot (app harness)', async () => {
+test('TC-3D-009 REQ-3D-016 paused saves stay closed across reload without paused-interval income', async () => {
   for (const savedAtAgoSeconds of [10, 3600]) {
-    const initial = pausedProgress(), f = fixture({ initial, savedAtAgoSeconds });
-    await f.flushOffline();
+    const initial = pausedProgress(), f = fixture({ initial, savedAtAgoSeconds }); await f.flushOffline();
     try {
-      assert.equal(f.state().paused, false, `valid ${savedAtAgoSeconds}s old pause must not strand the no-pause UI`);
-      assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(initial), 'repository first settles the old pause with zero elapsed, income, movement or asset changes');
+      assert.equal(f.state().paused, true); assert.equal(f.element('#business-toggle').textContent, '恢复营业');
+      assert.deepEqual(omitOfflineClaims(f.state()), omitOfflineClaims(initial), 'paused offline time never advances income, movement or brews');
       assert.equal(f.element('#reload').hidden, true);
-      const before = f.state();
-      f.tick(.5);
-      const expected = createEngine(before); expected.advance(.5);
-      assert.deepEqual(f.state(), expected.snapshot(), 'only the new online interval advances after automatic resume');
+      const before = f.state(), expected = createEngine(before); expected.advance(.5); f.tick(.5);
+      assert.deepEqual(f.state(), expected.snapshot(), 'existing customers may drain online while arrivals remain stopped');
+      assert.equal(f.state().nextCustomerId, before.nextCustomerId);
       f.click('#settings'); f.click('#save');
-      assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).state.paused, false);
-      const reloaded = fixture({ raw: f.memory.getItem(SAVE_KEY) });
-      await reloaded.flushOffline();
-      try { assert.deepEqual(reloaded.state(), f.state(), 'immediate new boot cannot reclaim the already settled paused interval'); }
+      assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).state.paused, true);
+      const reloaded = fixture({ raw: f.memory.getItem(SAVE_KEY), now: f.clock.now });
+      try { await reloaded.flushOffline(); assert.deepEqual(reloaded.state(), f.state()); }
       finally { reloaded.dispose(); }
+      f.click('#dialog-close'); f.click('#business-toggle'); assert.equal(f.state().paused, false);
+      assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).state.paused, false);
     } finally { f.dispose(); }
   }
 });
 
-test('TC-3D-009 REQ-3D-016 reading a valid external paused save resumes only current play after conflict recovery (app harness)', async () => {
-  const f = fixture();
-  await f.flushOffline();
+test('TC-3D-009 REQ-3D-016 recovering an external paused save preserves its pause until explicit resume', async () => {
+  const f = fixture(); await f.flushOffline();
   try {
     const paused = pausedProgress();
-    const latest = { schemaVersion: 1, savedAt: f.clock.now - 3600000, recordChangeTag: 'valid-paused-other-window', state: paused };
-    const raw = JSON.stringify(latest); f.memory.setItem(SAVE_KEY, raw);
-    f.window.emit('storage', { key: SAVE_KEY, newValue: raw });
-    assert.equal(f.state().paused, true);
+    const raw = JSON.stringify({ schemaVersion: 1, savedAt: f.clock.now - 3600000, recordChangeTag: 'valid-paused-other-window', state: paused });
+    f.memory.setItem(SAVE_KEY, raw); f.window.emit('storage', { key: SAVE_KEY, newValue: raw }); assertProtected(f);
     f.click('#settings'); f.click('#reload'); await f.flushOffline();
-    assert.equal(f.state().paused, false);
-    assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(paused), 'reload claims no income or movement from the paused hour');
+    assert.equal(f.state().paused, true); assert.equal(f.element('#business-toggle').disabled, false);
+    assert.deepEqual(omitOfflineClaims(f.state()), omitOfflineClaims(paused), 'recovery adds no earnings for the paused hour');
     assert.equal(f.element('#reload').hidden, true);
-    const before = f.state();
-    f.tick(.5);
-    const expected = createEngine(before); expected.advance(.5);
-    assert.deepEqual(f.state(), expected.snapshot());
-    f.click('#save');
-    assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).state.paused, false);
+    const before = f.state(), expected = createEngine(before); expected.advance(.5); f.tick(.5);
+    assert.deepEqual(f.state(), expected.snapshot()); assert.equal(f.state().nextCustomerId, before.nextCustomerId);
+    f.click('#save'); assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).state.paused, true);
+    f.click('#dialog-close'); f.click('#business-toggle'); assert.equal(f.state().paused, false);
   } finally { f.dispose(); }
 });
 
@@ -905,26 +871,27 @@ test('TC-3D-009 REQ-3D-006 failed offline writes or a concurrent claim keep paus
     await f.flushOffline();
     try {
       const raw = f.memory.getItem(SAVE_KEY), before = f.state();
-      assert.equal(before.paused, true, `${mode} must not be unlocked by valid-pause automatic resume`);
-      assert.deepEqual(omitPauseClaims(before), omitPauseClaims(initial));
+      assertProtected(f, true);
+      assert.deepEqual(omitOfflineClaims(before), omitOfflineClaims(initial));
       assert.equal(f.element('#reload').hidden, false);
       for (const type of ['pause', 'manager', 'settings', 'invite']) f.action({ type });
       f.tick(20);
       assert.deepEqual(f.state(), before);
       assert.equal(f.memory.getItem(SAVE_KEY), raw, 'blocked autosave cannot replace the valid original or another client');
-      f.action({ type: 'vault' });
-      assert.equal(f.element('#manager-upgrade').disabled, true);
-      f.click('#manager-upgrade');
+      openCoffee(f);
+      assert.equal(f.element('#coffee-upgrade').disabled, true);
+      f.click('#coffee-upgrade');
       assert.deepEqual(f.state(), before);
       f.click('#dialog-close'); f.click('#settings'); f.click('#save');
       assert.equal(f.memory.getItem(SAVE_KEY), raw);
       if (mode === 'writeUnavailable') {
         f.click('#reload'); await f.flushOffline();
-        assert.equal(f.state().paused, true, 'repeated failed reload still cannot resume protected play');
+        assertProtected(f, true);
         f.storageControl.writeUnavailable = false;
         f.click('#reload'); await f.flushOffline();
-        assert.equal(f.state().paused, false, 'explicit successful latest-save recovery can resume current play');
-        assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(initial));
+        assert.equal(f.state().paused, true, 'recovery does not resume a player-paused shop');
+        assert.equal(f.element('#business-toggle').disabled, false);
+        assert.deepEqual(omitOfflineClaims(f.state()), omitOfflineClaims(initial));
       }
     } finally { f.dispose(); }
   }
@@ -955,7 +922,7 @@ test('TC-3D-009 REQ-3D-006 bad, future and foreign saves preserve source bytes t
       f.click('#export');
       assert.equal(await f.blobs[0].text(), raw, 'backup must preserve the source instead of a resumed invented state');
       f.window.emit('storage', { key: SAVE_KEY, newValue: 'changed elsewhere' });
-      assert.equal(f.state().paused, true);
+      assertProtected(f);
       f.click('#reload'); await f.flushOffline();
       f.click('#save'); f.tick(10);
       assert.equal(f.memory.getItem(SAVE_KEY), raw, 'failed compatible reload does not release source-byte protection');
@@ -1062,14 +1029,15 @@ test('TC-3D-011 delayed duplicate pageshow preserves the newly visible tail', as
 
 
 test('TC-3D-012 default app draws every display frame using interpolated poses, without extra RAF owners', () => {
-  const f = fixture();
+  const moving = createEngine(); moving.invite(); moving.advance(.5);
+  const f = fixture({ initial: moving.snapshot() });
   try {
     assert.equal(f.renderer.renderMode, 'smooth');
     for (let i = 0; i < 120; i++) f.tick(1 / 120);
     assert.equal(f.renderer.updates.length, 120);
-    assert.ok(Math.abs(f.state().elapsed - 1) < 1e-9);
-    const poses = f.renderer.updates.slice(12, 100).map(update => update.state.manager.x);
-    for (let i = 1; i < poses.length; i++) assert.ok(Math.abs(poses[i - 1] - poses[i] - 2.6 / 120) < 1e-8);
+    assert.ok(Math.abs(f.state().elapsed - 1.5) < 1e-9);
+    const poses = f.renderer.updates.slice(12, 100).map(update => update.state.customers.find(customer => customer.id === 1).z);
+    for (let i = 1; i < poses.length; i++) assert.ok(Math.abs(poses[i - 1] - poses[i] - 2.5 / 120) < 1e-8);
     assert.equal(f.frames.size, 1);
   } finally { f.dispose(); }
 });
@@ -1176,7 +1144,7 @@ test('TC-3D-014 QA sessions reset on reload/new shop and report missing renderer
 });
 
 test('TC-3D-014 legacy-route actors are visibly marked rather than misreported as early new-route exits', () => {
-  const initial = createInitialState(); initial.customerRouteVersion = 1; initial.nextCustomerId = 2;
+  const initial = createInitialState(); initial.economyVersion = 2; delete initial.layout; initial.customerRouteVersion = 1; initial.nextCustomerId = 2;
   initial.customers = [{ id: 1, counterId: 'counter-a', phase: 'leaving', hasCup: true, skin: 0, timer: 2, x: -7, z: 5 }];
   const f = fixture({ initial });
   try {
@@ -1211,7 +1179,7 @@ test('TC-3D-015 performance panel is idle while closed, 1Hz when open, and leave
     assert.equal(f.renderer.statsReads, 7); assert.equal(writes, 7);
     assert.match(value, /p50 10.00ms · p95 10.00ms/); assert.match(value, /mode smooth/);
     assert.match(value, /viewport 400×550 CSS/); assert.match(value, /buffer 800×1100/);
-    assert.match(value, /customers.*manager Lv1/); assert.match(value, /不是模拟时间、GPU耗时、上屏帧或温度/);
+    assert.match(value, /customers.*counter-a Lv1.*open/); assert.match(value, /不是模拟时间、GPU耗时、上屏帧或温度/);
     f.click('#settings'); f.click('#save'); reference.click('#settings'); reference.click('#save');
     assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, JSON.parse(reference.memory.getItem(SAVE_KEY)).state);
     assert.doesNotMatch(f.memory.getItem(SAVE_KEY), /totalIntervals|p95Ms|capacityLimited/);
@@ -1359,15 +1327,16 @@ test('TC-3D-016 four native quality buttons expose selection, clear labels and a
 });
 
 test('TC-3D-016 clear-60 renders 60 of 120Hz with continuous poses and identical saved progression', async () => {
-  const f = fixture({ renderMode: 'clear-60' });
-  const reference = createEngine(); reference.advance(10);
+  const moving = createEngine(); moving.invite(); moving.advance(.5);
+  const f = fixture({ renderMode: 'clear-60', initial: moving.snapshot() });
+  const reference = createEngine(moving.snapshot()); reference.advance(10);
   try {
     assert.equal(f.renderer.renderMode, 'clear-60');
     for (let i = 0; i < 1200; i++) f.tick(1 / 120);
     assert.equal(f.renderer.updates.length, 600);
     assert.deepEqual(f.state(), reference.snapshot());
-    const poses = f.renderer.updates.slice(6, 50).map(update => update.state.manager.x);
-    for (let i = 1; i < poses.length; i++) assert.ok(Math.abs(poses[i - 1] - poses[i] - 2.6 / 60) < 1e-8);
+    const poses = f.renderer.updates.slice(6, 50).map(update => update.state.customers.find(customer => customer.id === 1).z);
+    for (let i = 1; i < poses.length; i++) assert.ok(Math.abs(poses[i - 1] - poses[i] - 2.5 / 60) < 1e-8);
     f.click('#settings'); f.click('#save');
     assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, reference.snapshot());
     assert.doesNotMatch(f.memory.getItem(SAVE_KEY), /clear-60|renderMode/);
@@ -1443,13 +1412,12 @@ test('TC-3D-016 clear-60 QA records the new target and isolates mode changes int
 
 
 test('TC-3D-019 failed latest-save reads retain the 570-earned frozen shop and cannot overwrite it after storage recovers', async () => {
-  const initial = createInitialState(); initial.manager.carrying = 570; initial.totalEarned = 570;
-  Object.assign(initial.manager, { phase: 'depositing', target: 2, timer: .55 });
+  const initial = createInitialState(); initial.wallet += 570; initial.totalEarned = 570;
   const f = fixture({ initial, now: 130000, savedAtAgoSeconds: 30, writeUnavailable: true });
   await f.flushOffline();
   try {
     const durable = f.memory.getItem(SAVE_KEY), frozen = f.state();
-    assert.equal(frozen.paused, true); assert.equal(frozen.totalEarned, 570);
+    assertProtected(f); assert.equal(frozen.totalEarned, 570);
     const session = f.window.__coffeeSliceDebug.readRoutes().session;
     f.storageControl.writeUnavailable = false; f.storageControl.readUnavailable = true;
     f.click('#settings'); f.click('#reload'); await f.flushOffline(); f.click('#reload'); await f.flushOffline();
@@ -1514,13 +1482,13 @@ test('TC-3D-019 startup read failure stays protected until a successful read, wh
   await f.flushOffline();
   try {
     const durable = f.memory.getItem(SAVE_KEY), blocked = f.state();
-    assert.equal(blocked.paused, true); assert.equal(f.element('#reload').hidden, false);
+    assertProtected(f); assert.equal(f.element('#reload').hidden, false);
     f.storageControl.readUnavailable = false;
     f.tick(10); f.click('#save'); assert.equal(f.memory.getItem(SAVE_KEY), durable);
     assert.deepEqual(f.state(), blocked);
     f.click('#reload'); await f.flushOffline(); assert.equal(f.state().paused, false);
     const recovered = createEngine(progressed.snapshot()); recovered.advance(8);
-    assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(recovered.snapshot()), 'the previously unpaid ten-second gap is recovered at 80%');
+    assert.deepEqual(omitOfflineClaims(f.state()), omitOfflineClaims(recovered.snapshot()), 'the previously unpaid ten-second gap is recovered at 80%');
   } finally { f.dispose(); }
   const fresh = fixture({ initial: null, now: 130000 });
   await fresh.flushOffline();
@@ -1561,7 +1529,7 @@ test('TC-3D-019 startup outage followed by missing data needs explicit new-shop,
   try {
     const frozen = f.state(); f.storageControl.readUnavailable = false;
     f.click('#reload'); f.click('#reload');
-    assert.deepEqual(f.state(), frozen); assert.equal(f.state().paused, true);
+    assert.deepEqual(f.state(), frozen); assertProtected(f);
     assert.match(f.element('#save-status').textContent, /未找到/);
     assert.equal(f.element('#reload').hidden, false); assert.equal(f.element('#new-shop').hidden, false);
     f.tick(10); f.click('#save'); assert.equal(f.memory.getItem(SAVE_KEY), null);
@@ -1612,16 +1580,16 @@ test('TC-3D-020 unlimited 80% loading stays responsive, exposes only committed a
     assert.equal(f.element('#offline-panel').hidden, false);
     assert.equal(f.element('#offline-working').hidden, false);
     assert.equal(f.element('#offline-result').hidden, true);
-    assert.equal(frozen.paused, true);
+    assertProtected(f);
     assert.equal(frozen.wallet, initial.wallet);
     assert.equal(frozen.lastOfflineClaimId, null);
     assert.match(f.element('#offline-progress-text').textContent, /0%/);
-    assert.doesNotMatch(f.element('#toast').textContent, /已存入金库/);
+    assert.doesNotMatch(f.element('#toast').textContent, /已计入当前金额/);
     await f.stepOffline();
     const progress = Number(f.element('#offline-progress').getAttribute('value'));
     assert.ok(progress > 0 && progress < 1, 'a partial exact chunk reports progress before final commit');
     assert.equal(f.memory.getItem(SAVE_KEY), raw); assert.deepEqual(f.state(), frozen);
-    f.tick(2.5); f.click('#save'); f.click('#manager-upgrade');
+    f.tick(2.5); f.click('#save'); f.click('#business-toggle');
     assert.deepEqual(f.state(), frozen, 'rendering and business controls cannot publish speculative progress');
     assert.equal(f.memory.getItem(SAVE_KEY), raw, 'yielding and loading never write an intermediate claim');
     f.window.emit('pageshow', { persisted: true });
@@ -1833,8 +1801,8 @@ test('TC-3D-020 unexplained long foreground RAF gaps freeze without partial simu
     f.tick(5); f.click('#save');
     const source = f.state(), raw = f.memory.getItem(SAVE_KEY);
     f.tick(61);
-    assert.equal(f.state().paused, true);
-    assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(source));
+    assertProtected(f);
+    assert.deepEqual(omitOfflineClaims(f.state()), omitOfflineClaims(source));
     assert.equal(f.memory.getItem(SAVE_KEY), raw);
     assert.match(f.element('#save-status').textContent, /页面长时间未更新.*无法确认.*已保护当前进度/);
     f.click('#save');
@@ -1842,7 +1810,7 @@ test('TC-3D-020 unexplained long foreground RAF gaps freeze without partial simu
     f.clock.now += 10000; f.clock.performance += 10000;
     f.document.hidden = false; f.document.emit('visibilitychange'); await f.flushOffline();
     assert.equal(f.memory.getItem(SAVE_KEY), raw);
-    assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(source), 'visibility alone cannot unlock a protected unexplained interval');
+    assert.deepEqual(omitOfflineClaims(f.state()), omitOfflineClaims(source), 'visibility alone cannot unlock a protected unexplained interval');
     f.click('#reload'); await f.flushOffline();
     const expected = createEngine(source); expected.applyOffline(71, f.state().lastOfflineClaimId);
     assert.deepEqual(f.state(), expected.snapshot(), 'only explicit latest-save recovery selects the durable interval for offline settlement');
@@ -1850,7 +1818,7 @@ test('TC-3D-020 unexplained long foreground RAF gaps freeze without partial simu
 });
 
 test('TC-3D-020 save and every business action guard unclassified foreground time before the next RAF', () => {
-  for (const action of ['save', 'invite', 'recipe', 'counter', 'coffee', 'manager']) {
+  for (const action of ['save', 'invite', 'recipe', 'counter', 'coffee', 'pause']) {
     const initial = createEngine(); initial.advance(22);
     const f = fixture({ initial: initial.snapshot(), now: 500_000 });
     try {
@@ -1863,25 +1831,26 @@ test('TC-3D-020 save and every business action guard unclassified foreground tim
         f.root.emit('click', { target: f.nodes.find(node => node.dataset.selectRecipe === 'latte') });
       }
       if (action === 'counter') { f.action({ type: 'counter', id: 'counter-a' }); f.click('#counter-upgrade'); }
-      if (action === 'coffee') { f.action({ type: 'menu', recipe: 'espresso' }); f.click('#coffee-upgrade'); }
-      if (action === 'manager') { f.action({ type: 'vault' }); f.click('#manager-upgrade'); }
-      assert.equal(f.state().paused, true, action);
-      assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(source), `${action} cannot change business before an unclassified long gap`);
+      if (action === 'coffee') { openCoffee(f, 'espresso'); f.click('#coffee-upgrade'); }
+      if (action === 'pause') f.click('#business-toggle');
+      assertProtected(f);
+      assert.deepEqual(omitOfflineClaims(f.state()), omitOfflineClaims(source), `${action} cannot change business before an unclassified long gap`);
       assert.equal(f.memory.getItem(SAVE_KEY), raw, `${action} cannot stamp an unaccounted time anchor`);
     } finally { f.dispose(); }
   }
 });
 
 test('TC-3D-020 verified 300-second foreground computation tail advances before purchases, recipe changes and invites', async () => {
-  for (const action of ['save', 'invite', 'recipe', 'counter', 'coffee', 'manager']) {
+  for (const action of ['save', 'invite', 'recipe', 'counter', 'coffee', 'pause']) {
     const initial = createEngine(); initial.advance(22);
+    for (let i = 0; i < 1000 && !initial.state.counters.some(counter => counter.brew); i++) initial.advance(.05);
     assert.ok(initial.state.counters.some(counter => counter.brew), 'fixture includes existing brew snapshots');
     const f = fixture({ initial: initial.snapshot(), now: 5_000_000, savedAtAgoSeconds: 3600 });
     try {
       for (let turn = 0; turn < 10; turn++) { f.tick(30); await f.stepOffline(); }
       await f.flushOffline();
       const committed = JSON.parse(f.memory.getItem(SAVE_KEY)).state;
-      assert.equal(committed.elapsed, 2902);
+      assert.ok(Math.abs(committed.elapsed - initial.state.elapsed - 2880) < 1e-8);
       assert.equal(f.state().paused, false, 'known computation is excluded from the long unclassified-gap guard');
       const expected = createEngine(committed); expected.advance(300);
       if (action === 'save') f.click('#save');
@@ -1892,16 +1861,16 @@ test('TC-3D-020 verified 300-second foreground computation tail advances before 
         f.root.emit('click', { target: f.nodes.find(node => node.dataset.selectRecipe === 'latte') });
       }
       if (action === 'counter') { expected.upgrade('counter-a'); f.action({ type: 'counter', id: 'counter-a' }); f.click('#counter-upgrade'); }
-      if (action === 'coffee') { expected.upgradeCoffee('espresso'); f.action({ type: 'menu', recipe: 'espresso' }); f.click('#coffee-upgrade'); }
-      if (action === 'manager') { expected.upgradeManager(); f.action({ type: 'vault' }); f.click('#manager-upgrade'); }
+      if (action === 'coffee') { expected.upgradeCoffee('espresso'); openCoffee(f, 'espresso'); f.click('#coffee-upgrade'); }
+      if (action === 'pause') { expected.togglePause(); f.click('#business-toggle'); }
       assert.deepEqual(f.state(), expected.snapshot(), `${action} occurs strictly after the100% foreground tail, preserving existing brew snapshots`);
       f.click('#save');
       assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).savedAt, f.clock.now);
       const once = f.state(), raw = f.memory.getItem(SAVE_KEY);
       f.clock.now += 61000; f.clock.performance += 61000;
       f.click('#save');
-      assert.equal(f.state().paused, true, 'the known-time allowance is consumed once and cannot hide a later unexplained gap');
-      assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(once));
+      assertProtected(f, once.paused);
+      assert.deepEqual(f.state(), once);
       assert.equal(f.memory.getItem(SAVE_KEY), raw);
     } finally { f.dispose(); }
   }
@@ -2074,7 +2043,7 @@ test('TC-3D-021 late file parsing cannot reopen or replace after cancel, back, c
       assert.equal(f.element('#file-review').hidden, true, action);
       assert.equal(f.memory.getItem(SAVE_KEY), bytesAfterAction, `${action}: late parsing cannot write`);
       assert.equal(f.storageWrites.length, writesAfterAction, action);
-      assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(before), `${action}: late parsing cannot replace the current game`);
+      assert.deepEqual(omitOfflineClaims(f.state()), omitOfflineClaims(before), `${action}: late parsing cannot replace the current game`);
       assert.equal(importBackupWrites(f).length, 0, action);
       if (!['hide', 'storage', 'dispose'].includes(action)) assert.equal(bytesAfterAction, raw, action);
     } finally { release.resolve(); await f.flushFiles(); f.dispose(); }
@@ -2207,7 +2176,7 @@ test('TC-3D-021 import backup failure or a silent storage race preserves current
       if (mode === 'backup-failure') f.storageControl.writeUnavailable = true;
       else f.memory.setItem(SAVE_KEY, 'new foreign bytes without a delivered storage event');
       confirmPortable(f);
-      assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(before));
+      assert.deepEqual(omitOfflineClaims(f.state()), omitOfflineClaims(before));
       assert.equal(f.memory.getItem(SAVE_KEY), mode === 'backup-failure' ? raw : 'new foreign bytes without a delivered storage event');
       assert.equal(portableWrites(f).length, 0);
       f.storageControl.writeUnavailable = false;
@@ -2274,10 +2243,10 @@ test('TC-3D-021 active review is invalidated by storage, visibility and disposal
       if (action === 'hide') { f.document.hidden = true; f.document.emit('visibilitychange'); }
       if (action === 'dispose') f.dispose();
       assert.equal(f.element('#file-review').hidden, true, action);
-      assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(before), action);
+      assert.deepEqual(omitOfflineClaims(f.state()), omitOfflineClaims(before), action);
       assert.equal(importBackupWrites(f).length, 0, action);
       if (action === 'storage') {
-        f.click('#file-confirm'); assert.equal(f.memory.getItem(SAVE_KEY), 'new foreign source'); assert.equal(f.state().paused, true);
+        f.click('#file-confirm'); assert.equal(f.memory.getItem(SAVE_KEY), 'new foreign source'); assertProtected(f);
       } else {
         const saved = JSON.parse(f.memory.getItem(SAVE_KEY));
         assert.deepEqual(saved.state, before, `${action}: no review pause bit or dwell progress leaks into the saved state`);
@@ -2352,7 +2321,7 @@ test('TC-3D-021 failed durable save cannot prepare a portable current-progress f
       f.click('#file-prepare'); await f.flushFiles(); f.click('#file-download');
       assert.equal(f.downloads.length, 0, mode); assert.equal(f.element('#file-download').disabled, true, mode);
       assert.match(f.element('#file-status').textContent, /尚未安全保存|恢复/, mode);
-      assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(before), mode);
+      assert.deepEqual(omitOfflineClaims(f.state()), omitOfflineClaims(before), mode);
       assert.equal(f.memory.getItem(SAVE_KEY), mode === 'silent-conflict' ? 'new durable bytes' : raw, mode);
       assert.equal(portableWrites(f).length, 0, mode);
       f.storageControl.writeUnavailable = false; f.storageControl.readUnavailable = false;
@@ -2415,13 +2384,13 @@ test('TC-3D-022 panel controls keep unique accessible IDs and an enabled styled 
 });
 
 test('TC-3D-022 technical metadata and full ledger are closed disclosures while replacement safeguards remain visible (static contract)', () => {
-  assert.equal(detailsBlocks.length, 5, 'only graphics and relevant vault/file detail disclosures remain');
+  assert.equal(detailsBlocks.length, 5, 'graphics, counter management and file detail disclosures remain');
   for (const block of detailsBlocks) {
     const tag = openingTags(block, 'details')[0];
     assert.doesNotMatch(tag, /\s(?:open|aria-hidden)(?:[\s=>])/);
     assert.match(block, /^<details\b[^>]*>\s*<summary>[\s\S]+?<\/summary>/, 'every disclosure has a native named summary');
   }
-  for (const id of ['file-current-details', 'file-incoming-details', 'pending', 'carrying']) {
+  for (const id of ['file-current-details', 'file-incoming-details']) {
     const disclosure = detailsBlocks.find(block => block.includes(`id="${id}"`));
     assert.ok(disclosure, `${id} stays available inside a default-closed disclosure`);
     assert.doesNotMatch(withoutDetails(modal), new RegExp(`id="${id}"`));
@@ -2431,7 +2400,7 @@ test('TC-3D-022 technical metadata and full ledger are closed disclosures while 
   for (const safety of [/当前小店将被完整替换/, /较早进度会回退/, /金币不合并/, /文件导出至本次导入之间不补离线收益/, /替换前会先校验本地备份/, /备份失败就停止/, /已关闭其他游戏标签页和窗口/, /多窗口同时写入可能造成冲突/]) assert.match(confirmation, safety, 'essential confirmation text cannot be hidden in details');
   for (const id of ['file-current-summary', 'file-incoming-summary', 'file-older-warning', 'file-repeat-warning', 'file-confirm', 'file-cancel']) assert.match(confirmation, new RegExp(`id="${id}"`));
   const offlineMarkup = modal.slice(modal.indexOf('<div id="offline-result"'));
-  assert.match(offlineMarkup, /本次到账/); assert.match(offlineMarkup, /已存入金库/); assert.match(offlineMarkup, /继续营业/);
+  assert.match(offlineMarkup, /本次到账/); assert.match(offlineMarkup, /已计入当前金额/); assert.match(offlineMarkup, /回到小店/);
   assert.doesNotMatch(offlineMarkup, /offline-(?:generated|pending|legacy)|有效经营|期间售出|台面待收|经理运送|50%|SHA-256/);
 });
 
@@ -2441,7 +2410,7 @@ test('TC-3D-022 selected render mode stays visually and accessibly selected acro
     try {
       const raw = f.memory.getItem(SAVE_KEY), before = f.state();
       f.click('#settings'); openFilePanel(f); f.click('#file-back'); f.click('#dialog-close');
-      f.action({ type: 'vault' }); f.click('#dialog-close'); f.click('#settings');
+      f.click('#dock-background'); f.click('#dialog-close'); f.click('#settings');
       for (const button of f.nodes.filter(node => node.dataset.renderMode)) {
         const selected = button.dataset.renderMode === mode;
         assert.equal(button.classList.contains('active'), selected, `${mode}: visible selection`);
@@ -2517,10 +2486,10 @@ test('TC-3D-022 an older file warns before replacement, equal/newer files clear 
       const currentDetails = f.element('#file-current-details').textContent;
       const incomingDetails = f.element('#file-incoming-details').textContent;
       assert.ok(currentDetails.includes(durable.saveId)); assert.ok(currentDetails.includes(`r${durable.revision}`));
-      assert.match(currentDetails, /营业额.*已售/); assert.match(currentDetails, /待收.*运送.*经营/);
+      assert.match(currentDetails, /营业额.*已售/); assert.match(currentDetails, /营业中.*经营/);
       assert.ok(incomingDetails.includes(incoming.payload.saveId)); assert.ok(incomingDetails.includes('r27'));
       assert.ok(incomingDetails.includes(`SHA-256 ${incoming.fingerprint}`));
-      assert.match(incomingDetails, /导出/); assert.match(incomingDetails, /营业额.*已售/); assert.match(incomingDetails, /待收.*运送.*经营/);
+      assert.match(incomingDetails, /导出/); assert.match(incomingDetails, /营业额.*已售/); assert.match(incomingDetails, /营业中.*经营/);
       assert.deepEqual(f.state(), current); assert.equal(f.memory.getItem(SAVE_KEY), raw);
     }
     f.click('#file-cancel');
@@ -2545,7 +2514,7 @@ test('TC-3D-024 blocked save recovery is contextual in 小店存档 and retains 
       assert.equal(f.element('#reload').hidden, false, cause);
       assert.equal(f.element('#save-status').textContent.length > 0, true, cause);
       const before = f.state(), raw = f.memory.getItem(SAVE_KEY);
-      assert.equal(before.paused, true, cause);
+      assertProtected(f);
       f.click('#save'); f.tick(.1); f.action({ type: 'invite' });
       assert.deepEqual(f.state(), before, cause); assert.equal(f.memory.getItem(SAVE_KEY), raw, cause);
     } finally { f.dispose(); }
@@ -2580,27 +2549,28 @@ test('TC-3D-024 a normal file-panel save failure exposes backup recovery immedia
   } finally { f.dispose(); }
 });
 
-test('TC-3D-022 offline reward shows only the exact credited wallet delta, including zero when sales remain uncollected', async () => {
-  for (const carrying of [0, 570]) {
-    const initial = createInitialState();
-    initial.manager.carrying = carrying; initial.totalEarned = carrying;
-    if (carrying) Object.assign(initial.manager, { phase: 'depositing', target: 2, timer: .55 });
+test('TC-3D-022 offline reward reports exact direct wallet credit and zero while paused', async () => {
+  for (const paused of [false, true]) {
+    const initial = createInitialState(); initial.paused = paused;
     const f = fixture({ initial, now: 130000, savedAtAgoSeconds: 30.999 });
     try {
       await f.flushOffline({ dismissResult: false });
-      const after = f.state(), committed = JSON.parse(f.memory.getItem(SAVE_KEY)).state;
-      const credited = after.wallet - initial.wallet, generated = after.totalEarned - initial.totalEarned;
-      assert.equal(credited, carrying, 'fixture separately covers zero credit and existing cash deposited');
-      assert.notEqual(generated, credited, 'fixture would catch incorrectly displaying generated sales as a reward');
-      assert.ok(after.counters.some(counter => counter.pendingCash > 0)); assert.ok(after.manager.carrying > 0);
-      assert.deepEqual(after, committed, 'the displayed amount comes from the installed durable state');
-      assert.equal(f.element('#offline-deposited').textContent, centsLabel(credited));
-      assert.equal(f.element('#offline-duration').textContent, '离开了 30 秒');
-      for (const id of ['offline-generated', 'offline-pending', 'offline-legacy']) assert.equal(f.element(`#${id}`), null);
-      const beforeContinue = f.memory.getItem(SAVE_KEY);
+      const after = f.state(), credited = after.wallet - initial.wallet;
+      assert.equal(credited, after.totalEarned - initial.totalEarned);
+      if (paused) assert.equal(credited, 0); else assert.ok(credited > 0);
+      assert.ok(after.counters.every(counter => counter.pendingCash === 0)); assert.equal(after.manager.carrying, 0);
+      assert.deepEqual(after, JSON.parse(f.memory.getItem(SAVE_KEY)).state);
+      if (paused) {
+        assert.equal(f.element('#operation-dialog').open, false, 'a closed shop has no earnings reward to announce');
+        assert.equal(f.element('#business-status').textContent, '已暂停营业');
+      } else {
+        assert.equal(f.element('#offline-deposited').textContent, centsLabel(credited));
+        assert.equal(f.element('#offline-duration').textContent, '离开了 30 秒');
+      }
+      const bytes = f.memory.getItem(SAVE_KEY);
       f.click('#offline-done'); f.click('#offline-done');
-      assert.equal(f.element('#operation-dialog').open, false);
-      assert.deepEqual(f.state(), after); assert.equal(f.memory.getItem(SAVE_KEY), beforeContinue, 'continue cannot award the same reward again');
+      assert.equal(f.element('#operation-dialog').open, false); assert.deepEqual(f.state(), after); assert.equal(f.memory.getItem(SAVE_KEY), bytes);
+      assert.equal(f.state().paused, paused, 'dismissing a reward never changes the business pause');
     } finally { f.dispose(); }
   }
 });
@@ -2658,39 +2628,28 @@ test('TC-3D-022 counter upgrades show real cost and before/after benefits while 
   }
 });
 
-test('TC-3D-022 manager upgrade shows efficiency, benefit and real cost without bypassing funds or level caps', () => {
+test('TC-3D-022 background selection persists cosmetically without spending and survives reload', () => {
   const f = fixture();
   try {
-    f.action({ type: 'vault' });
-    const before = f.state(), expected = createEngine(before), quote = expected.managerQuote();
-    assert.ok(quote.nextSpeed > quote.speed);
-    assert.equal(f.element('#manager-speed').textContent, `${Math.round(quote.speed / managerSpeed(1) * 100)}%`);
-    assert.equal(f.element('#manager-preview').textContent, `→ ${Math.round(quote.nextSpeed / managerSpeed(1) * 100)}% · 容量提升`);
-    assert.equal(f.element('#manager-upgrade').textContent, `升级经理 · ${centsLabel(quote.cost)}`);
-    assert.equal(f.element('#manager-upgrade').disabled, false);
-    assert.equal(f.element('#manager-funds').textContent, '');
-    f.click('#manager-upgrade'); assert.equal(expected.upgradeManager(), true);
-    assert.deepEqual(f.state(), expected.snapshot());
-    assert.equal(before.wallet - f.state().wallet, quote.cost);
-    assert.equal(f.state().spend - before.spend, quote.cost);
-    assert.equal(f.element('#manager-rank').textContent, 'Lv. 2');
-    assert.equal(f.element('#manager-upgrade').disabled, true);
-    assert.equal(f.element('#manager-funds').textContent, `还差 ${centsLabel(expected.managerQuote().cost - f.state().wallet)}`);
-    const insufficient = f.state();
-    f.click('#manager-upgrade'); f.element('#manager-upgrade').emit('click');
-    assert.deepEqual(f.state(), insufficient);
+    const before = f.state(), bytes = f.memory.getItem(SAVE_KEY);
+    assert.equal(f.renderer.backdrop, 'garden'); f.click('#dock-background');
+    for (const backdrop of ['terrace', 'sunset', 'garden']) {
+      const button = f.nodes.find(node => node.dataset.backdrop === backdrop);
+      f.root.emit('click', { target: button });
+      assert.equal(f.renderer.backdrop, backdrop); assert.equal(f.memory.getItem('mellow-bean:backdrop:v1'), backdrop);
+      assert.equal(button.getAttribute('aria-pressed'), 'true');
+      assert.deepEqual(f.state(), before); assert.equal(f.memory.getItem(SAVE_KEY), bytes);
+      const reload = fixture({ backdropPreference: backdrop });
+      try { assert.equal(reload.renderer.backdrop, backdrop); assert.deepEqual(reload.state(), before); }
+      finally { reload.dispose(); }
+    }
+    f.click('#dialog-close');
+    const stale = f.nodes.find(node => node.dataset.backdrop === 'sunset'); f.root.emit('click', { target: stale });
+    assert.equal(f.renderer.backdrop, 'garden', 'closed-panel controls cannot change preferences');
   } finally { f.dispose(); }
-  const capped = createInitialState(); capped.manager.level = 20;
-  const g = fixture({ initial: capped });
-  try {
-    g.action({ type: 'vault' }); const before = g.state();
-    assert.equal(g.element('#manager-preview').textContent, '经理已满级');
-    assert.equal(g.element('#manager-upgrade').textContent, '已满级');
-    assert.equal(g.element('#manager-upgrade').disabled, true);
-    assert.equal(g.element('#manager-funds').textContent, '');
-    g.click('#manager-upgrade'); g.element('#manager-upgrade').emit('click');
-    assert.deepEqual(g.state(), before, 'max-level manager cannot charge money or upgrade again');
-  } finally { g.dispose(); }
+  for (const backdropPreference of ['unknown', '{broken']) {
+    const f = fixture({ backdropPreference }); try { assert.equal(f.renderer.backdrop, 'garden'); } finally { f.dispose(); }
+  }
 });
 
 function panelMarkup(id, nextId) { return modal.slice(modal.indexOf(`id="${id}"`), modal.indexOf(`id="${nextId}"`)); }
@@ -2705,7 +2664,7 @@ function fundedInitial(wallet) {
 test('TC-3D-023 REQ-3D-033 recipe choice, counter upgrades and coffee upgrades have distinct controls (static contract)', () => {
   const recipe = panelMarkup('recipe-panel', 'counter-panel');
   const counter = panelMarkup('counter-panel', 'coffee-panel');
-  const coffee = panelMarkup('coffee-panel', 'vault-panel');
+  const coffee = panelMarkup('coffee-panel', 'background-panel');
   assert.equal(openingTags(recipe, 'button').length, 2);
   assert.match(recipe, /data-select-recipe="espresso"/); assert.match(recipe, /data-select-recipe="latte"/);
   assert.match(recipe, /下一杯生效/);
@@ -2713,7 +2672,8 @@ test('TC-3D-023 REQ-3D-033 recipe choice, counter upgrades and coffee upgrades h
   assert.equal(openingTags(counter, 'button').length, 1);
   assert.match(counter, /id="counter-upgrade"/);
   assert.doesNotMatch(counter, /data-select-recipe|data-assign|id="coffee-upgrade"/);
-  assert.equal(openingTags(coffee, 'button').length, 1);
+  assert.equal(openingTags(coffee, 'button').length, 3);
+  assert.match(coffee, /data-view-coffee="espresso"/); assert.match(coffee, /data-view-coffee="latte"/);
   for (const id of ['coffee-level', 'coffee-price', 'coffee-next-price', 'coffee-seconds', 'coffee-next-seconds', 'coffee-upgrade', 'coffee-funds']) assert.match(coffee, new RegExp(`id="${id}"`));
   assert.doesNotMatch(coffee, /data-select-recipe|data-assign|id="counter-upgrade"|柜台\s*[AB]/);
   assert.doesNotMatch(html, /data-assign|assign-buttons|counter-payback/);
@@ -2752,7 +2712,7 @@ test('TC-3D-023 REQ-3D-033 both counter entrances and both coffee menus open onl
     }
     for (const recipe of ['espresso', 'latte']) {
       const before = f.state(), bytes = f.memory.getItem(SAVE_KEY), quote = createEngine(before).coffeeQuote(recipe);
-      f.action({ type: 'menu', recipe });
+      openCoffee(f, recipe);
       assert.deepEqual(f.nodes.filter(node => node.classList.contains('operation-panel') && !node.hidden).map(node => node.id), ['coffee-panel']);
       assert.equal(f.element('#dialog-title').textContent, recipeById[recipe].name);
       assert.equal(f.element('#coffee-level').textContent, `Lv. ${quote.level} → ${quote.nextLevel}`);
@@ -2770,8 +2730,8 @@ test('TC-3D-023 REQ-3D-033 both counter entrances and both coffee menus open onl
 test('TC-3D-023 REQ-3D-033 hidden and closed recipe/counter/coffee handlers cannot mutate a different panel', () => {
   const f = fixture({ initial: fundedInitial(50000) });
   try {
-    for (const action of [{ type: 'recipe', id: 'counter-b' }, { type: 'counter', id: 'counter-b' }, { type: 'menu', recipe: 'latte' }, { type: 'vault' }]) {
-      f.action(action);
+    for (const action of [{ type: 'recipe', id: 'counter-b' }, { type: 'counter', id: 'counter-b' }, { type: 'menu', recipe: 'latte' }, { type: 'background' }]) {
+      openAction(f, action);
       const before = f.state(), bytes = f.memory.getItem(SAVE_KEY);
       if (action.type !== 'recipe') f.root.emit('click', { target: f.nodes.find(node => node.dataset.selectRecipe === 'espresso') });
       if (action.type !== 'counter') f.element('#counter-upgrade').emit('click');
@@ -2831,7 +2791,7 @@ test('TC-3D-023 REQ-3D-033 coffee upgrades charge their own quote and cannot upg
       // Deliberately select B first: the coffee operation must use viewedRecipe,
       // not a stale selected counter or the recipe served by that counter.
       f.action({ type: 'counter', id: 'counter-b' }); f.click('#dialog-close');
-      f.action({ type: 'menu', recipe });
+      openCoffee(f, recipe);
       const before = f.state(), expected = createEngine(before);
       assert.equal(f.element('#coffee-upgrade').textContent, `升级咖啡 · ${centsLabel(quote.cost)}`);
       assert.equal(f.element('#coffee-upgrade').disabled, false); assert.equal(f.element('#coffee-funds').textContent, '');
@@ -2852,13 +2812,13 @@ test('TC-3D-023 REQ-3D-033 coffee upgrades charge their own quote and cannot upg
       f.click('#coffee-upgrade'); f.element('#coffee-upgrade').emit('click');
       assert.deepEqual(f.state(), once, 'disabled UI and real handler reject repeated insufficient-funds purchases');
       assert.equal(f.memory.getItem(SAVE_KEY), bytes);
-      f.click('#dialog-close'); f.action({ type: 'menu', recipe });
+      f.click('#dialog-close'); openCoffee(f, recipe);
       assert.equal(f.element('#coffee-level').textContent, `Lv. ${next.level} → ${next.nextLevel}`);
     } finally { f.dispose(); }
     const capped = fundedInitial(50000); capped.coffeeLevels[recipe] = COFFEE_MAX_LEVEL;
     const g = fixture({ initial: capped });
     try {
-      g.action({ type: 'menu', recipe }); const before = g.state(), bytes = g.memory.getItem(SAVE_KEY);
+      openCoffee(g, recipe); const before = g.state(), bytes = g.memory.getItem(SAVE_KEY);
       assert.equal(g.element('#coffee-level').textContent, `Lv. ${COFFEE_MAX_LEVEL} · MAX`);
       assert.equal(g.element('#coffee-next-price').textContent, '已达上限'); assert.equal(g.element('#coffee-next-seconds').textContent, '已达上限');
       assert.equal(g.element('#coffee-upgrade').textContent, '已满级'); assert.equal(g.element('#coffee-upgrade').disabled, true);
@@ -2890,7 +2850,7 @@ test('TC-3D-023 REQ-3D-033 a short offline interruption restores the exact recip
   for (const [action, panel] of [[{ type: 'recipe', id: 'counter-b' }, 'recipe'], [{ type: 'counter', id: 'counter-b' }, 'counter'], [{ type: 'menu', recipe: 'latte' }, 'coffee']]) {
     const f = fixture({ now: 500000, initial: fundedInitial(50000) });
     try {
-      f.action(action);
+      openAction(f, action);
       const title = f.element('#dialog-title').textContent, eyebrow = f.element('#dialog-eyebrow').textContent;
       f.document.hidden = true; f.document.emit('visibilitychange');
       f.clock.now += 20000; f.clock.performance += 20000;
@@ -2921,9 +2881,9 @@ test('TC-3D-023 REQ-3D-033 save conflict or canceled settlement blocks all split
         f.click('#offline-cancel'); await f.flushOffline({ dismissResult: false });
       }
       const protectedState = f.state(), bytes = f.memory.getItem(SAVE_KEY);
-      assert.equal(protectedState.paused, true);
+      assertProtected(f);
       for (const action of [{ type: 'recipe', id: 'counter-b' }, { type: 'counter', id: 'counter-b' }, { type: 'menu', recipe: 'espresso' }]) {
-        f.action(action);
+        openAction(f, action);
         if (action.type === 'recipe') {
           const button = f.nodes.find(node => node.dataset.selectRecipe === 'espresso');
           assert.equal(button.disabled, true); f.root.emit('click', { target: button });
@@ -2945,7 +2905,7 @@ test('TC-3D-023 REQ-3D-033 portable preview, cancellation, replacement and recov
   const current = fundedInitial(50000); current.coffeeLevels = { espresso: 3, latte: 5 };
   const source = fundedInitial(30000); source.coffeeLevels = { espresso: 7, latte: 2 };
   const incoming = await portableFixture({ state: source, savedAt: 1000, exportedAt: 2000, saveId: 'coffee-progress-source' });
-  assert.equal(JSON.parse(incoming.text).formatVersion, 3);
+  assert.equal(JSON.parse(incoming.text).formatVersion, 4);
   const f = fixture({ initial: current, now: 130000 });
   try {
     const before = f.state(), bytes = f.memory.getItem(SAVE_KEY);
@@ -2974,9 +2934,9 @@ test('TC-3D-023 REQ-3D-033 portable preview, cancellation, replacement and recov
     assert.equal(f.element('#file-download').disabled, false);
     f.click('#file-download');
     const recoveryText = await f.blobs.at(-1).text(), recovery = await parsePortableSave(recoveryText);
-    assert.equal(JSON.parse(recoveryText).formatVersion, 3, 'recovery download uses the coffee-aware portable format');
+    assert.equal(JSON.parse(recoveryText).formatVersion, 4, 'recovery download uses the coffee-aware portable format');
     assert.equal(recovery.ok, true);
-    assert.equal(recovery.file.payload.economyVersion, 3);
+    assert.equal(recovery.file.payload.economyVersion, 4);
     assert.deepEqual(recovery.file.payload.state, before, 'recovery export preserves the entire pre-import live snapshot');
     assert.deepEqual(recovery.file.payload.overview.coffeeLevels, current.coffeeLevels);
     assert.deepEqual(f.state(), source, 'exporting the old shop cannot replace current progress');
@@ -3099,7 +3059,7 @@ test('TC-3D-024 missing or unreadable sources stay frozen and retryable through 
       if (failure === 'read') f.storageControl.readUnavailable = true;
       f.window.emit('storage', { key: SAVE_KEY, newValue: null });
       visibleClick(f, '#reload');
-      assert.equal(f.state().paused, true);
+      assertProtected(f);
       assert.equal(isVisible(f, '#save-recovery'), true);
       assert.equal(f.element('#save').disabled, true);
       assert.equal(f.memory.getItem(SAVE_KEY), null);
@@ -3121,9 +3081,10 @@ test('TC-3D-024 first exposure is four skippable scene steps with no modal or sa
     assert.deepEqual(f.storageWrites.map(item => item.key), [ONBOARDING_KEY]);
     assert.equal(f.memory.getItem(ONBOARDING_KEY), 'shown');
     assert.equal(f.renderer.focusCalls.at(-1), 'counter-a-recipe');
-    for (const anchor of ['counter-a-upgrade', 'menu-espresso', 'vault']) {
+    for (const control of ['counter-a-upgrade', '#dock-coffee', '#business-toggle']) {
       visibleClick(f, '#guide-next');
-      assert.equal(f.renderer.focusCalls.at(-1), anchor);
+      if (control.startsWith('#')) assert.equal(f.document.activeElement, f.element(control));
+      else assert.equal(f.renderer.focusCalls.at(-1), control);
       assert.equal(f.renderer.interactionEnabled, true);
       f.tick(.5); oracle.tick(.5);
       assert.deepEqual(f.state(), oracle.state(), 'the guide cannot pause, advance or reset simulation time');
@@ -3157,7 +3118,7 @@ test('TC-3D-024 skip, finish and interrupted refresh never automatically repeat 
 test('TC-3D-024 existing pristine, developed, paused and legacy saves are never mistaken for newcomers', async () => {
   const developed = createEngine(); developed.advance(50);
   const paused = createInitialState(); paused.paused = true;
-  const legacy = createInitialState(); delete legacy.coffeeLevels; legacy.economyVersion = 1;
+  const legacy = createInitialState(); delete legacy.coffeeLevels; delete legacy.layout; legacy.customerRouteVersion = 2; legacy.economyVersion = 1;
   for (const initial of [createInitialState(), developed.snapshot(), paused, legacy]) {
     const f = fixture({ initial });
     try {
@@ -3181,7 +3142,7 @@ test('TC-3D-024 guide preference failures never interfere with game persistence 
       } else if (failure === 'all-storage') {
         visibleClick(f, '#settings'); visibleClick(f, '#save-files');
         assert.equal(isVisible(f, '#save-recovery'), true);
-        assert.equal(f.state().paused, true);
+        assertProtected(f);
       }
     } finally { f.dispose(); }
   }
@@ -3200,7 +3161,7 @@ test('TC-3D-024 modal interruption hides then resumes the same guide step and re
     assert.equal(f.document.activeElement?.id, 'guide-next');
     f.element('#guide-next').emit('keydown', { key: 'ArrowRight' });
     assert.equal(f.renderer.focusCalls.at(-1), 'counter-a-upgrade', 'guide buttons do not capture canvas keyboard routes');
-    f.action({ type: 'vault' });
+    f.click('#dock-background');
     assert.equal(isVisible(f, '#welcome-guide'), false);
     visibleClick(f, '#dialog-close'); f.flushCloseEvents();
     assert.match(f.element('#guide-progress').textContent, /2 \/ 4/);
@@ -3332,7 +3293,8 @@ test('TC-3D-024 hidden first entry and disposal never force a modal, keyboard ca
 });
 
 function openRenovation(f) {
-  f.action({ type: 'renovate' });
+  if (!f.state().paused) f.click('#business-toggle');
+  f.click('#dock-furniture');
   assert.equal(f.element('#renovation-panel').hidden, false);
   for (let i = 0; i < 2500 && f.element('#renovation-tools').hidden; i++) f.tick(.25);
   assert.equal(f.element('#renovation-tools').hidden, false, 'safe draining reaches editable state');
@@ -3351,17 +3313,18 @@ test('TC-3D-025 REQ-3D-035 renovation draft does not mutate wallet, saved pause 
     assert.equal(f.renderer.renovation.valid, false);
     f.tick(9);
     assert.deepEqual(f.state(), before, 'editing time is frozen without changing saved paused');
-    assert.equal(f.renderer.updates.at(-1).state.paused, true, 'only presentation is frozen while editing');
+    assert.equal(f.renderer.updates.at(-1).state.paused, true, 'the player-owned business pause remains set while editing');
     assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, before, 'auto-save contains only committed furniture');
     f.click('#renovation-cancel');
     assert.equal(f.element('#renovation-panel').hidden, true);
     assert.equal(f.renderer.renovation, null);
     assert.deepEqual(f.state(), before);
-    f.tick(.2); assert.ok(f.state().elapsed > before.elapsed);
+    f.tick(.2); assert.deepEqual(f.state(), before, 'cancel leaves the business paused');
+    f.click('#business-toggle'); f.tick(.2); assert.ok(f.state().elapsed > before.elapsed);
   } finally { f.dispose(); }
 });
 
-test('TC-3D-025 renovation commit charges table once and resumes; repeated apply cannot charge again', () => {
+test('TC-3D-025 renovation commit charges table once and remains paused; repeated apply cannot charge again', () => {
   const f = fixture();
   try {
     openRenovation(f);
@@ -3392,7 +3355,7 @@ test('TC-3D-025 hiding or losing storage authority cancels uncommitted renovatio
       assert.equal(f.element('#renovation-panel').hidden, true);
       assert.deepEqual(f.state().layout, before.layout);
       assert.equal(f.state().wallet, before.wallet);
-      assert.equal(f.state().paused, boundary === 'conflict');
+      assert.equal(f.state().paused, true, 'interruption preserves the user pause');
       if (boundary === 'hidden') assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state.layout, before.layout);
     } finally { f.dispose(); }
   }
@@ -3444,21 +3407,27 @@ function catalogTabClick(f, tab) {
   f.root.emit('click', { target: button });
 }
 
-test('TC-3D-026 REQ-3D-036 bottom catalogue contains owned, purchasable and coffee items with filtered storage', () => {
+test('TC-3D-026 REQ-3D-036 compact pictured furniture catalogue separates owned and purchasable items from coffee', () => {
   const f = fixture();
   try {
     openRenovation(f);
-    assert.deepEqual(f.nodes.filter(n => n.dataset.catalogKey).map(n => n.dataset.catalogKey), ['counter-a', 'counter-b', 'menu-espresso', 'menu-latte', 'new-counter', 'new-table']);
-    assert.equal(declarations('.renovation-panel', 'width')[0], '100%');
-    assert.equal(declarations('.renovation-panel', 'bottom')[0], '0');
-    catalogTabClick(f, 'coffee');
-    assert.deepEqual(f.nodes.filter(n => n.dataset.catalogKey).map(n => n.dataset.catalogKey), ['menu-espresso', 'menu-latte']);
-    f.root.emit('click', { target: catalogButton(f, 'menu-latte') });
-    assert.equal(f.element('#rotate-furniture').disabled, true);
-    f.click('#store-furniture');
+    assert.deepEqual(f.nodes.filter(n => n.dataset.catalogKey).map(n => n.dataset.catalogKey), ['counter-a', 'counter-b', 'new-counter', 'new-table']);
+    assert.equal(declarations('.renovation-panel', 'width')[0], 'min(880px, calc(100vw - 32px))');
+    assert.equal(declarations('.renovation-panel', 'left')[0], '50%');
+    assert.ok(declarations('.renovation-panel', 'bottom')[0].includes('safe-area-inset-bottom'));
+    assert.equal(f.nodes.some(n => n.dataset.catalogTab === 'coffee'), false);
+    for (const card of f.nodes.filter(n => n.dataset.catalogKey)) {
+      const art = card.children.find(node => node.tagName === 'IMG'); assert.ok(art);
+      const path = art.getAttribute('src'); assert.match(path, /catalog-(?:counter|table)\.svg$/);
+      assert.match(readFileSync(new URL(`../public/${path.replace(/^\.\//, '')}`, import.meta.url), 'utf8'), /<svg\b/);
+      assert.ok(art.getAttribute('alt')); assert.equal(art.getAttribute('draggable'), 'false');
+    }
+    catalogTabClick(f, 'counter');
+    assert.deepEqual(f.nodes.filter(n => n.dataset.catalogKey).map(n => n.dataset.catalogKey), ['counter-a', 'counter-b', 'new-counter']);
+    f.root.emit('click', { target: catalogButton(f, 'counter-b') }); f.click('#store-furniture');
     catalogTabClick(f, 'stored');
-    assert.deepEqual(f.nodes.filter(n => n.dataset.catalogKey).map(n => n.dataset.catalogKey), ['menu-latte']);
-    assert.match(f.element('#renovation-hint').textContent, /配方与等级仍保留/);
+    assert.deepEqual(f.nodes.filter(n => n.dataset.catalogKey).map(n => n.dataset.catalogKey), ['counter-b']);
+    assert.equal(f.element('#rotate-furniture').disabled, true);
   } finally { f.dispose(); }
 });
 
@@ -3567,25 +3536,25 @@ test('TC-3D-026 scene-origin drag uses shared detached transaction and preserves
   } finally { f.dispose(); }
 });
 
-test('TC-3D-026 stored coffee palette restores the same upgraded recipe sign and rejects overlap', () => {
-  const initial = createInitialState(); initial.coffeeLevels.latte = 4;
+test('TC-3D-026 stored furniture restores the same upgraded counter and rejects overlap', () => {
+  const initial = createInitialState(); initial.coffeeLevels.latte = 4; initial.counters[1].level = 3;
   const f = fixture({ initial });
   try {
     openRenovation(f); const before = f.state();
-    f.root.emit('click', { target: catalogButton(f, 'menu-latte') }); f.click('#store-furniture');
-    f.renderer.placementPicker = () => ({ x: 0, z: -3.45 });
-    armCatalog(f, 'menu-latte'); dragPointer(f, 'pointermove', 700, 50);
-    assert.equal(f.renderer.renovation.valid, false);
-    dragPointer(f, 'pointerup', 700, 50);
-    assert.equal(f.renderer.renovation.layout.coffeeSigns[1].stored, true);
-    f.renderer.placementPicker = () => ({ x: 6, z: -3.45 });
-    armCatalog(f, 'menu-latte'); dragPointer(f, 'pointermove', 700, 50); dragPointer(f, 'pointerup', 700, 50);
-    assert.equal(f.renderer.renovation.layout.coffeeSigns.length, 2);
-    assert.equal(f.renderer.renovation.layout.coffeeSigns[1].x, 6);
-    assert.equal(f.renderer.renovation.layout.coffeeSigns[1].stored, false);
+    f.root.emit('click', { target: catalogButton(f, 'counter-b') }); f.click('#store-furniture');
+    f.renderer.placementPicker = () => ({ x: 0, z: 0 });
+    armCatalog(f, 'counter-b'); dragPointer(f, 'pointermove', 700, 50);
+    assert.equal(f.renderer.renovation.valid, false); dragPointer(f, 'pointerup', 700, 50);
+    assert.equal(f.renderer.renovation.layout.furniture[1].stored, true);
+    f.renderer.placementPicker = () => ({ x: 5, z: 4 });
+    armCatalog(f, 'counter-b'); dragPointer(f, 'pointermove', 700, 50); dragPointer(f, 'pointerup', 700, 50);
+    assert.equal(f.renderer.renovation.layout.furniture.length, 2);
+    assert.equal(f.renderer.renovation.layout.furniture[1].z, 4);
+    assert.equal(f.renderer.renovation.layout.furniture[1].stored, false);
     f.click('#renovation-apply');
     assert.equal(f.state().coffeeLevels.latte, 4); assert.equal(f.state().wallet, before.wallet);
-    assert.equal(f.state().counters[1].recipe, 'latte');
+    assert.equal(f.state().counters[1].recipe, 'latte'); assert.equal(f.state().counters[1].level, 3);
+    assert.equal(f.state().paused, true);
   } finally { f.dispose(); }
 });
 
@@ -3620,5 +3589,146 @@ test('TC-3D-026 horizontal touch browsing without pointercancel cannot become a 
     f.root.emit('click', { target: button, detail: 1 });
     assert.deepEqual(f.renderer.renovation.layout, original);
     assert.equal(f.root.hasPointerCapture(71), false);
+  } finally { f.dispose(); }
+});
+
+
+test('TC-3D-027 player pause drains existing guests, persists closure and gates decoration until explicit resume', () => {
+  const initial = createEngine(); initial.invite(); initial.advance(8);
+  assert.ok(initial.state.customers.length);
+  const f = fixture({ initial: initial.snapshot() });
+  try {
+    const initialState = f.state(), bytes = f.memory.getItem(SAVE_KEY);
+    f.click('#dock-furniture');
+    assert.equal(f.element('#renovation-panel').hidden, true);
+    assert.match(f.element('#toast').textContent, /暂停营业/);
+    assert.deepEqual(f.state(), initialState); assert.equal(f.memory.getItem(SAVE_KEY), bytes);
+    f.click('#business-toggle'); const paused = f.state();
+    assert.equal(paused.paused, true); assert.equal(f.element('#dock-invite').disabled, true);
+    f.click('#dock-invite'); f.element('#dock-invite').emit('click'); f.action({ type: 'invite' });
+    assert.deepEqual(f.state(), paused);
+    for (let i = 0; i < 4000 && f.state().customers.length; i++) f.tick(.1);
+    const drained = f.state();
+    assert.equal(drained.customers.length, 0); assert.equal(drained.nextCustomerId, paused.nextCustomerId);
+    assert.ok(drained.totalServed > paused.totalServed, 'guests already inside finish their purchases');
+    assert.ok(drained.wallet > paused.wallet); assert.equal(drained.paused, true);
+    f.tick(.2); assert.equal(f.element('#business-status').textContent, '已暂停营业');
+    f.click('#dock-furniture'); assert.equal(f.element('#renovation-panel').hidden, false);
+    const draft = f.state(); f.click('#business-toggle');
+    assert.deepEqual(f.state(), draft); assert.equal(f.element('#renovation-panel').hidden, false);
+    assert.match(f.element('#toast').textContent, /完成布置.*取消/);
+    f.click('#renovation-cancel'); assert.equal(f.state().paused, true);
+    f.click('#business-toggle'); assert.equal(f.state().paused, false);
+    f.tick(5); assert.ok(f.state().nextCustomerId > drained.nextCustomerId);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-027 drops over HUD and dialog controls roll back despite a valid scene ray', () => {
+  for (const overlay of ['#business-toggle', '#settings', '#action-dock', '#operation-dialog']) {
+    const f = fixture();
+    try {
+      openRenovation(f); const before = f.state(), original = structuredClone(f.renderer.renovation.layout);
+      f.renderer.placementPicker = () => ({ x: 0, z: 5 });
+      armCatalog(f, 'new-table'); dragPointer(f, 'pointermove', 700, 80);
+      assert.equal(f.renderer.renovation.valid, true);
+      f.document.elementFromPoint = () => f.element(overlay);
+      dragPointer(f, 'pointerup', 700, 80);
+      assert.deepEqual(f.renderer.renovation.layout, original, overlay);
+      assert.deepEqual(f.state(), before); assert.equal(f.root.hasPointerCapture(71), false);
+      assert.equal(f.element('#catalog-drag-label').hidden, true);
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-027 coffee panel counter shortcuts open the correct active counter without changing money or recipes', () => {
+  const f = fixture({ initial: fundedInitial(50000) });
+  try {
+    for (const id of ['counter-a', 'counter-b']) for (const mode of ['Recipe', 'Upgrade']) {
+      openCoffee(f, 'latte'); const before = f.state(), bytes = f.memory.getItem(SAVE_KEY), calls = f.element('#operation-dialog').showModalCalls;
+      const shortcut = f.nodes.find(node => node.dataset[`counter${mode}`] === id); assert.ok(shortcut);
+      assert.match(shortcut.getAttribute('aria-label'), new RegExp(`柜台 ${id === 'counter-a' ? 'A' : 'B'}`));
+      f.root.emit('click', { target: shortcut });
+      assert.equal(f.element(mode === 'Recipe' ? '#recipe-panel' : '#counter-panel').hidden, false);
+      assert.match(f.element('#dialog-eyebrow').textContent, new RegExp(`柜台 ${id === 'counter-a' ? 'A' : 'B'}`));
+      assert.deepEqual(f.state(), before); assert.equal(f.memory.getItem(SAVE_KEY), bytes);
+      assert.equal(f.element('#operation-dialog').showModalCalls, calls, 'counter navigation reuses the current native modal');
+      f.click('#dialog-close');
+      f.root.emit('click', { target: shortcut }); assert.equal(f.element('#operation-dialog').open, false, 'stale closed-panel shortcuts cannot open a dialog');
+    }
+    openRenovation(f);
+    f.root.emit('click', { target: catalogButton(f, 'counter-b') }); f.click('#store-furniture'); f.click('#renovation-apply');
+    openCoffee(f);
+    assert.deepEqual(f.nodes.filter(node => node.dataset.counterRecipe).map(node => node.dataset.counterRecipe), ['counter-a']);
+    assert.deepEqual(f.nodes.filter(node => node.dataset.counterUpgrade).map(node => node.dataset.counterUpgrade), ['counter-a']);
+    assert.ok(declarations('.counter-shortcut button', 'min-height').some(value => Number.parseFloat(value) >= 44));
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-027 pause and resume surface durable write failure or conflict instead of reporting success', () => {
+  for (const paused of [false, true]) for (const failure of ['write', 'conflict']) {
+    const initial = createInitialState(); initial.paused = paused;
+    const f = fixture({ initial });
+    try {
+      if (failure === 'write') f.storageControl.writeUnavailable = true;
+      else {
+        const foreign = JSON.parse(f.memory.getItem(SAVE_KEY)); foreign.recordChangeTag = 'newer-before-pause-write';
+        f.memory.setItem(SAVE_KEY, JSON.stringify(foreign));
+      }
+      const before = f.state(), durable = f.memory.getItem(SAVE_KEY), expected = createEngine(before); expected.togglePause();
+      f.click('#business-toggle');
+      assert.deepEqual(f.state(), expected.snapshot(), 'the selected business state changes only in current memory');
+      assert.equal(f.memory.getItem(SAVE_KEY), durable, 'failed pause save never overwrites durable or foreign bytes');
+      assert.equal(f.element('#toast').classList.contains('visible'), true);
+      assert.doesNotMatch(f.element('#toast').textContent, /开门啦|已停止接待新客/);
+      if (failure === 'conflict') {
+        assert.match(f.element('#toast').textContent, /冲突.*营业状态尚未保存/);
+        assertProtected(f, !paused);
+        const frozen = f.state(); f.tick(5); assert.deepEqual(f.state(), frozen);
+      } else {
+        assert.match(f.element('#toast').textContent, /保存失败.*刷新可能恢复旧状态/);
+        f.storageControl.writeUnavailable = false;
+        openFilePanel(f); f.click('#save');
+        assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).state.paused, !paused, 'explicit retry persists the selected business state');
+      }
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-027 furniture arrow buttons follow the projected screen direction without committing the draft', () => {
+  const f = fixture();
+  try {
+    openRenovation(f);
+    const state = f.state(), raw = f.memory.getItem(SAVE_KEY), start = structuredClone(f.renderer.renovation.layout.furniture[0]);
+    for (const [direction, x, z] of [['left', start.x + 1, start.z], ['right', start.x, start.z], ['up', start.x, start.z - 1], ['down', start.x, start.z]]) {
+      const button = f.nodes.find(node => node.dataset.layoutMove === direction); assert.ok(button);
+      f.root.emit('click', { target: button });
+      const current = f.renderer.renovation.layout.furniture[0];
+      assert.equal(current.x, x, direction); assert.equal(current.z, z, direction);
+      assert.deepEqual(f.state(), state); assert.equal(f.memory.getItem(SAVE_KEY), raw);
+    }
+    f.click('#renovation-cancel'); assert.deepEqual(f.state(), state);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-027 coffee tabs switch within one read-only modal and keep independent upgrade selection', () => {
+  const initial = fundedInitial(50000); initial.coffeeLevels = { espresso: 2, latte: 4 };
+  const f = fixture({ initial });
+  try {
+    const before = f.state(), raw = f.memory.getItem(SAVE_KEY);
+    f.click('#dock-coffee'); const dialog = f.element('#operation-dialog');
+    assert.equal(dialog.showModalCalls, 1);
+    for (const recipe of ['latte', 'espresso', 'latte']) {
+      const tab = f.nodes.find(node => node.dataset.viewCoffee === recipe);
+      f.root.emit('click', { target: tab });
+      assert.equal(dialog.showModalCalls, 1); assert.equal(f.element('#coffee-panel').hidden, false);
+      assert.equal(f.element('#dialog-title').textContent, recipeById[recipe].name);
+      assert.equal(f.element('#coffee-image').getAttribute('src'), `./assets/catalog-${recipe}.svg`);
+      for (const other of f.nodes.filter(node => node.dataset.viewCoffee)) assert.equal(other.getAttribute('aria-pressed'), String(other === tab));
+      assert.equal(f.element('#coffee-level').textContent, `Lv. ${before.coffeeLevels[recipe]} → ${before.coffeeLevels[recipe] + 1}`);
+      assert.deepEqual(f.state(), before); assert.equal(f.memory.getItem(SAVE_KEY), raw);
+    }
+    const expected = createEngine(before); expected.upgradeCoffee('latte'); f.click('#coffee-upgrade');
+    assert.deepEqual(f.state(), expected.snapshot());
+    assert.equal(f.state().coffeeLevels.espresso, before.coffeeLevels.espresso);
   } finally { f.dispose(); }
 });

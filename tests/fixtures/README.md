@@ -1,0 +1,5 @@
+# Synthetic migration fixtures
+
+`economy3-operations-migration.json` contains synthetic states generated from the previously published branch at commit `44d15c97c8bc928e16a4af857bac5b7403e9f7d7` (economy3/layout2/customer route3). It contains no user save data.
+
+The states retain the old live cash model and representative inactive/active/expanded/paused/in-flight phases. New tests validate the original economic and route relationships before checking the one-time direct-credit/two-door migration. Do not replace these with `createInitialState()` from the current engine: that would erase the compatibility boundary under test.

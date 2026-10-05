@@ -1,0 +1,2565 @@
+{
+  "sourceCommit": "44d15c97c8bc928e16a4af857bac5b7403e9f7d7",
+  "inactive": {
+    "schemaVersion": 1,
+    "economyVersion": 3,
+    "layout": {
+      "version": 2,
+      "active": false,
+      "expanded": false,
+      "furniture": [
+        {
+          "id": "counter-a",
+          "kind": "counter",
+          "counterId": "counter-a",
+          "x": 0,
+          "z": 0,
+          "rotation": 0,
+          "stored": false
+        },
+        {
+          "id": "counter-b",
+          "kind": "counter",
+          "counterId": "counter-b",
+          "x": 5,
+          "z": 0,
+          "rotation": 0,
+          "stored": false
+        }
+      ],
+      "coffeeSigns": [
+        {
+          "id": "menu-espresso",
+          "recipe": "espresso",
+          "x": 0,
+          "stored": false
+        },
+        {
+          "id": "menu-latte",
+          "recipe": "latte",
+          "x": 5,
+          "stored": false
+        }
+      ]
+    },
+    "coffeeLevels": {
+      "espresso": 1,
+      "latte": 1
+    },
+    "managerRouteVersion": 2,
+    "customerRouteVersion": 3,
+    "elapsed": 20,
+    "wallet": 1200,
+    "totalEarned": 220,
+    "totalServed": 2,
+    "spend": 0,
+    "nextCustomerId": 8,
+    "arrivalTimer": 2.15,
+    "inviteCooldown": 0,
+    "paused": false,
+    "stepCarry": 0.037,
+    "eventSequence": 11,
+    "offlineClaimIds": [],
+    "counters": [
+      {
+        "id": "counter-a",
+        "x": 0,
+        "level": 1,
+        "recipe": "espresso",
+        "pendingCash": 220,
+        "brewed": 2,
+        "brew": null
+      },
+      {
+        "id": "counter-b",
+        "x": 5,
+        "level": 1,
+        "recipe": "latte",
+        "pendingCash": 0,
+        "brewed": 0,
+        "brew": {
+          "recipe": "latte",
+          "customerId": 2,
+          "elapsed": 5.65,
+          "duration": 6.8,
+          "price": 246
+        }
+      }
+    ],
+    "customers": [
+      {
+        "id": 1,
+        "x": -8.275,
+        "z": 7.4,
+        "phase": "leaving",
+        "counterId": "counter-a",
+        "timer": 0,
+        "hasCup": true,
+        "skin": 0,
+        "routeLeg": 2
+      },
+      {
+        "id": 2,
+        "x": 5,
+        "z": 1.5,
+        "phase": "serving",
+        "counterId": "counter-b",
+        "timer": 0,
+        "hasCup": false,
+        "skin": 1
+      },
+      {
+        "id": 3,
+        "x": 1.6,
+        "z": 4,
+        "phase": "leaving",
+        "counterId": "counter-a",
+        "timer": 0,
+        "hasCup": true,
+        "skin": 2,
+        "routeLeg": 1
+      },
+      {
+        "id": 4,
+        "x": 5,
+        "z": 2.2199999999999998,
+        "phase": "queue",
+        "counterId": "counter-b",
+        "timer": 0,
+        "hasCup": false,
+        "skin": 3
+      },
+      {
+        "id": 5,
+        "x": 0,
+        "z": 2.1999999999999993,
+        "phase": "entering",
+        "counterId": "counter-a",
+        "timer": 0,
+        "routeLeg": 3,
+        "hasCup": false,
+        "skin": 4
+      },
+      {
+        "id": 6,
+        "x": 0.625,
+        "z": 8.2,
+        "phase": "entering",
+        "counterId": "counter-b",
+        "timer": 0,
+        "routeLeg": 2,
+        "hasCup": false,
+        "skin": 5
+      },
+      {
+        "id": 7,
+        "x": -6,
+        "z": 8.125,
+        "phase": "entering",
+        "counterId": "counter-a",
+        "timer": 0,
+        "routeLeg": 1,
+        "hasCup": false,
+        "skin": 0
+      }
+    ],
+    "manager": {
+      "x": 1.4900000000000029,
+      "z": -1.7,
+      "carrying": 0,
+      "phase": "moving",
+      "target": 0,
+      "timer": 0,
+      "level": 1
+    },
+    "lastOfflineClaimId": null
+  },
+  "active": {
+    "schemaVersion": 1,
+    "economyVersion": 3,
+    "layout": {
+      "version": 2,
+      "active": true,
+      "expanded": true,
+      "furniture": [
+        {
+          "id": "counter-a",
+          "kind": "counter",
+          "counterId": "counter-a",
+          "x": 0,
+          "z": 0,
+          "rotation": 0,
+          "stored": false
+        },
+        {
+          "id": "counter-b",
+          "kind": "counter",
+          "counterId": "counter-b",
+          "x": 5,
+          "z": 0,
+          "rotation": 0,
+          "stored": false
+        },
+        {
+          "id": "counter-c",
+          "kind": "counter",
+          "x": 12,
+          "z": 0,
+          "rotation": 0,
+          "stored": false,
+          "counterId": "counter-c"
+        },
+        {
+          "id": "counter-d",
+          "kind": "counter",
+          "x": 13,
+          "z": 6,
+          "rotation": 0,
+          "stored": false,
+          "counterId": "counter-d"
+        },
+        {
+          "id": "table-1",
+          "kind": "table",
+          "x": -4,
+          "z": 0,
+          "rotation": 0,
+          "stored": false
+        },
+        {
+          "id": "table-2",
+          "kind": "table",
+          "x": 3,
+          "z": 5,
+          "rotation": 0,
+          "stored": false
+        }
+      ],
+      "coffeeSigns": [
+        {
+          "id": "menu-espresso",
+          "recipe": "espresso",
+          "x": 0,
+          "stored": false
+        },
+        {
+          "id": "menu-latte",
+          "recipe": "latte",
+          "x": 5,
+          "stored": false
+        }
+      ],
+      "trafficTurn": "manager"
+    },
+    "coffeeLevels": {
+      "espresso": 1,
+      "latte": 1
+    },
+    "managerRouteVersion": 2,
+    "customerRouteVersion": 3,
+    "elapsed": 120,
+    "wallet": 91614,
+    "totalEarned": 102990,
+    "totalServed": 61,
+    "spend": 12000,
+    "nextCustomerId": 25,
+    "arrivalTimer": 1.65,
+    "inviteCooldown": 0,
+    "paused": false,
+    "stepCarry": 0,
+    "eventSequence": 98,
+    "offlineClaimIds": [],
+    "counters": [
+      {
+        "id": "counter-a",
+        "x": 0,
+        "level": 1,
+        "recipe": "espresso",
+        "pendingCash": 0,
+        "brewed": 46,
+        "brew": null
+      },
+      {
+        "id": "counter-b",
+        "x": 5,
+        "level": 1,
+        "recipe": "latte",
+        "pendingCash": 246,
+        "brewed": 5,
+        "brew": {
+          "recipe": "latte",
+          "customerId": 22,
+          "elapsed": 2.55,
+          "duration": 6.8,
+          "price": 246
+        }
+      },
+      {
+        "id": "counter-c",
+        "x": 12,
+        "level": 1,
+        "recipe": "espresso",
+        "pendingCash": 110,
+        "brewed": 5,
+        "brew": null
+      },
+      {
+        "id": "counter-d",
+        "x": 13,
+        "level": 1,
+        "recipe": "espresso",
+        "pendingCash": 110,
+        "brewed": 5,
+        "brew": null
+      }
+    ],
+    "customers": [
+      {
+        "id": 19,
+        "x": 3,
+        "z": 6,
+        "phase": "leaving",
+        "counterId": "counter-c",
+        "timer": 0,
+        "hasCup": true,
+        "skin": 0
+      },
+      {
+        "id": 20,
+        "x": 7.625,
+        "z": 7,
+        "phase": "leaving",
+        "counterId": "counter-d",
+        "timer": 0,
+        "hasCup": true,
+        "skin": 1,
+        "nav": [
+          {
+            "x": 7,
+            "z": 7
+          },
+          {
+            "x": 6,
+            "z": 7
+          },
+          {
+            "x": 5,
+            "z": 7
+          },
+          {
+            "x": 4,
+            "z": 7
+          },
+          {
+            "x": 3,
+            "z": 7
+          },
+          {
+            "x": 2,
+            "z": 7
+          },
+          {
+            "x": 2,
+            "z": 6
+          },
+          {
+            "x": 1,
+            "z": 6
+          },
+          {
+            "x": 0,
+            "z": 6
+          },
+          {
+            "x": -1,
+            "z": 6
+          },
+          {
+            "x": -2,
+            "z": 6
+          },
+          {
+            "x": -3,
+            "z": 6
+          },
+          {
+            "x": -4,
+            "z": 6
+          },
+          {
+            "x": -5,
+            "z": 6
+          },
+          {
+            "x": -6,
+            "z": 6
+          },
+          {
+            "x": -7,
+            "z": 6
+          },
+          {
+            "x": -8,
+            "z": 6
+          }
+        ]
+      },
+      {
+        "id": 21,
+        "x": -4,
+        "z": 1,
+        "phase": "leaving",
+        "counterId": "counter-a",
+        "timer": 0,
+        "hasCup": true,
+        "skin": 2
+      },
+      {
+        "id": 22,
+        "x": 5,
+        "z": 2,
+        "phase": "serving",
+        "counterId": "counter-b",
+        "timer": 0,
+        "hasCup": false,
+        "skin": 3
+      },
+      {
+        "id": 23,
+        "x": 6,
+        "z": 2.375,
+        "phase": "entering",
+        "counterId": "counter-c",
+        "timer": 0,
+        "hasCup": false,
+        "skin": 4,
+        "nav": [
+          {
+            "x": 6,
+            "z": 2
+          },
+          {
+            "x": 7,
+            "z": 2
+          },
+          {
+            "x": 8,
+            "z": 2
+          },
+          {
+            "x": 9,
+            "z": 2
+          },
+          {
+            "x": 10,
+            "z": 2
+          },
+          {
+            "x": 11,
+            "z": 2
+          },
+          {
+            "x": 12,
+            "z": 2
+          }
+        ]
+      },
+      {
+        "id": 24,
+        "x": -7,
+        "z": 4.625,
+        "phase": "entering",
+        "counterId": "counter-d",
+        "timer": 0,
+        "hasCup": false,
+        "skin": 5,
+        "nav": [
+          {
+            "x": -7,
+            "z": 4
+          },
+          {
+            "x": -6,
+            "z": 4
+          },
+          {
+            "x": -5,
+            "z": 4
+          },
+          {
+            "x": -4,
+            "z": 4
+          },
+          {
+            "x": -3,
+            "z": 4
+          },
+          {
+            "x": -2,
+            "z": 4
+          },
+          {
+            "x": -1,
+            "z": 4
+          },
+          {
+            "x": 0,
+            "z": 4
+          },
+          {
+            "x": 1,
+            "z": 4
+          },
+          {
+            "x": 2,
+            "z": 4
+          },
+          {
+            "x": 3,
+            "z": 4
+          },
+          {
+            "x": 4,
+            "z": 4
+          },
+          {
+            "x": 5,
+            "z": 4
+          },
+          {
+            "x": 6,
+            "z": 4
+          },
+          {
+            "x": 7,
+            "z": 4
+          },
+          {
+            "x": 8,
+            "z": 4
+          },
+          {
+            "x": 9,
+            "z": 4
+          },
+          {
+            "x": 10,
+            "z": 4
+          },
+          {
+            "x": 10,
+            "z": 5
+          },
+          {
+            "x": 10,
+            "z": 6
+          },
+          {
+            "x": 10,
+            "z": 7
+          },
+          {
+            "x": 10,
+            "z": 8
+          },
+          {
+            "x": 11,
+            "z": 8
+          },
+          {
+            "x": 12,
+            "z": 8
+          },
+          {
+            "x": 13,
+            "z": 8
+          }
+        ]
+      }
+    ],
+    "manager": {
+      "x": 7.13,
+      "z": -2,
+      "carrying": 110,
+      "phase": "moving",
+      "target": 4,
+      "timer": 0,
+      "level": 1,
+      "collectionCursor": 1,
+      "nav": [
+        {
+          "x": 8,
+          "z": -2
+        },
+        {
+          "x": 9,
+          "z": -2
+        }
+      ]
+    },
+    "lastOfflineClaimId": null
+  },
+  "phases": {
+    "entering": {
+      "schemaVersion": 1,
+      "economyVersion": 3,
+      "layout": {
+        "version": 2,
+        "active": true,
+        "expanded": true,
+        "furniture": [
+          {
+            "id": "counter-a",
+            "kind": "counter",
+            "counterId": "counter-a",
+            "x": 0,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "counter-b",
+            "kind": "counter",
+            "counterId": "counter-b",
+            "x": 5,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "counter-c",
+            "kind": "counter",
+            "x": 12,
+            "z": 0,
+            "rotation": 0,
+            "stored": false,
+            "counterId": "counter-c"
+          },
+          {
+            "id": "counter-d",
+            "kind": "counter",
+            "x": 13,
+            "z": 6,
+            "rotation": 0,
+            "stored": false,
+            "counterId": "counter-d"
+          },
+          {
+            "id": "table-1",
+            "kind": "table",
+            "x": -4,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "table-2",
+            "kind": "table",
+            "x": 3,
+            "z": 5,
+            "rotation": 0,
+            "stored": false
+          }
+        ],
+        "coffeeSigns": [
+          {
+            "id": "menu-espresso",
+            "recipe": "espresso",
+            "x": 0,
+            "stored": false
+          },
+          {
+            "id": "menu-latte",
+            "recipe": "latte",
+            "x": 5,
+            "stored": false
+          }
+        ],
+        "trafficTurn": "customer"
+      },
+      "coffeeLevels": {
+        "espresso": 1,
+        "latte": 1
+      },
+      "managerRouteVersion": 2,
+      "customerRouteVersion": 3,
+      "elapsed": 2.55,
+      "wallet": 89200,
+      "totalEarned": 100000,
+      "totalServed": 40,
+      "spend": 12000,
+      "nextCustomerId": 2,
+      "arrivalTimer": 0,
+      "inviteCooldown": 0,
+      "paused": false,
+      "stepCarry": 0,
+      "eventSequence": 2,
+      "offlineClaimIds": [],
+      "counters": [
+        {
+          "id": "counter-a",
+          "x": 0,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 0,
+          "brewed": 40,
+          "brew": null
+        },
+        {
+          "id": "counter-b",
+          "x": 5,
+          "level": 1,
+          "recipe": "latte",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": null
+        },
+        {
+          "id": "counter-c",
+          "x": 12,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": null
+        },
+        {
+          "id": "counter-d",
+          "x": 13,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": null
+        }
+      ],
+      "customers": [
+        {
+          "id": 1,
+          "x": -7.875,
+          "z": 5,
+          "phase": "entering",
+          "counterId": "counter-a",
+          "timer": 0,
+          "hasCup": false,
+          "skin": 0,
+          "nav": [
+            {
+              "x": -7,
+              "z": 5
+            },
+            {
+              "x": -7,
+              "z": 4
+            },
+            {
+              "x": -7,
+              "z": 3
+            },
+            {
+              "x": -7,
+              "z": 2
+            },
+            {
+              "x": -6,
+              "z": 2
+            },
+            {
+              "x": -5,
+              "z": 2
+            },
+            {
+              "x": -4,
+              "z": 2
+            },
+            {
+              "x": -3,
+              "z": 2
+            },
+            {
+              "x": -2,
+              "z": 2
+            },
+            {
+              "x": -1,
+              "z": 2
+            },
+            {
+              "x": 0,
+              "z": 2
+            }
+          ]
+        }
+      ],
+      "manager": {
+        "x": 9,
+        "z": -2,
+        "carrying": 0,
+        "phase": "moving",
+        "target": 4,
+        "timer": 0,
+        "level": 1
+      },
+      "lastOfflineClaimId": null
+    },
+    "queue": {
+      "schemaVersion": 1,
+      "economyVersion": 3,
+      "layout": {
+        "version": 2,
+        "active": true,
+        "expanded": true,
+        "furniture": [
+          {
+            "id": "counter-a",
+            "kind": "counter",
+            "counterId": "counter-a",
+            "x": 0,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "counter-b",
+            "kind": "counter",
+            "counterId": "counter-b",
+            "x": 5,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "counter-c",
+            "kind": "counter",
+            "x": 12,
+            "z": 0,
+            "rotation": 0,
+            "stored": false,
+            "counterId": "counter-c"
+          },
+          {
+            "id": "counter-d",
+            "kind": "counter",
+            "x": 13,
+            "z": 6,
+            "rotation": 0,
+            "stored": false,
+            "counterId": "counter-d"
+          },
+          {
+            "id": "table-1",
+            "kind": "table",
+            "x": -4,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "table-2",
+            "kind": "table",
+            "x": 3,
+            "z": 5,
+            "rotation": 0,
+            "stored": false
+          }
+        ],
+        "coffeeSigns": [
+          {
+            "id": "menu-espresso",
+            "recipe": "espresso",
+            "x": 0,
+            "stored": false
+          },
+          {
+            "id": "menu-latte",
+            "recipe": "latte",
+            "x": 5,
+            "stored": false
+          }
+        ],
+        "trafficTurn": "manager"
+      },
+      "coffeeLevels": {
+        "espresso": 1,
+        "latte": 1
+      },
+      "managerRouteVersion": 2,
+      "customerRouteVersion": 3,
+      "elapsed": 6.9,
+      "wallet": 89200,
+      "totalEarned": 100000,
+      "totalServed": 40,
+      "spend": 12000,
+      "nextCustomerId": 3,
+      "arrivalTimer": 1.65,
+      "inviteCooldown": 0,
+      "paused": false,
+      "stepCarry": 0,
+      "eventSequence": 3,
+      "offlineClaimIds": [],
+      "counters": [
+        {
+          "id": "counter-a",
+          "x": 0,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 0,
+          "brewed": 40,
+          "brew": null
+        },
+        {
+          "id": "counter-b",
+          "x": 5,
+          "level": 1,
+          "recipe": "latte",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": null
+        },
+        {
+          "id": "counter-c",
+          "x": 12,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": null
+        },
+        {
+          "id": "counter-d",
+          "x": 13,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": null
+        }
+      ],
+      "customers": [
+        {
+          "id": 1,
+          "x": 0,
+          "z": 2,
+          "phase": "queue",
+          "counterId": "counter-a",
+          "timer": 0,
+          "hasCup": false,
+          "skin": 0
+        },
+        {
+          "id": 2,
+          "x": -5.75,
+          "z": 3,
+          "phase": "entering",
+          "counterId": "counter-b",
+          "timer": 0,
+          "hasCup": false,
+          "skin": 1,
+          "nav": [
+            {
+              "x": -5,
+              "z": 3
+            },
+            {
+              "x": -4,
+              "z": 3
+            },
+            {
+              "x": -3,
+              "z": 3
+            },
+            {
+              "x": -2,
+              "z": 3
+            },
+            {
+              "x": -1,
+              "z": 3
+            },
+            {
+              "x": 0,
+              "z": 3
+            },
+            {
+              "x": 1,
+              "z": 3
+            },
+            {
+              "x": 1,
+              "z": 2
+            },
+            {
+              "x": 2,
+              "z": 2
+            },
+            {
+              "x": 3,
+              "z": 2
+            },
+            {
+              "x": 4,
+              "z": 2
+            },
+            {
+              "x": 5,
+              "z": 2
+            }
+          ]
+        }
+      ],
+      "manager": {
+        "x": 9,
+        "z": -2,
+        "carrying": 0,
+        "phase": "moving",
+        "target": 4,
+        "timer": 0,
+        "level": 1
+      },
+      "lastOfflineClaimId": null
+    },
+    "serving": {
+      "schemaVersion": 1,
+      "economyVersion": 3,
+      "layout": {
+        "version": 2,
+        "active": true,
+        "expanded": true,
+        "furniture": [
+          {
+            "id": "counter-a",
+            "kind": "counter",
+            "counterId": "counter-a",
+            "x": 0,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "counter-b",
+            "kind": "counter",
+            "counterId": "counter-b",
+            "x": 5,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "counter-c",
+            "kind": "counter",
+            "x": 12,
+            "z": 0,
+            "rotation": 0,
+            "stored": false,
+            "counterId": "counter-c"
+          },
+          {
+            "id": "counter-d",
+            "kind": "counter",
+            "x": 13,
+            "z": 6,
+            "rotation": 0,
+            "stored": false,
+            "counterId": "counter-d"
+          },
+          {
+            "id": "table-1",
+            "kind": "table",
+            "x": -4,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "table-2",
+            "kind": "table",
+            "x": 3,
+            "z": 5,
+            "rotation": 0,
+            "stored": false
+          }
+        ],
+        "coffeeSigns": [
+          {
+            "id": "menu-espresso",
+            "recipe": "espresso",
+            "x": 0,
+            "stored": false
+          },
+          {
+            "id": "menu-latte",
+            "recipe": "latte",
+            "x": 5,
+            "stored": false
+          }
+        ],
+        "trafficTurn": "manager"
+      },
+      "coffeeLevels": {
+        "espresso": 1,
+        "latte": 1
+      },
+      "managerRouteVersion": 2,
+      "customerRouteVersion": 3,
+      "elapsed": 6.95,
+      "wallet": 89200,
+      "totalEarned": 100000,
+      "totalServed": 40,
+      "spend": 12000,
+      "nextCustomerId": 3,
+      "arrivalTimer": 1.7,
+      "inviteCooldown": 0,
+      "paused": false,
+      "stepCarry": 0,
+      "eventSequence": 3,
+      "offlineClaimIds": [],
+      "counters": [
+        {
+          "id": "counter-a",
+          "x": 0,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 0,
+          "brewed": 40,
+          "brew": {
+            "recipe": "espresso",
+            "customerId": 1,
+            "elapsed": 0.05,
+            "duration": 2.7,
+            "price": 110
+          }
+        },
+        {
+          "id": "counter-b",
+          "x": 5,
+          "level": 1,
+          "recipe": "latte",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": null
+        },
+        {
+          "id": "counter-c",
+          "x": 12,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": null
+        },
+        {
+          "id": "counter-d",
+          "x": 13,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": null
+        }
+      ],
+      "customers": [
+        {
+          "id": 1,
+          "x": 0,
+          "z": 2,
+          "phase": "serving",
+          "counterId": "counter-a",
+          "timer": 0,
+          "hasCup": false,
+          "skin": 0
+        },
+        {
+          "id": 2,
+          "x": -5.625,
+          "z": 3,
+          "phase": "entering",
+          "counterId": "counter-b",
+          "timer": 0,
+          "hasCup": false,
+          "skin": 1,
+          "nav": [
+            {
+              "x": -5,
+              "z": 3
+            },
+            {
+              "x": -4,
+              "z": 3
+            },
+            {
+              "x": -3,
+              "z": 3
+            },
+            {
+              "x": -2,
+              "z": 3
+            },
+            {
+              "x": -1,
+              "z": 3
+            },
+            {
+              "x": 0,
+              "z": 3
+            },
+            {
+              "x": 1,
+              "z": 3
+            },
+            {
+              "x": 1,
+              "z": 2
+            },
+            {
+              "x": 2,
+              "z": 2
+            },
+            {
+              "x": 3,
+              "z": 2
+            },
+            {
+              "x": 4,
+              "z": 2
+            },
+            {
+              "x": 5,
+              "z": 2
+            }
+          ]
+        }
+      ],
+      "manager": {
+        "x": 9,
+        "z": -2,
+        "carrying": 0,
+        "phase": "moving",
+        "target": 4,
+        "timer": 0,
+        "level": 1
+      },
+      "lastOfflineClaimId": null
+    },
+    "receiving": {
+      "schemaVersion": 1,
+      "economyVersion": 3,
+      "layout": {
+        "version": 2,
+        "active": true,
+        "expanded": true,
+        "furniture": [
+          {
+            "id": "counter-a",
+            "kind": "counter",
+            "counterId": "counter-a",
+            "x": 0,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "counter-b",
+            "kind": "counter",
+            "counterId": "counter-b",
+            "x": 5,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "counter-c",
+            "kind": "counter",
+            "x": 12,
+            "z": 0,
+            "rotation": 0,
+            "stored": false,
+            "counterId": "counter-c"
+          },
+          {
+            "id": "counter-d",
+            "kind": "counter",
+            "x": 13,
+            "z": 6,
+            "rotation": 0,
+            "stored": false,
+            "counterId": "counter-d"
+          },
+          {
+            "id": "table-1",
+            "kind": "table",
+            "x": -4,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "table-2",
+            "kind": "table",
+            "x": 3,
+            "z": 5,
+            "rotation": 0,
+            "stored": false
+          }
+        ],
+        "coffeeSigns": [
+          {
+            "id": "menu-espresso",
+            "recipe": "espresso",
+            "x": 0,
+            "stored": false
+          },
+          {
+            "id": "menu-latte",
+            "recipe": "latte",
+            "x": 5,
+            "stored": false
+          }
+        ],
+        "trafficTurn": "manager"
+      },
+      "coffeeLevels": {
+        "espresso": 1,
+        "latte": 1
+      },
+      "managerRouteVersion": 2,
+      "customerRouteVersion": 3,
+      "elapsed": 9.6,
+      "wallet": 89200,
+      "totalEarned": 100000,
+      "totalServed": 40,
+      "spend": 12000,
+      "nextCustomerId": 4,
+      "arrivalTimer": 1.95,
+      "inviteCooldown": 0,
+      "paused": false,
+      "stepCarry": 0,
+      "eventSequence": 5,
+      "offlineClaimIds": [],
+      "counters": [
+        {
+          "id": "counter-a",
+          "x": 0,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 0,
+          "brewed": 41,
+          "brew": {
+            "recipe": "espresso",
+            "customerId": 1,
+            "elapsed": 2.7,
+            "duration": 2.7,
+            "price": 110
+          }
+        },
+        {
+          "id": "counter-b",
+          "x": 5,
+          "level": 1,
+          "recipe": "latte",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": null
+        },
+        {
+          "id": "counter-c",
+          "x": 12,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": null
+        },
+        {
+          "id": "counter-d",
+          "x": 13,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": null
+        }
+      ],
+      "customers": [
+        {
+          "id": 1,
+          "x": 0,
+          "z": 2,
+          "phase": "receiving",
+          "counterId": "counter-a",
+          "timer": 0,
+          "hasCup": true,
+          "skin": 0
+        },
+        {
+          "id": 2,
+          "x": 1,
+          "z": 3,
+          "phase": "entering",
+          "counterId": "counter-b",
+          "timer": 0,
+          "hasCup": false,
+          "skin": 1,
+          "nav": [
+            {
+              "x": 1,
+              "z": 2
+            },
+            {
+              "x": 2,
+              "z": 2
+            },
+            {
+              "x": 3,
+              "z": 2
+            },
+            {
+              "x": 4,
+              "z": 2
+            },
+            {
+              "x": 5,
+              "z": 2
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "x": -4,
+          "z": 4,
+          "phase": "entering",
+          "counterId": "counter-c",
+          "timer": 0,
+          "hasCup": false,
+          "skin": 2,
+          "nav": [
+            {
+              "x": -3,
+              "z": 4
+            },
+            {
+              "x": -2,
+              "z": 4
+            },
+            {
+              "x": -1,
+              "z": 4
+            },
+            {
+              "x": 0,
+              "z": 4
+            },
+            {
+              "x": 1,
+              "z": 4
+            },
+            {
+              "x": 2,
+              "z": 4
+            },
+            {
+              "x": 2,
+              "z": 3
+            },
+            {
+              "x": 3,
+              "z": 3
+            },
+            {
+              "x": 4,
+              "z": 3
+            },
+            {
+              "x": 5,
+              "z": 3
+            },
+            {
+              "x": 6,
+              "z": 3
+            },
+            {
+              "x": 6,
+              "z": 2
+            },
+            {
+              "x": 7,
+              "z": 2
+            },
+            {
+              "x": 8,
+              "z": 2
+            },
+            {
+              "x": 9,
+              "z": 2
+            },
+            {
+              "x": 10,
+              "z": 2
+            },
+            {
+              "x": 11,
+              "z": 2
+            },
+            {
+              "x": 12,
+              "z": 2
+            }
+          ]
+        }
+      ],
+      "manager": {
+        "x": 9,
+        "z": -2,
+        "carrying": 0,
+        "phase": "moving",
+        "target": 4,
+        "timer": 0,
+        "level": 1
+      },
+      "lastOfflineClaimId": null
+    },
+    "seeking-seat": {
+      "schemaVersion": 1,
+      "economyVersion": 3,
+      "layout": {
+        "version": 2,
+        "active": true,
+        "expanded": true,
+        "furniture": [
+          {
+            "id": "counter-a",
+            "kind": "counter",
+            "counterId": "counter-a",
+            "x": 0,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "counter-b",
+            "kind": "counter",
+            "counterId": "counter-b",
+            "x": 5,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "counter-c",
+            "kind": "counter",
+            "x": 12,
+            "z": 0,
+            "rotation": 0,
+            "stored": false,
+            "counterId": "counter-c"
+          },
+          {
+            "id": "counter-d",
+            "kind": "counter",
+            "x": 13,
+            "z": 6,
+            "rotation": 0,
+            "stored": false,
+            "counterId": "counter-d"
+          },
+          {
+            "id": "table-1",
+            "kind": "table",
+            "x": -4,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "table-2",
+            "kind": "table",
+            "x": 3,
+            "z": 5,
+            "rotation": 0,
+            "stored": false
+          }
+        ],
+        "coffeeSigns": [
+          {
+            "id": "menu-espresso",
+            "recipe": "espresso",
+            "x": 0,
+            "stored": false
+          },
+          {
+            "id": "menu-latte",
+            "recipe": "latte",
+            "x": 5,
+            "stored": false
+          }
+        ],
+        "trafficTurn": "manager"
+      },
+      "coffeeLevels": {
+        "espresso": 1,
+        "latte": 1
+      },
+      "managerRouteVersion": 2,
+      "customerRouteVersion": 3,
+      "elapsed": 10.3,
+      "wallet": 89200,
+      "totalEarned": 100110,
+      "totalServed": 41,
+      "spend": 12000,
+      "nextCustomerId": 5,
+      "arrivalTimer": 0.1,
+      "inviteCooldown": 0,
+      "paused": false,
+      "stepCarry": 0,
+      "eventSequence": 7,
+      "offlineClaimIds": [],
+      "counters": [
+        {
+          "id": "counter-a",
+          "x": 0,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 110,
+          "brewed": 41,
+          "brew": null
+        },
+        {
+          "id": "counter-b",
+          "x": 5,
+          "level": 1,
+          "recipe": "latte",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": null
+        },
+        {
+          "id": "counter-c",
+          "x": 12,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": null
+        },
+        {
+          "id": "counter-d",
+          "x": 13,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": null
+        }
+      ],
+      "customers": [
+        {
+          "id": 1,
+          "x": -0.125,
+          "z": 2,
+          "phase": "seeking-seat",
+          "counterId": "counter-a",
+          "timer": 0,
+          "hasCup": true,
+          "skin": 0,
+          "seatId": "table-1",
+          "nav": [
+            {
+              "x": -1,
+              "z": 2
+            },
+            {
+              "x": -2,
+              "z": 2
+            },
+            {
+              "x": -3,
+              "z": 2
+            },
+            {
+              "x": -3,
+              "z": 1
+            },
+            {
+              "x": -4,
+              "z": 1
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "x": 1.75,
+          "z": 2,
+          "phase": "entering",
+          "counterId": "counter-b",
+          "timer": 0,
+          "hasCup": false,
+          "skin": 1,
+          "nav": [
+            {
+              "x": 2,
+              "z": 2
+            },
+            {
+              "x": 3,
+              "z": 2
+            },
+            {
+              "x": 4,
+              "z": 2
+            },
+            {
+              "x": 5,
+              "z": 2
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "x": -2.25,
+          "z": 4,
+          "phase": "entering",
+          "counterId": "counter-c",
+          "timer": 0,
+          "hasCup": false,
+          "skin": 2,
+          "nav": [
+            {
+              "x": -2,
+              "z": 4
+            },
+            {
+              "x": -1,
+              "z": 4
+            },
+            {
+              "x": 0,
+              "z": 4
+            },
+            {
+              "x": 1,
+              "z": 4
+            },
+            {
+              "x": 2,
+              "z": 4
+            },
+            {
+              "x": 2,
+              "z": 3
+            },
+            {
+              "x": 3,
+              "z": 3
+            },
+            {
+              "x": 4,
+              "z": 3
+            },
+            {
+              "x": 5,
+              "z": 3
+            },
+            {
+              "x": 6,
+              "z": 3
+            },
+            {
+              "x": 6,
+              "z": 2
+            },
+            {
+              "x": 7,
+              "z": 2
+            },
+            {
+              "x": 8,
+              "z": 2
+            },
+            {
+              "x": 9,
+              "z": 2
+            },
+            {
+              "x": 10,
+              "z": 2
+            },
+            {
+              "x": 11,
+              "z": 2
+            },
+            {
+              "x": 12,
+              "z": 2
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "x": -7.625,
+          "z": 5,
+          "phase": "entering",
+          "counterId": "counter-d",
+          "timer": 0,
+          "hasCup": false,
+          "skin": 3,
+          "nav": [
+            {
+              "x": -7,
+              "z": 5
+            },
+            {
+              "x": -6,
+              "z": 5
+            },
+            {
+              "x": -5,
+              "z": 5
+            },
+            {
+              "x": -4,
+              "z": 5
+            },
+            {
+              "x": -3,
+              "z": 5
+            },
+            {
+              "x": -2,
+              "z": 5
+            },
+            {
+              "x": -1,
+              "z": 5
+            },
+            {
+              "x": 0,
+              "z": 5
+            },
+            {
+              "x": 1,
+              "z": 5
+            },
+            {
+              "x": 2,
+              "z": 5
+            },
+            {
+              "x": 2,
+              "z": 6
+            },
+            {
+              "x": 2,
+              "z": 7
+            },
+            {
+              "x": 3,
+              "z": 7
+            },
+            {
+              "x": 4,
+              "z": 7
+            },
+            {
+              "x": 5,
+              "z": 7
+            },
+            {
+              "x": 6,
+              "z": 7
+            },
+            {
+              "x": 7,
+              "z": 7
+            },
+            {
+              "x": 8,
+              "z": 7
+            },
+            {
+              "x": 9,
+              "z": 7
+            },
+            {
+              "x": 10,
+              "z": 7
+            },
+            {
+              "x": 10,
+              "z": 8
+            },
+            {
+              "x": 11,
+              "z": 8
+            },
+            {
+              "x": 12,
+              "z": 8
+            },
+            {
+              "x": 13,
+              "z": 8
+            }
+          ]
+        }
+      ],
+      "manager": {
+        "x": 8.87,
+        "z": -2,
+        "carrying": 0,
+        "phase": "moving",
+        "target": 0,
+        "timer": 0,
+        "level": 1,
+        "nav": [
+          {
+            "x": 8,
+            "z": -2
+          },
+          {
+            "x": 7,
+            "z": -2
+          },
+          {
+            "x": 6,
+            "z": -2
+          },
+          {
+            "x": 5,
+            "z": -2
+          },
+          {
+            "x": 4,
+            "z": -2
+          },
+          {
+            "x": 3,
+            "z": -2
+          },
+          {
+            "x": 2,
+            "z": -2
+          },
+          {
+            "x": 1,
+            "z": -2
+          },
+          {
+            "x": 0,
+            "z": -2
+          }
+        ]
+      },
+      "lastOfflineClaimId": null
+    },
+    "dining": {
+      "schemaVersion": 1,
+      "economyVersion": 3,
+      "layout": {
+        "version": 2,
+        "active": true,
+        "expanded": true,
+        "furniture": [
+          {
+            "id": "counter-a",
+            "kind": "counter",
+            "counterId": "counter-a",
+            "x": 0,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "counter-b",
+            "kind": "counter",
+            "counterId": "counter-b",
+            "x": 5,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "counter-c",
+            "kind": "counter",
+            "x": 12,
+            "z": 0,
+            "rotation": 0,
+            "stored": false,
+            "counterId": "counter-c"
+          },
+          {
+            "id": "counter-d",
+            "kind": "counter",
+            "x": 13,
+            "z": 6,
+            "rotation": 0,
+            "stored": false,
+            "counterId": "counter-d"
+          },
+          {
+            "id": "table-1",
+            "kind": "table",
+            "x": -4,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "table-2",
+            "kind": "table",
+            "x": 3,
+            "z": 5,
+            "rotation": 0,
+            "stored": false
+          }
+        ],
+        "coffeeSigns": [
+          {
+            "id": "menu-espresso",
+            "recipe": "espresso",
+            "x": 0,
+            "stored": false
+          },
+          {
+            "id": "menu-latte",
+            "recipe": "latte",
+            "x": 5,
+            "stored": false
+          }
+        ],
+        "trafficTurn": "manager"
+      },
+      "coffeeLevels": {
+        "espresso": 1,
+        "latte": 1
+      },
+      "managerRouteVersion": 2,
+      "customerRouteVersion": 3,
+      "elapsed": 12.25,
+      "wallet": 89200,
+      "totalEarned": 100110,
+      "totalServed": 41,
+      "spend": 12000,
+      "nextCustomerId": 5,
+      "arrivalTimer": 2.05,
+      "inviteCooldown": 0,
+      "paused": false,
+      "stepCarry": 0,
+      "eventSequence": 7,
+      "offlineClaimIds": [],
+      "counters": [
+        {
+          "id": "counter-a",
+          "x": 0,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 110,
+          "brewed": 41,
+          "brew": null
+        },
+        {
+          "id": "counter-b",
+          "x": 5,
+          "level": 1,
+          "recipe": "latte",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": {
+            "recipe": "latte",
+            "customerId": 2,
+            "elapsed": 0.65,
+            "duration": 6.8,
+            "price": 246
+          }
+        },
+        {
+          "id": "counter-c",
+          "x": 12,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": null
+        },
+        {
+          "id": "counter-d",
+          "x": 13,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": null
+        }
+      ],
+      "customers": [
+        {
+          "id": 1,
+          "x": -4,
+          "z": 1,
+          "phase": "dining",
+          "counterId": "counter-a",
+          "timer": 0,
+          "hasCup": true,
+          "skin": 0,
+          "seatId": "table-1"
+        },
+        {
+          "id": 2,
+          "x": 5,
+          "z": 2,
+          "phase": "serving",
+          "counterId": "counter-b",
+          "timer": 0,
+          "hasCup": false,
+          "skin": 1
+        },
+        {
+          "id": 3,
+          "x": 2,
+          "z": 3.375,
+          "phase": "entering",
+          "counterId": "counter-c",
+          "timer": 0,
+          "hasCup": false,
+          "skin": 2,
+          "nav": [
+            {
+              "x": 2,
+              "z": 3
+            },
+            {
+              "x": 3,
+              "z": 3
+            },
+            {
+              "x": 4,
+              "z": 3
+            },
+            {
+              "x": 5,
+              "z": 3
+            },
+            {
+              "x": 6,
+              "z": 3
+            },
+            {
+              "x": 6,
+              "z": 2
+            },
+            {
+              "x": 7,
+              "z": 2
+            },
+            {
+              "x": 8,
+              "z": 2
+            },
+            {
+              "x": 9,
+              "z": 2
+            },
+            {
+              "x": 10,
+              "z": 2
+            },
+            {
+              "x": 11,
+              "z": 2
+            },
+            {
+              "x": 12,
+              "z": 2
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "x": -2.75,
+          "z": 5,
+          "phase": "entering",
+          "counterId": "counter-d",
+          "timer": 0,
+          "hasCup": false,
+          "skin": 3,
+          "nav": [
+            {
+              "x": -2,
+              "z": 5
+            },
+            {
+              "x": -1,
+              "z": 5
+            },
+            {
+              "x": 0,
+              "z": 5
+            },
+            {
+              "x": 1,
+              "z": 5
+            },
+            {
+              "x": 2,
+              "z": 5
+            },
+            {
+              "x": 2,
+              "z": 6
+            },
+            {
+              "x": 2,
+              "z": 7
+            },
+            {
+              "x": 3,
+              "z": 7
+            },
+            {
+              "x": 4,
+              "z": 7
+            },
+            {
+              "x": 5,
+              "z": 7
+            },
+            {
+              "x": 6,
+              "z": 7
+            },
+            {
+              "x": 7,
+              "z": 7
+            },
+            {
+              "x": 8,
+              "z": 7
+            },
+            {
+              "x": 9,
+              "z": 7
+            },
+            {
+              "x": 10,
+              "z": 7
+            },
+            {
+              "x": 10,
+              "z": 8
+            },
+            {
+              "x": 11,
+              "z": 8
+            },
+            {
+              "x": 12,
+              "z": 8
+            },
+            {
+              "x": 13,
+              "z": 8
+            }
+          ]
+        }
+      ],
+      "manager": {
+        "x": 4,
+        "z": -2,
+        "carrying": 0,
+        "phase": "moving",
+        "target": 0,
+        "timer": 0,
+        "level": 1,
+        "nav": [
+          {
+            "x": 3,
+            "z": -2
+          },
+          {
+            "x": 2,
+            "z": -2
+          },
+          {
+            "x": 1,
+            "z": -2
+          },
+          {
+            "x": 0,
+            "z": -2
+          }
+        ]
+      },
+      "lastOfflineClaimId": null
+    },
+    "leaving": {
+      "schemaVersion": 1,
+      "economyVersion": 3,
+      "layout": {
+        "version": 2,
+        "active": true,
+        "expanded": true,
+        "furniture": [
+          {
+            "id": "counter-a",
+            "kind": "counter",
+            "counterId": "counter-a",
+            "x": 0,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "counter-b",
+            "kind": "counter",
+            "counterId": "counter-b",
+            "x": 5,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "counter-c",
+            "kind": "counter",
+            "x": 12,
+            "z": 0,
+            "rotation": 0,
+            "stored": false,
+            "counterId": "counter-c"
+          },
+          {
+            "id": "counter-d",
+            "kind": "counter",
+            "x": 13,
+            "z": 6,
+            "rotation": 0,
+            "stored": false,
+            "counterId": "counter-d"
+          },
+          {
+            "id": "table-1",
+            "kind": "table",
+            "x": -4,
+            "z": 0,
+            "rotation": 0,
+            "stored": false
+          },
+          {
+            "id": "table-2",
+            "kind": "table",
+            "x": 3,
+            "z": 5,
+            "rotation": 0,
+            "stored": false
+          }
+        ],
+        "coffeeSigns": [
+          {
+            "id": "menu-espresso",
+            "recipe": "espresso",
+            "x": 0,
+            "stored": false
+          },
+          {
+            "id": "menu-latte",
+            "recipe": "latte",
+            "x": 5,
+            "stored": false
+          }
+        ],
+        "trafficTurn": "customer"
+      },
+      "coffeeLevels": {
+        "espresso": 1,
+        "latte": 1
+      },
+      "managerRouteVersion": 2,
+      "customerRouteVersion": 3,
+      "elapsed": 18.25,
+      "wallet": 89200,
+      "totalEarned": 100110,
+      "totalServed": 41,
+      "spend": 12000,
+      "nextCustomerId": 6,
+      "arrivalTimer": 0.55,
+      "inviteCooldown": 0,
+      "paused": false,
+      "stepCarry": 0,
+      "eventSequence": 9,
+      "offlineClaimIds": [],
+      "counters": [
+        {
+          "id": "counter-a",
+          "x": 0,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 0,
+          "brewed": 41,
+          "brew": {
+            "recipe": "espresso",
+            "customerId": 5,
+            "elapsed": 1,
+            "duration": 2.7,
+            "price": 110
+          }
+        },
+        {
+          "id": "counter-b",
+          "x": 5,
+          "level": 1,
+          "recipe": "latte",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": {
+            "recipe": "latte",
+            "customerId": 2,
+            "elapsed": 6.65,
+            "duration": 6.8,
+            "price": 246
+          }
+        },
+        {
+          "id": "counter-c",
+          "x": 12,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": {
+            "recipe": "espresso",
+            "customerId": 3,
+            "elapsed": 1.45,
+            "duration": 3.6,
+            "price": 110
+          }
+        },
+        {
+          "id": "counter-d",
+          "x": 13,
+          "level": 1,
+          "recipe": "espresso",
+          "pendingCash": 0,
+          "brewed": 0,
+          "brew": null
+        }
+      ],
+      "customers": [
+        {
+          "id": 1,
+          "x": -4,
+          "z": 1.125,
+          "phase": "leaving",
+          "counterId": "counter-a",
+          "timer": 0,
+          "hasCup": true,
+          "skin": 0,
+          "nav": [
+            {
+              "x": -4,
+              "z": 2
+            },
+            {
+              "x": -4,
+              "z": 3
+            },
+            {
+              "x": -4,
+              "z": 4
+            },
+            {
+              "x": -4,
+              "z": 5
+            },
+            {
+              "x": -4,
+              "z": 6
+            },
+            {
+              "x": -5,
+              "z": 6
+            },
+            {
+              "x": -6,
+              "z": 6
+            },
+            {
+              "x": -7,
+              "z": 6
+            },
+            {
+              "x": -8,
+              "z": 6
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "x": 5,
+          "z": 2,
+          "phase": "serving",
+          "counterId": "counter-b",
+          "timer": 0,
+          "hasCup": false,
+          "skin": 1
+        },
+        {
+          "id": 3,
+          "x": 12,
+          "z": 2,
+          "phase": "serving",
+          "counterId": "counter-c",
+          "timer": 0,
+          "hasCup": false,
+          "skin": 2
+        },
+        {
+          "id": 4,
+          "x": 10,
+          "z": 7.25,
+          "phase": "entering",
+          "counterId": "counter-d",
+          "timer": 0,
+          "hasCup": false,
+          "skin": 3,
+          "nav": [
+            {
+              "x": 10,
+              "z": 8
+            },
+            {
+              "x": 11,
+              "z": 8
+            },
+            {
+              "x": 12,
+              "z": 8
+            },
+            {
+              "x": 13,
+              "z": 8
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "x": 0,
+          "z": 2,
+          "phase": "serving",
+          "counterId": "counter-a",
+          "timer": 0,
+          "hasCup": false,
+          "skin": 4
+        }
+      ],
+      "manager": {
+        "x": 9,
+        "z": -2,
+        "carrying": 110,
+        "phase": "depositing",
+        "target": 4,
+        "timer": 0.4,
+        "level": 1,
+        "collectionCursor": 1
+      },
+      "lastOfflineClaimId": null
+    }
+  }
+}

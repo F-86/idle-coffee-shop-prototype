@@ -88,3 +88,5 @@ REQ-3D-035 → [TC-3D-025](cases/slice/TC-3D-025.md)、[计划](plans/furniture-
 ## 底部装修目录与真实拖拽
 
 REQ-3D-036 → [TC-3D-026](cases/slice/TC-3D-026.md)、[计划](plans/renovation-drag-catalog.md)。真实应用handler的捕获/取消/拖后click、NullEngine几何射线、墙牌布局2迁移与离线/存档保护；真实浏览器像素和设备输入独立验收。
+
+- REQ-3D-037～039 → [TC-3D-027](cases/slice/TC-3D-027.md)：直接收款、双门迁移、持久暂停、清场装修、紧凑图标与有图目录；原生视觉和输入另验。

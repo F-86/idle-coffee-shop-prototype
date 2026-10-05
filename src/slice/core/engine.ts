@@ -1,4 +1,4 @@
-import { copyLayout, initialLayout, layoutCost, normalizeLayout, validateLayout, GRID } from './layout';
+import { copyLayout, initialLayout, layoutCost, normalizeLayout, validateLayout, migrateLayoutDoors } from './layout';
 import { createLayoutSimulation } from './layoutSimulation';
 import type { RouteObserver, RouteTraceEvent } from './routeTrace';
 import type { Counter, CounterId, CounterQuote, CoffeeQuote, Customer, OfflineJob, OfflinePolicyVersion, Recipe, RecipeId, SliceEngine, SliceEvent, SliceState } from './types';
@@ -6,7 +6,7 @@ import type { Counter, CounterId, CounterQuote, CoffeeQuote, Customer, OfflineJo
 /** Draft balance for this small playable slice, expressed in cents and metres. */
 export const STEP_SECONDS = .05;
 export const MAX_LEVEL = 20;
-export const ECONOMY_VERSION = 3;
+export const ECONOMY_VERSION = 4;
 /** Temporary feature values, not a settled balance design. */
 export const COFFEE_UPGRADE_CONFIG = Object.freeze({
   maxLevel: 10, pricePerLevel: .08, speedPerLevel: .025, costGrowth: 1.55,
@@ -29,8 +29,9 @@ export function offlineEffectiveSeconds(seconds: number, policy: OfflinePolicyVe
   return offlineWallSeconds(seconds, policy) * (policy === 3 ? OFFLINE_EFFICIENCY : .5);
 }
 export const MANAGER_ROUTE_VERSION = 2;
-export const CUSTOMER_ROUTE_VERSION = 3;
+export const CUSTOMER_ROUTE_VERSION = 4;
 export const CUSTOMER_SPEED = 2.5;
+/** Compatibility coordinates for already-moving pre-layout guests only. */
 export const WORLD = Object.freeze({ entryX: -8, entryZ: 5, inboundX: -6, inboundZ: 8.2, departureOffsetX: 1.6, exitZ: 7.4, exitX: -10.4, serviceZ: 1.5, queueGap: .72, backZ: -1.7, vaultX: 8.8 });
 export const recipes: readonly Recipe[] = Object.freeze([
   Object.freeze({ id: 'espresso', name: '浓缩咖啡', price: 110, brewSeconds: 3.6, color: '#a7693d', description: '出杯快、单价低，适合长队。' }),
@@ -47,57 +48,49 @@ export const managerCapacity = (level: number): number => 1200 + 180 * (level - 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const roundTime = (value: number): number => Math.round(value * 1e9) / 1e9;
 
-/** Only legacy economy1 can omit recipe levels. Never downgrade or repair malformed progression. */
-export function migrateCoffeeEconomy(state: { economyVersion: number; coffeeLevels?: Record<RecipeId, number>; layout?: SliceState['layout'] }): void {
+/** Versioned one-time transfer: legacy receipts were already minted in totalEarned. */
+export function migrateCoffeeEconomy(state: SliceState): void {
+  const version = (state as { economyVersion: number }).economyVersion;
+  if (![1, 2, 3, ECONOMY_VERSION].includes(version)) throw new Error('Unsupported economy version.');
   if (state.layout !== undefined && (!state.layout || typeof state.layout !== 'object' || Array.isArray(state.layout))) throw new Error('Invalid layout.');
-  if (state.economyVersion !== ECONOMY_VERSION && state.layout?.active) throw new Error('Legacy economy cannot contain an active layout.');
-  if (state.economyVersion === ECONOMY_VERSION && state.layout === undefined) throw new Error('Current economy requires explicit layout.');
-  if (state.economyVersion === 1) {
+  if (version < 3 && state.layout?.active) throw new Error('Legacy economy cannot contain an active layout.');
+  if (version >= 3 && state.layout === undefined) throw new Error('Current economy requires explicit layout.');
+  if (version < ECONOMY_VERSION && state.layout?.version === 3) throw new Error('Legacy economy cannot contain current layout.');
+  if (version === 1) {
     if (state.coffeeLevels !== undefined) throw new Error('Legacy economy cannot contain coffee levels.');
     state.coffeeLevels = { espresso: 1, latte: 1 };
-    state.layout ??= initialLayout();
-    state.economyVersion = ECONOMY_VERSION;
-    return;
   }
-  if (state.economyVersion === 2) { state.layout ??= initialLayout(); state.economyVersion = ECONOMY_VERSION; }
-  if (state.economyVersion !== ECONOMY_VERSION) throw new Error('Unsupported economy version.');
   const levels = state.coffeeLevels;
   if (!levels || typeof levels !== 'object' || Array.isArray(levels) || Object.keys(levels).sort().join() !== 'espresso,latte' ||
     recipes.some(recipe => !Number.isInteger(levels[recipe.id]) || levels[recipe.id] < 1 || levels[recipe.id] > COFFEE_MAX_LEVEL)) throw new Error('Invalid coffee levels.');
-}
-
-/** Narrow route migration, not an economy/schema migration. External states must be validated first. */
-export function migrateManagerRoute(state: SliceState): void {
-  if (state.managerRouteVersion === MANAGER_ROUTE_VERSION) return;
-  if (state.managerRouteVersion !== undefined && state.managerRouteVersion !== 1) throw new Error('Unsupported manager route version.');
-  const manager = state.manager;
-  const freshDeparture = manager.phase === 'moving' && manager.target === 0 && manager.x === -8 && manager.timer === 0 && manager.carrying === 0;
-  const clamp = (value: number): number => Math.max(0, Math.min(1, value));
-  // Match the previous visible leg progress once. Thereafter x is the actual
-  // world coordinate, including throughout a still-in-flight legacy sweep.
-  if (manager.target === 0) manager.x = WORLD.vaultX * (1 - clamp((manager.x + 8) / 8));
-  else if (manager.target === 1) manager.x = Math.max(0, Math.min(5, manager.x));
-  else manager.x = 5 + (WORLD.vaultX - 5) * (1 - clamp((manager.x + 8) / 13));
-  // The old validator allowed stationary coordinates away from the semantic
-  // stop. Live archives already match it; accepted old archives are now made
-  // physically safe without touching their money or in-progress dwell timer.
-  if (manager.phase !== 'moving') manager.x = manager.target === 2 ? WORLD.vaultX : state.counters[manager.target].x;
-  if (freshDeparture) manager.target = 1;
-  else if (manager.target !== 2 || manager.phase === 'moving' && manager.timer !== 0) manager.finishLegacySweep = true;
+  if (version === ECONOMY_VERSION) {
+    if (state.manager.carrying || state.counters.some(counter => counter.pendingCash)) throw new Error('Retired cash balances must be zero.');
+    return;
+  }
+  if (state.layout === undefined) state.layout = { ...initialLayout(), version: 2, active: false };
+  state.layout = normalizeLayout(state.layout);
+  for (const sign of state.layout.coffeeSigns) sign.stored = true;
+  const receipts = state.manager.carrying + state.counters.reduce((sum, counter) => sum + counter.pendingCash, 0);
+  if (!Number.isSafeInteger(receipts) || receipts < 0 || !Number.isSafeInteger(state.wallet + receipts)) throw new Error('Invalid transferred receipts.');
+  state.wallet += receipts;
+  for (const counter of state.counters) counter.pendingCash = 0;
+  // Tombstone keeps historical upgrade investment without a live actor or action.
+  state.manager = { x: WORLD.vaultX, z: WORLD.backZ, carrying: 0, phase: 'moving', target: state.counters.length, timer: 0, level: state.manager.level };
   state.managerRouteVersion = MANAGER_ROUTE_VERSION;
+  state.economyVersion = ECONOMY_VERSION;
 }
 
 /** Pre-v2 in-flight customers finish their visible leg once; v2 paths extend in place.
  * Coordinates, brew snapshots and assets never change during migration. */
 export function migrateCustomerRoutes(state: SliceState): void {
-  if (state.customerRouteVersion === CUSTOMER_ROUTE_VERSION) return;
+  if (state.customerRouteVersion === CUSTOMER_ROUTE_VERSION || state.customerRouteVersion === 3) return;
   if (state.customerRouteVersion !== undefined && state.customerRouteVersion !== 1 && state.customerRouteVersion !== 2) throw new Error('Unsupported customer route version.');
   if (state.customerRouteVersion !== 2) {
     for (const customer of state.customers) {
       if (customer.phase === 'entering' || customer.phase === 'leaving') customer.finishLegacyRoute = true;
     }
   }
-  state.customerRouteVersion = CUSTOMER_ROUTE_VERSION;
+  state.customerRouteVersion = 3;
 }
 
 export function createInitialState(): SliceState {
@@ -109,7 +102,7 @@ export function createInitialState(): SliceState {
       { id: 'counter-a', x: 0, level: 1, recipe: 'espresso', pendingCash: 0, brewed: 0, brew: null },
       { id: 'counter-b', x: 5, level: 1, recipe: 'latte', pendingCash: 0, brewed: 0, brew: null }
     ],
-    customers: [], manager: { x: WORLD.vaultX, z: WORLD.backZ, carrying: 0, phase: 'moving', target: 1, timer: 0, level: 1 },
+    customers: [], manager: { x: WORLD.vaultX, z: WORLD.backZ, carrying: 0, phase: 'moving', target: 2, timer: 0, level: 1 },
     lastOfflineClaimId: null
   };
 }
@@ -118,8 +111,8 @@ export function createEngine(initial: SliceState = createInitialState(), observe
   const state = clone(initial);
   migrateCoffeeEconomy(state);
   state.layout = normalizeLayout(state.layout);
-  migrateManagerRoute(state);
   migrateCustomerRoutes(state);
+  if (state.customerRouteVersion !== CUSTOMER_ROUTE_VERSION) migrateLayoutDoors(state);
   state.stepCarry ??= 0;
   state.eventSequence ??= 0;
   state.offlineClaimIds ??= state.lastOfflineClaimId ? [state.lastOfflineClaimId] : [];
@@ -127,11 +120,10 @@ export function createEngine(initial: SliceState = createInitialState(), observe
   let silent = false;
   let editing: 'idle' | 'draining' | 'ready' = 'idle';
   const activeLayout = () => !!state.layout?.active;
-  const counterDrained = (counter: Counter): boolean => !counter.brew && (!counter.pendingCash || !!state.layout?.furniture.some(item => item.counterId === counter.id && item.stored));
-  const layoutSimulation = createLayoutSimulation(state, { emit, traceCustomer, traceManager, stepSeconds: STEP_SECONDS, customerSpeed: CUSTOMER_SPEED,
+  const counterDrained = (counter: Counter): boolean => !counter.brew;
+  const layoutSimulation = createLayoutSimulation(state, { emit, traceCustomer, stepSeconds: STEP_SECONDS, customerSpeed: CUSTOMER_SPEED,
     price: counter => counterPrice(counter.recipe, counter.level, counter.id, state.coffeeLevels[counter.recipe]),
-    duration: counter => counterBrewSeconds(counter.recipe, counter.level, counter.id, state.coffeeLevels[counter.recipe]),
-    speed: () => managerSpeed(state.manager.level), capacity: () => managerCapacity(state.manager.level) });
+    duration: counter => counterBrewSeconds(counter.recipe, counter.level, counter.id, state.coffeeLevels[counter.recipe]) });
   function trace(event: Omit<RouteTraceEvent, 'time'>): void {
     if (!observeRoute || silent) return;
     // The observer receives detached scalar data and cannot break the simulation.
@@ -143,11 +135,6 @@ export function createEngine(initial: SliceState = createInitialState(), observe
       x: customer.x, z: customer.z, phase: customer.phase, routeLeg: customer.routeLeg,
       legacy: !!customer.finishLegacyRoute, hasCup: customer.hasCup, ...extra });
   }
-  function traceManager(kind: RouteTraceEvent['kind'], extra: Partial<RouteTraceEvent> = {}): void {
-    if (!observeRoute || silent) return;
-    const manager = state.manager;
-    trace({ actor: 'manager', kind, x: manager.x, z: manager.z, phase: manager.phase, target: manager.target, ...extra });
-  }
   function emit(type: SliceEvent['type'], payload: Omit<Partial<SliceEvent>, 'id' | 'type'> = {}): void {
     state.eventSequence = (state.eventSequence ?? 0) + 1;
     if (silent) return;
@@ -156,26 +143,18 @@ export function createEngine(initial: SliceState = createInitialState(), observe
     if (events.length > 512) events.shift();
   }
   const findCounter = (id: CounterId): Counter | undefined => state.counters.find(counter => counter.id === id);
-  const lane = (counterId: CounterId): Customer[] => state.customers.filter(customer => customer.counterId === counterId && customer.phase !== 'leaving').sort((a, b) => a.id - b.id);
+  const lane = (counterId: CounterId): Customer[] => {
+    const x = findCounter(counterId)!.x;
+    const priority = (customer: Customer): number => ['serving', 'receiving'].includes(customer.phase) ? -1 : customer.x === x ? 0 : 1;
+    // Accepted pre-grid archives can contain a younger guest already ahead of an
+    // older arrival. Drain in physical order so neither must walk through the
+    // other to honor an obsolete ID queue. Existing paid/brewing orders stay first.
+    return state.customers.filter(customer => customer.counterId === counterId && customer.phase !== 'leaving')
+      .sort((a, b) => priority(a) - priority(b) || (priority(a) === 0 ? a.z - b.z : 0) || a.id - b.id);
+  };
   function arrive(): boolean {
-    if (editing !== 'idle') return false;
-    if (activeLayout()) return layoutSimulation.arrive();
-    if (state.customers.length >= 32) return false;
-    const counts = state.counters.map(counter => lane(counter.id).length);
-    const smallest = Math.min(...counts);
-    if (smallest >= QUEUE_CAPACITY) return false;
-    const candidates = state.counters.filter((_, i) => counts[i] === smallest);
-    const counter = candidates[(state.nextCustomerId - 1) % candidates.length];
-    // Batch invitations form a short physical line at the entrance instead of
-    // spawning three bodies on the very same point.
-    const entryLine = state.customers.filter(customer => customer.phase === 'entering' && !customer.finishLegacyRoute && customer.routeLeg === 0);
-    const entryX = Math.min(WORLD.entryX, ...entryLine.map(customer => customer.x - WORLD.queueGap));
-    if (entryX < WORLD.entryX - QUEUE_CAPACITY * WORLD.queueGap) return false;
-    const id = state.nextCustomerId++;
-    state.customers.push({ id, x: entryX, z: WORLD.entryZ, phase: 'entering', counterId: counter.id, timer: 0, routeLeg: 0, hasCup: false, skin: (id * 37 + 11) % 6 });
-    traceCustomer('spawn', state.customers[state.customers.length - 1]);
-    emit('arrived', { counterId: counter.id });
-    return true;
+    if (editing !== 'idle' || state.paused || state.customerRouteVersion !== CUSTOMER_ROUTE_VERSION) return false;
+    return layoutSimulation.arrive();
   }
   // The parallel return lane crosses only the three short inbound feeders and
   // the two local departure merges. A customer already inside a junction clears
@@ -278,7 +257,7 @@ export function createEngine(initial: SliceState = createInitialState(), observe
           customer.timer = roundTime(customer.timer + STEP_SECONDS);
           if (customer.timer >= .7 && counter.brew?.customerId === customer.id) {
             const price = counter.brew.price;
-            counter.pendingCash += price; state.totalEarned += price; state.totalServed++;
+            state.wallet += price; state.totalEarned += price; state.totalServed++;
             counter.brew = null; customer.phase = 'leaving'; customer.timer = 0; customer.routeLeg = 0;
             traceCustomer('phase', customer);
             emit('served', { counterId: counter.id, amount: price });
@@ -325,68 +304,21 @@ export function createEngine(initial: SliceState = createInitialState(), observe
       }
     }
   }
-  function advanceManager(): void {
-    const manager = state.manager;
-    manager.z = WORLD.backZ;
-    const targetX = manager.target === 2 ? WORLD.vaultX : state.counters[manager.target].x;
-    if (manager.phase === 'moving') {
-      const difference = targetX - manager.x, step = managerSpeed(manager.level) * STEP_SECONDS;
-      if (Math.abs(difference) <= step + 1e-9) {
-        manager.x = targetX; manager.timer = 0;
-        manager.phase = manager.target === 2 ? 'depositing' : 'collecting';
-        traceManager('phase');
-      } else {
-        const previousX = manager.x;
-        manager.x += Math.sign(difference) * step;
-        if (observeRoute && !silent) for (const [index, counter] of state.counters.entries()) {
-          if (index !== manager.target && (previousX < counter.x && manager.x >= counter.x || previousX > counter.x && manager.x <= counter.x))
-            traceManager('passage', { counterId: counter.id });
-        }
-      }
-      return;
-    }
-    manager.timer = roundTime(manager.timer + STEP_SECONDS);
-    if (manager.timer < (manager.phase === 'depositing' ? .6 : .45)) return;
-    if (manager.phase === 'collecting') {
-      const counter = state.counters[manager.target];
-      // Reserve half a bag for each counter, preventing high-level A from starving B.
-      const amount = Math.min(counter.pendingCash, Math.floor(managerCapacity(manager.level) / 2), managerCapacity(manager.level) - manager.carrying);
-      if (amount > 0) {
-        const pendingBefore = counter.pendingCash, carryingBefore = manager.carrying;
-        counter.pendingCash -= amount; manager.carrying += amount; emit('collected', { counterId: counter.id, amount });
-        traceManager('collected', { counterId: counter.id, amount, pendingBefore, pendingAfter: counter.pendingCash,
-          carryingBefore, carryingAfter: manager.carrying, walletBefore: state.wallet, walletAfter: state.wallet });
-      }
-      // Targets keep their counter identity. Current sweeps visit the nearest
-      // counter B first; migrated sweeps finish only their remaining old stops.
-      manager.target = manager.finishLegacySweep ? (manager.target === 0 ? 1 : 2) : (manager.target === 1 ? 0 : 2);
-    } else {
-      const amount = manager.carrying;
-      if (amount > 0) {
-        const walletBefore = state.wallet;
-        state.wallet += amount; manager.carrying = 0; emit('deposited', { amount });
-        traceManager('deposited', { amount, carryingBefore: amount, carryingAfter: 0, walletBefore, walletAfter: state.wallet });
-      }
-      delete manager.finishLegacySweep;
-      manager.target = 1;
-    }
-    manager.phase = 'moving'; manager.timer = 0;
-    traceManager('phase');
-  }
   function tick(): void {
     state.elapsed = Math.round((state.elapsed + STEP_SECONDS) / STEP_SECONDS) * STEP_SECONDS;
     state.elapsed = roundTime(state.elapsed);
     state.inviteCooldown = Math.max(0, roundTime(state.inviteCooldown - STEP_SECONDS));
-    state.arrivalTimer = roundTime(state.arrivalTimer + STEP_SECONDS);
+    if (!state.paused) state.arrivalTimer = roundTime(state.arrivalTimer + STEP_SECONDS);
     // Deterministic small cadence variation; no wall clock or Math.random.
     const interval = 2.4 + (state.nextCustomerId % 3) * .15;
-    if (state.arrivalTimer + 1e-9 >= interval) { state.arrivalTimer = roundTime(state.arrivalTimer - interval); arrive(); }
-    if (activeLayout()) { layoutSimulation.advanceCustomers(); advanceBrews(); layoutSimulation.advanceManager(); }
-    else { advanceCustomers(); advanceBrews(); advanceManager(); }
-    if (editing === 'draining' && !state.customers.length && state.counters.every(counterDrained) && state.manager.carrying === 0 && state.manager.x === (activeLayout() ? GRID.vault.x : WORLD.vaultX) && state.manager.z === (activeLayout() ? GRID.vault.z : WORLD.backZ)) editing = 'ready';
+    if (!state.paused && state.arrivalTimer + 1e-9 >= interval) { state.arrivalTimer = roundTime(state.arrivalTimer - interval); arrive(); }
+    if (activeLayout()) { layoutSimulation.advanceCustomers(); advanceBrews(); layoutSimulation.advanceMovement(); }
+    else { advanceCustomers(); advanceBrews(); }
+    if (state.customerRouteVersion !== CUSTOMER_ROUTE_VERSION) migrateLayoutDoors(state);
+    if (editing === 'draining' && !state.customers.length && state.counters.every(counterDrained)) editing = 'ready';
   }
   function advance(seconds: number, beforeLastStep?: (state: Readonly<SliceState>) => void): void {
-    if (editing === 'ready' || state.paused && editing !== 'draining' || !Number.isFinite(seconds) || seconds <= 0) return;
+    if (editing === 'ready' || state.paused && !state.customers.length && state.counters.every(counterDrained) || !Number.isFinite(seconds) || seconds <= 0) return;
     // Keep fractional frames instead of rounding each incoming delta. Rounding
     // 1/60 per call, for example, would drift relative to one whole second.
     const total = (state.stepCarry ?? 0) + seconds;
@@ -395,9 +327,9 @@ export function createEngine(initial: SliceState = createInitialState(), observe
     state.stepCarry = Math.abs(carry) < 1e-12 ? 0 : Math.max(0, carry);
     for (let i = 0; i < steps; i++) {
       // Optional read-only presentation seam; offline/core callers pay no snapshot cost.
-      if (i === steps - 1) beforeLastStep?.(state);
+      if (i === steps - 1 || state.paused) beforeLastStep?.(state);
       tick();
-      if ((editing as string) === 'ready') break;
+      if ((editing as string) === 'ready' || state.paused && !state.customers.length && state.counters.every(counterDrained)) { state.stepCarry = 0; break; }
     }
   }
   function quote(id: CounterId): CounterQuote {
@@ -423,23 +355,21 @@ export function createEngine(initial: SliceState = createInitialState(), observe
       beforeSeconds: coffeeBrewSeconds(recipe, level), afterSeconds: coffeeBrewSeconds(recipe, nextLevel)
     };
   }
-  function managerQuote() {
-    const capped = state.manager.level >= MAX_LEVEL;
-    return { cost: capped ? 0 : Math.round(1000 * 1.16 ** (state.manager.level - 1)), speed: managerSpeed(state.manager.level), nextSpeed: managerSpeed(Math.min(MAX_LEVEL, state.manager.level + 1)), capped };
-  }
+  function managerQuote() { return { cost: 0, speed: 0, nextSpeed: 0, capped: true }; }
   return {
     get state() { return state; }, advance,
     beginLayoutEdit() {
-      if (editing !== 'idle') return false;
+      if (editing !== 'idle' || !state.paused) return false;
       editing = 'draining';
-      if (!state.customers.length && state.counters.every(counterDrained) && !state.manager.carrying && state.manager.x === (activeLayout() ? GRID.vault.x : WORLD.vaultX) && state.manager.z === (activeLayout() ? GRID.vault.z : WORLD.backZ)) editing = 'ready';
+      if (!state.customers.length && state.counters.every(counterDrained)) editing = 'ready';
       return true;
     },
     layoutEditStatus() { return editing; },
     createLayoutDraft() { return editing === 'ready' ? copyLayout(state) : null; },
     cancelLayoutEdit() { editing = 'idle'; },
     commitLayout(draft) {
-      if (editing !== 'ready') return { ok: false, message: '请等顾客离店、经理送回现金后再装修。' };
+      if (editing !== 'ready') return { ok: false, message: '请先暂停营业，等顾客离店后再装修。' };
+      if (draft.version !== 3) return { ok: false, message: '请使用当前装修布局。' };
       const checked = validateLayout(draft); if (!checked.ok) return checked;
       const offer = layoutCost(state, draft); if (!offer.ok) return offer;
       const next = clone(draft); next.active = true; next.trafficTurn = 'customer';
@@ -450,12 +380,11 @@ export function createEngine(initial: SliceState = createInitialState(), observe
       }
       state.counters.sort((a, b) => a.id.localeCompare(b.id));
       state.wallet -= offer.cost!; state.spend += offer.cost!; state.layout = next;
-      // Drain-to-vault preserves the manager's exact physical location. The first
-      // dynamic leg walks the 36cm to its grid anchor rather than teleporting.
+      // Historical manager progression remains a stationary compatibility record.
       state.manager.target = state.counters.length; state.manager.phase = 'moving'; state.manager.timer = 0;
       delete state.manager.nav; delete state.manager.finishLegacySweep;
       editing = 'idle'; emit('layout-changed', { amount: offer.cost });
-      return { ok: true, message: '装修已保存，小店继续营业。', cost: offer.cost };
+      return { ok: true, message: '装修已保存，点击恢复营业后再接待新顾客。', cost: offer.cost };
     },
     invite() {
       if (editing !== 'idle' || state.paused || state.inviteCooldown > 0) return false;
@@ -478,13 +407,7 @@ export function createEngine(initial: SliceState = createInitialState(), observe
       state.wallet -= offer.cost; state.spend += offer.cost; state.coffeeLevels[recipe]++;
       emit('coffee-upgraded', { recipeId: recipe, amount: offer.cost }); return true;
     },
-    upgradeManager() {
-      if (editing !== 'idle') return false;
-      const offer = managerQuote();
-      if (offer.capped || state.wallet < offer.cost) return false;
-      state.wallet -= offer.cost; state.spend += offer.cost; state.manager.level++;
-      emit('upgraded', { amount: offer.cost }); return true;
-    },
+    upgradeManager() { return false; },
     setRecipe(id, recipe) {
       if (editing !== 'idle') return false;
       const counter = findCounter(id);

@@ -1,5 +1,5 @@
-import { createEngine, createInitialState, CUSTOMER_ROUTE_VERSION, ECONOMY_VERSION, INITIAL_WALLET, INVITE_COOLDOWN_SECONDS, MANAGER_ROUTE_VERSION, MAX_ELAPSED_SECONDS, MAX_LEVEL, migrateCoffeeEconomy, migrateCustomerRoutes, migrateManagerRoute, QUEUE_CAPACITY, STEP_SECONDS, WORLD } from './engine';
-import { initialLayout, LAYOUT_VERSION, normalizeLayout, validateLayoutState } from './layout';
+import { createEngine, createInitialState, CUSTOMER_ROUTE_VERSION, ECONOMY_VERSION, INITIAL_WALLET, INVITE_COOLDOWN_SECONDS, MANAGER_ROUTE_VERSION, MAX_ELAPSED_SECONDS, MAX_LEVEL, migrateCoffeeEconomy, migrateCustomerRoutes, QUEUE_CAPACITY, STEP_SECONDS, WORLD } from './engine';
+import { initialLayout, LAYOUT_VERSION, normalizeLayout, validateLayoutState, migrateLayoutDoors } from './layout';
 import type { OfflineJob, OfflinePolicyVersion, OfflineResult, SliceEngine, SliceState } from './types';
 export type { OfflineResult } from './types';
 
@@ -27,14 +27,19 @@ function tag(): string { return globalThis.crypto?.randomUUID?.() ?? `local-${Da
 /** Fail closed: do not silently repair corrupted assets, enums or relationships. */
 export function validateState(value: unknown): { ok: true; state: SliceState } | { ok: false; message: string } {
   const fail = (message: string): { ok: false; message: string } => ({ ok: false, message });
-  if (!object(value) || value.schemaVersion !== 1 || value.economyVersion !== 1 && value.economyVersion !== 2 && value.economyVersion !== ECONOMY_VERSION) return fail('存档版本不受支持。');
+  if (!object(value) || value.schemaVersion !== 1 || value.economyVersion !== 1 && value.economyVersion !== 2 && value.economyVersion !== 3 && value.economyVersion !== ECONOMY_VERSION) return fail('存档版本不受支持。');
   if (value.managerRouteVersion !== undefined && value.managerRouteVersion !== 1 && value.managerRouteVersion !== MANAGER_ROUTE_VERSION) return fail('经理路线版本不受支持。');
-  if (value.customerRouteVersion !== undefined && value.customerRouteVersion !== 1 && value.customerRouteVersion !== 2 && value.customerRouteVersion !== CUSTOMER_ROUTE_VERSION) return fail('顾客路线版本不受支持。');
+  if (value.customerRouteVersion !== undefined && value.customerRouteVersion !== 1 && value.customerRouteVersion !== 2 && value.customerRouteVersion !== 3 && value.customerRouteVersion !== CUSTOMER_ROUTE_VERSION) return fail('顾客路线版本不受支持。');
   if (value.layout !== undefined && !object(value.layout)) return fail('家具布局格式无效。');
-  if (value.economyVersion === ECONOMY_VERSION && !object(value.layout)) return fail('当前存档缺少家具布局。');
-  if (value.economyVersion !== ECONOMY_VERSION && object(value.layout) && value.layout.active === true) return fail('旧经济版本不能包含已装修布局。');
+  if ((value.economyVersion as number) >= 3 && !object(value.layout)) return fail('当前存档缺少家具布局。');
+  if ((value.economyVersion as number) < 3 && object(value.layout) && value.layout.active === true) return fail('旧经济版本不能包含已装修布局。');
+  const retiredManager = value.economyVersion === ECONOMY_VERSION;
+  if (value.doorMigrationNotice !== undefined && (!retiredManager || value.doorMigrationNotice !== true)) return fail('门口迁移提示无效。');
+  if (object(value.layout) && ((value.economyVersion as number) < ECONOMY_VERSION && value.layout.version === LAYOUT_VERSION || value.layout.version === LAYOUT_VERSION && (!value.layout.active || value.customerRouteVersion !== CUSTOMER_ROUTE_VERSION))) return fail('经济、家具与顾客路线版本不匹配。');
+  if (retiredManager && object(value.layout) && value.layout.version !== LAYOUT_VERSION && (value.customerRouteVersion !== 3 || !Array.isArray(value.customers) || !value.customers.length)) return fail('旧路线只能用于尚未离店的迁移顾客。');
+  if (retiredManager && object(value.layout) && Array.isArray(value.layout.coffeeSigns) && value.layout.coffeeSigns.some(sign => !object(sign) || sign.stored !== true)) return fail('旧咖啡墙牌必须收起。');
   const activeLayout = object(value.layout) && value.layout.active === true;
-  if (activeLayout && (value.managerRouteVersion !== MANAGER_ROUTE_VERSION || value.customerRouteVersion !== CUSTOMER_ROUTE_VERSION)) return fail('家具布局路线版本不匹配。');
+  if (activeLayout && (value.managerRouteVersion !== MANAGER_ROUTE_VERSION || value.customerRouteVersion !== ((value.layout as Record<string, unknown>).version === LAYOUT_VERSION ? CUSTOMER_ROUTE_VERSION : 3))) return fail('家具布局路线版本不匹配。');
   const legacyCustomerRoute = value.customerRouteVersion === undefined || value.customerRouteVersion === 1;
   const localExitRoute = value.customerRouteVersion === 2;
   const legacyRoute = value.managerRouteVersion === undefined || value.managerRouteVersion === 1;
@@ -50,7 +55,9 @@ export function validateState(value: unknown): { ok: true; state: SliceState } |
   if (!object(value.manager)) return fail('经理状态缺失。');
   const manager = value.manager;
   if (!number(manager.x, activeLayout ? -100 : legacyRoute ? -8 : 0, activeLayout ? 100 : legacyRoute ? 5 : WORLD.vaultX) || (activeLayout ? !number(manager.z, -100, 100) : manager.z !== WORLD.backZ) || !integer(manager.carrying) || !integer(manager.level, 1, MAX_LEVEL) || !integer(manager.target, 0, activeLayout ? value.counters.length : 2) || !number(manager.timer, 0, .6) || !['moving', 'collecting', 'depositing'].includes(String(manager.phase))) return fail('经理坐标、等级或动作无效。');
-  if (!activeLayout) {
+  if (retiredManager && value.managerRouteVersion !== MANAGER_ROUTE_VERSION) return fail('经理兼容记录版本无效。');
+  if (retiredManager && (manager.carrying !== 0 || manager.x !== WORLD.vaultX || manager.z !== WORLD.backZ || manager.phase !== 'moving' || manager.target !== value.counters.length || manager.timer !== 0 || Object.keys(manager).sort().join() !== 'carrying,level,phase,target,timer,x,z')) return fail('经理兼容记录不能继续收款或移动。');
+  if (!activeLayout && !retiredManager) {
     if (manager.finishLegacySweep !== undefined && (legacyRoute || manager.finishLegacySweep !== true)) return fail('经理迁移路线标识无效。');
     if (manager.phase === 'collecting' && manager.target === 2 || manager.phase === 'depositing' && manager.target !== 2) return fail('经理路线关系无效。');
     if (!legacyRoute) {
@@ -106,6 +113,7 @@ export function validateState(value: unknown): { ok: true; state: SliceState } |
   for (let i = 0; i < counters.length; i++) {
     const entry = counters[i];
     if (!object(entry) || entry.id !== counterIds[i] || (activeLayout ? !number(entry.x, -100, 100) : entry.x !== (i === 0 ? 0 : 5)) || !integer(entry.level, 1, MAX_LEVEL) || !recipe(entry.recipe) || !integer(entry.pendingCash) || !integer(entry.brewed)) return fail('柜台坐标、配方或资产无效。');
+    if (retiredManager && entry.pendingCash !== 0) return fail('当前柜台收款必须直接到账。');
     pending += entry.pendingCash; brewed += entry.brewed;
     const active = value.customers.filter(customer => object(customer) && customer.counterId === entry.id && !['leaving', 'seeking-seat', 'dining'].includes(String(customer.phase)));
     if (active.length > QUEUE_CAPACITY) return fail('队列超出容量。');
@@ -121,20 +129,19 @@ export function validateState(value: unknown): { ok: true; state: SliceState } |
   if (brewed !== (value.totalServed as number) + receiving) return fail('出杯计数不守恒。');
   if ((value.wallet as number) + (value.spend as number) + manager.carrying + pending !== INITIAL_WALLET + (value.totalEarned as number)) return fail('资金账本不守恒。');
   const state = clone(value) as unknown as SliceState;
-  if (state.layout === undefined && value.economyVersion !== ECONOMY_VERSION) state.layout = initialLayout();
-  try { migrateCoffeeEconomy(state); } catch { return fail('咖啡等级或经济版本无效。'); }
+  if (state.layout === undefined && (value.economyVersion === 1 || value.economyVersion === 2)) state.layout = { ...initialLayout(), version: 2, active: false, coffeeSigns: initialLayout().coffeeSigns.map(sign => ({ ...sign, stored: false })) };
   state.stepCarry ??= 0; state.eventSequence ??= 0; state.offlineClaimIds ??= state.lastOfflineClaimId ? [state.lastOfflineClaimId] : [];
   try {
     state.layout = normalizeLayout(state.layout);
+    // Check legacy layout/nav/manager relationships before retiring that actor.
     const layoutError = validateLayoutState(state);
     if (layoutError) return fail(layoutError);
-    migrateManagerRoute(state);
+    migrateCoffeeEconomy(state);
     migrateCustomerRoutes(state);
-  } catch { return fail('家具布局或路线状态无效。'); }
-  // An accepted old archive must also be valid after its one-time migration.
-  // Impossible old stationary positions fail closed instead of becoming an
-  // un-saveable live game; do not teleport guests to silently repair it.
-  if (legacyCustomerRoute || localExitRoute) return validateState(state);
+    if (state.customerRouteVersion !== CUSTOMER_ROUTE_VERSION) migrateLayoutDoors(state);
+  } catch { return fail('咖啡等级、家具布局或路线状态无效。'); }
+  // A one-time migrated archive must itself be durable in the current format.
+  if (!retiredManager || legacyCustomerRoute || localExitRoute) return validateState(state);
   return { ok: true, state };
 }
 

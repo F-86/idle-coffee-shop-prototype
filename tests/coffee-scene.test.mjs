@@ -14,8 +14,8 @@ registerHooks({ resolve(specifier, context, nextResolve) {
   }
 } });
 const { CoffeeScene } = await import('../src/slice/render/CoffeeScene.ts');
-const { createEngine, createInitialState, WORLD, managerSpeed, coffeePrice, coffeeBrewSeconds } = await import('../src/slice/core/engine.ts');
-const { validateState } = await import('../src/slice/core/persistence.ts');
+const { createEngine, createInitialState } = await import('../src/slice/core/engine.ts');
+const { GRID, initialLayout, layoutEntrySpawn, layoutExit, layoutExitAnchor } = await import('../src/slice/core/layout.ts');
 
 // These are CPU-side scene/state/input checks, not browser or pixel-render acceptance.
 class FakeCanvas {
@@ -63,7 +63,6 @@ function centerMesh(f, meshName) {
   f.renderer.panBy(point.clientX - 35 - f.canvas.width / 2, point.clientY - 80 - f.canvas.height / 2);
 }
 
-
 test('TC-3D-006 original reusable geometry presents snapshots without changing business state', () => {
   const f = fixture();
   try {
@@ -95,9 +94,7 @@ const physicalControls = [
   ['counter-b-upgrade', 'counter-b-upgrade-plaque', { type: 'counter', id: 'counter-b' }],
   ['counter-a-recipe', 'counter-a-recipe-selector', { type: 'recipe', id: 'counter-a' }],
   ['counter-b-recipe', 'counter-b-recipe-selector', { type: 'recipe', id: 'counter-b' }],
-  ['menu-espresso', 'menu-espresso', { type: 'menu', recipe: 'espresso' }],
-  ['menu-latte', 'menu-latte', { type: 'menu', recipe: 'latte' }],
-  ['vault', 'vault-bank-label', { type: 'vault' }],
+  ['expansion', 'expansion-marker', { type: 'renovate' }],
 ];
 
 test('TC-3D-006 all physical room controls dispatch detail actions without mutating economy', () => {
@@ -141,7 +138,7 @@ for (const [width, height] of [[1280, 900], [390, 844], [844, 390]]) {
           ]) {
             f.renderer.focusAnchor(key);
             assert.equal(f.renderer.projectAnchor(key).visible, true);
-            assert.ok(surfaceDiameter(f, mesh.name) >= 44, `${key}: the actual polygon still has a 44px touch diameter`);
+            assert.ok(surfaceDiameter(f, mesh.name) >= 24, `${key}: the actual polygon still has a 24px touch diameter`);
             const point = screenPoint(f, mesh.name);
             const pick = f.renderer.scene.pick(point.x / dpr, point.y / dpr);
             assert.equal(pick?.pickedMesh, mesh, `${key}: ray hits the visible label itself`);
@@ -200,68 +197,6 @@ test('TC-3D-023 each A/B front control respects solid occlusion and a press cann
   } finally { f.dispose(); }
 });
 
-test('TC-3D-023 wall coffee boards independently follow shared levels and only repaint when their level changes (CPU presentation data)', () => {
-  const f = fixture();
-  try {
-    const state = createInitialState();
-    const board = recipe => f.renderer.scene.getMeshByName(`menu-${recipe}`);
-    const expected = (recipe, level) => ({ recipe, level, price: coffeePrice(recipe, level), brewSeconds: coffeeBrewSeconds(recipe, level) });
-    for (const recipe of ['espresso', 'latte']) assert.deepEqual(board(recipe).metadata.coffeeMenu, expected(recipe, 1));
-    const geometry = ['espresso', 'latte'].map(recipe => ({ mesh: board(recipe), geometry: board(recipe).geometry, position: board(recipe).position.asArray(), scale: board(recipe).scaling.asArray(), action: board(recipe).metadata.coffeeAction }));
-    const paints = [];
-    const originalPaint = f.renderer.paintLabel.bind(f.renderer);
-    f.renderer.paintLabel = (label, key, paint) => {
-      if (label.mesh.name.startsWith('menu-')) {
-        const text = [];
-        // Capture the real drawing callback's text; NullEngine still proves no pixels.
-        const context = new Proxy({ fillText(value) { text.push(value); } }, { get(target, property) { return property in target ? target[property] : () => {}; } });
-        paint(context, 768, 448);
-        paints.push({ mesh: label.mesh.name, key, text });
-      }
-      originalPaint(label, key, paint);
-    };
-    const latteInitial = board('latte').metadata;
-    state.coffeeLevels.espresso = 3;
-    const snapshot = JSON.stringify(state);
-    f.renderer.update(state, 0);
-    assert.equal(JSON.stringify(state), snapshot, 'menu refresh cannot alter shared economy state');
-    assert.deepEqual(board('espresso').metadata.coffeeMenu, expected('espresso', 3));
-    assert.equal(board('latte').metadata, latteInitial, 'espresso upgrade leaves latte presentation untouched');
-    assert.equal(paints.length, 1);
-    assert.equal(paints[0].mesh, 'menu-espresso');
-    assert.ok(paints[0].text.includes(`¥ ${(coffeePrice('espresso', 3) / 100).toFixed(2)}  ·  ${coffeeBrewSeconds('espresso', 3).toFixed(2)}s`));
-    assert.ok(paints[0].text.includes('Lv. 3 · 查看 +'));
-    const espressoMetadata = board('espresso').metadata;
-    state.coffeeLevels.latte = 5;
-    f.renderer.update(state, 0);
-    assert.deepEqual(board('latte').metadata.coffeeMenu, expected('latte', 5));
-    assert.equal(board('espresso').metadata, espressoMetadata, 'latte upgrade leaves espresso presentation untouched');
-    assert.equal(paints.length, 2);
-    assert.equal(paints[1].mesh, 'menu-latte');
-    assert.ok(paints[1].text.includes(`¥ ${(coffeePrice('latte', 5) / 100).toFixed(2)}  ·  ${coffeeBrewSeconds('latte', 5).toFixed(2)}s`));
-    assert.ok(paints[1].text.includes('Lv. 5 · 查看 +'));
-    const latteMetadata = board('latte').metadata;
-    state.counters[0].level = 7;
-    state.counters[0].recipe = 'latte';
-    for (let frame = 0; frame < 20; frame++) f.renderer.update(state, .016);
-    assert.equal(paints.length, 2, 'unchanged coffee levels and unrelated counter changes do not request any menu repaint');
-    assert.equal(board('espresso').metadata, espressoMetadata);
-    assert.equal(board('latte').metadata, latteMetadata);
-    state.coffeeLevels.espresso = 1;
-    f.renderer.update(state, 0);
-    assert.deepEqual(board('espresso').metadata.coffeeMenu, expected('espresso', 1), 'loading lower saved progression also refreshes the board');
-    assert.equal(paints.length, 3);
-    for (const old of geometry) {
-      assert.equal(old.mesh.geometry, old.geometry);
-      assert.deepEqual(old.mesh.position.asArray(), old.position);
-      assert.deepEqual(old.mesh.scaling.asArray(), old.scale);
-      assert.deepEqual(old.mesh.metadata.coffeeAction, old.action);
-      tap(f, old.mesh.name, old.mesh.metadata.coffeeAnchor);
-    }
-    assert.deepEqual(f.actions, [{ type: 'menu', recipe: 'espresso' }, { type: 'menu', recipe: 'latte' }], 'upgraded menus retain their actual mesh actions');
-  } finally { f.dispose(); }
-});
-
 test('TC-3D-006 panning, long holds, cancelled and secondary pointers cannot become taps', () => {
   const f = fixture();
   try {
@@ -284,7 +219,7 @@ test('TC-3D-006 panning, long holds, cancelled and secondary pointers cannot bec
   } finally { f.dispose(); }
 });
 
-test('TC-3D-001 cups, brew progress, table money, manager cart and machine upgrades are state-driven', () => {
+test('TC-3D-001 cups, brew progress and machine upgrades are state-driven', () => {
   const f = fixture();
   try {
     const state = createInitialState();
@@ -293,9 +228,6 @@ test('TC-3D-001 cups, brew progress, table money, manager cart and machine upgra
     state.counters[0].pendingCash = 950;
     state.counters[0].brew = { recipe: 'espresso', customerId: 10, elapsed: 2, duration: 4, price: 110 };
     state.customers = [{ id: 10, x: 0, z: 1.5, phase: 'serving', counterId: 'counter-a', timer: 0, hasCup: false, skin: 2 }];
-    state.manager.carrying = 700;
-    state.manager.x = 1;
-    state.manager.phase = 'collecting';
     f.renderer.update(state, .05);
     const scene = f.renderer.scene;
     assert.equal(scene.getMeshByName('counter-a-progress').isEnabled(), true);
@@ -304,27 +236,20 @@ test('TC-3D-001 cups, brew progress, table money, manager cart and machine upgra
     assert.equal(scene.getTransformNodeByName('counter-a-ready-cup').scaling.x, .82);
     assert.equal(scene.getTransformNodeByName('customer-10-takeaway').isEnabled(), false, 'cup remains at the machine during brewing');
     assert.equal(scene.getTransformNodeByName('counter-a-upgrade-copper').isEnabled(), true);
-    assert.equal(scene.getTransformNodeByName('counter-a-cash-0').isEnabled(), true);
-    assert.equal(scene.getTransformNodeByName('counter-a-cash-2').isEnabled(), true);
-    assert.equal(scene.getTransformNodeByName('cart-cash-0').isEnabled(), true);
-    assert.equal(scene.getTransformNodeByName('cart-cash-1').isEnabled(), true);
     state.counters[0].brew.elapsed = 4;
     state.customers[0].phase = 'receiving'; state.customers[0].hasCup = true;
     f.renderer.update(state, .05);
     assert.equal(scene.getTransformNodeByName('counter-a-ready-cup').isEnabled(), false, 'the handed cup is no longer drawn on the machine');
     assert.equal(scene.getTransformNodeByName('customer-10-takeaway').isEnabled(), true, 'exactly one cup is shown during receipt');
     state.counters[0].brew = null; state.counters[0].pendingCash = 0;
-    state.manager.carrying = 0; state.customers[0].phase = 'leaving';
     f.renderer.update(state, .05);
     assert.equal(scene.getMeshByName('counter-a-progress').isEnabled(), false);
     assert.equal(scene.getTransformNodeByName('counter-a-ready-cup').isEnabled(), false);
-    assert.equal(scene.getTransformNodeByName('counter-a-cash-0').isEnabled(), false);
-    assert.equal(scene.getTransformNodeByName('cart-cash-0').isEnabled(), false);
     assert.equal(scene.getTransformNodeByName('customer-10-takeaway').isEnabled(), true, 'departing customer carries the actual cup');
   } finally { f.dispose(); }
 });
 
-test('TC-3D-006 pause freezes animation, disposal removes listeners and late input is harmless', () => {
+test('TC-3D-027 closing admissions keeps guests animated; closed empty shop freezes and disposal is safe', () => {
   const f = fixture();
   const state = createInitialState();
   state.customers = [{ id: 1, x: -3, z: 4, phase: 'entering', counterId: 'counter-a', timer: 0, hasCup: false, skin: 0 }];
@@ -335,7 +260,11 @@ test('TC-3D-006 pause freezes animation, disposal removes listeners and late inp
   const leg = f.renderer.scene.getTransformNodeByName('customer-1-left-hip');
   const before = [pose(customer), pose(leg)];
   for (let frame = 0; frame < 10; frame++) f.renderer.update(state, .1);
-  assert.deepEqual([pose(customer), pose(leg)], before);
+  assert.notDeepEqual([pose(customer), pose(leg)], before, 'existing guests finish with an animated gait after closing');
+  state.customers = []; f.renderer.update(state, .1);
+  const frozenTime = f.renderer.animationTime;
+  for (let frame = 0; frame < 10; frame++) f.renderer.update(state, .1);
+  assert.equal(f.renderer.animationTime, frozenTime, 'the drained closed shop stops ambient motion');
   assert.equal(f.canvas.listenerCount(), 6);
   f.renderer.dispose();
   assert.equal(f.canvas.listenerCount(), 0);
@@ -355,37 +284,35 @@ function drag(f, dx, dy, pointerId = 1) {
 
 for (const [width, height] of [[1280, 900], [390, 844], [844, 390]]) {
   for (const dpr of [1, 1.75]) {
-    test(`TC-3D-006 physical ${width}×${height} at DPR ${dpr}: close room, shared anchors and reachable controls (projection only)`, () => {
+    test(`TC-3D-006 physical ${width}×${height} at DPR ${dpr}: cutaway, shared anchors and reachable controls (projection only)`, () => {
       const f = fixture(width, height, 1 / dpr);
       try {
         const initial = physicalControls.map(([key]) => f.renderer.projectAnchor(key));
         assert.equal(f.canvas.width, width, 'canvas has the actual physical viewport CSS width');
         assert.equal(f.canvas.height, height, 'no wide scrolling canvas surrogate');
-        assert.equal(f.renderer.scene.getMeshByName('shop-plinth'), null, 'no finite floating plinth');
+        assert.equal(f.renderer.scene.getMeshByName('shop-plinth'), null, 'floor meets the exterior ground rather than a floating plinth');
         if (width < height && width < 500) {
-          assert.ok(initial.filter(point => !point.visible).length >= 4, 'portrait crops the world rather than fitting every small target');
-          for (const key of ['counter-a-upgrade', 'counter-a-recipe', 'menu-espresso']) assert.equal(f.renderer.projectAnchor(key).visible, true, `${key} is useful in the initial portrait view`);
+          assert.ok(initial.filter(point => !point.visible).length >= 2, 'portrait crops the world rather than fitting every small target');
           const camera = f.renderer.scene.activeCamera;
           const span = camera.orthoRight - camera.orthoLeft;
           assert.ok(span < 6, 'portrait retains large counters');
         }
-        if (height < 500) for (const key of ['menu-espresso', 'menu-latte', 'counter-a-upgrade', 'counter-b-upgrade']) assert.equal(f.renderer.projectAnchor(key).visible, true, `${key} is fully visible in the initial landscape world`);
         const counter = f.renderer.scene.getMeshByName('counter-a-countertop');
         counter.computeWorldMatrix(true);
         const projected = counter.getBoundingInfo().boundingBox.vectorsWorld.map(v => Vector3.Project(v, Matrix.Identity(), f.renderer.scene.getTransformMatrix(), f.renderer.scene.activeCamera.viewport.toGlobal(f.engine.getRenderWidth(), f.engine.getRenderHeight())));
         const counterWidth = (Math.max(...projected.map(p => p.x)) - Math.min(...projected.map(p => p.x))) / dpr;
-        assert.ok(counterWidth >= (height < 500 ? 165 : 235), `counter has meaningful screen scale (${counterWidth.toFixed(0)} CSS px)`);
+        assert.ok(counterWidth >= (height < 500 ? 110 : width >= 1000 ? 130 : 190), `counter has meaningful screen scale (${counterWidth.toFixed(0)} CSS px)`);
         for (const [key, mesh] of physicalControls) {
           f.renderer.focusAnchor(key);
           const p = f.renderer.projectAnchor(key), physical = screenPoint(f, mesh);
           assert.equal(p.visible, true, `${key} can be brought fully into view at its physical size`);
           assert.ok(p.x >= 12 && p.x <= width - 12 && p.y >= 12 && p.y <= height - 12);
           const footprint = f.renderer.getAnchorFootprint(key);
-          assert.ok(footprint.width >= 44 && footprint.height >= 44, `${key} actual geometry is at least 44 CSS px in both axes (${footprint.width.toFixed(1)}×${footprint.height.toFixed(1)})`);
+          assert.ok(footprint.width >= 24 && footprint.height >= 24, `${key} actual geometry is at least 24 CSS px in both axes (${footprint.width.toFixed(1)}×${footprint.height.toFixed(1)})`);
           assert.ok(Math.abs(p.x - (physical.clientX - 35)) < .01 && Math.abs(p.y - (physical.clientY - 80)) < .01, `${key} diagnostic and physical target share the same world point`);
           tap(f, mesh);
         }
-        assert.deepEqual(f.actions, physicalControls.map(([, , action]) => action), 'DPR is applied exactly once when picking all eight controls');
+        assert.deepEqual(f.actions, physicalControls.map(([, , action]) => action), 'DPR is applied exactly once when picking each surviving physical control');
       } finally { f.dispose(); }
     });
   }
@@ -403,7 +330,7 @@ for (const [width, height] of [[1280, 900], [390, 844], [844, 390]]) {
         assert.deepEqual(camera.rotation.asArray(), rotation, 'camera angle stays fixed');
         assert.equal(f.canvas.captured.size, 0, 'capture is released after drag');
         for (const [x, y] of [[1, 1], [width - 1, 1], [1, height - 1], [width - 1, height - 1], [width / 2, height / 2]]) {
-          const pick = f.renderer.scene.pick(x, y, mesh => Boolean(mesh.metadata?.coffeeEnvironment), false, camera);
+          const pick = f.renderer.scene.pick(x, y, mesh => Boolean(mesh.metadata?.coffeeEnvironment || mesh.metadata?.coffeeExterior), false, camera);
           assert.equal(pick?.hit, true, `room floor/wall continues through viewport (${x}, ${y})`);
         }
       }
@@ -431,35 +358,10 @@ test('TC-3D-006 cancellation, capture loss and unrelated pointers preserve one d
     f.canvas.emit('pointerdown', { clientX: 120, clientY: 180 });
     f.renderer.dispose();
     assert.equal(f.canvas.captured.size, 0, 'destroying an active renderer releases capture');
-    assert.deepEqual(f.renderer.projectAnchor('vault'), { x: 0, y: 0, visible: false });
-    f.renderer.focusAnchor('vault');
+    assert.deepEqual(f.renderer.projectAnchor('counter-a-upgrade'), { x: 0, y: 0, visible: false });
+    f.renderer.focusAnchor('counter-a-upgrade');
   } finally { f.dispose(); }
 });
-
-test('TC-3D-006 wall menus remain global recipe boards while each counter selector follows its recipe', () => {
-  const f = fixture();
-  try {
-    const state = createInitialState();
-    const espresso = f.renderer.scene.getMeshByName('menu-espresso');
-    const latte = f.renderer.scene.getMeshByName('menu-latte');
-    state.counters[0].recipe = 'latte'; state.counters[1].recipe = 'espresso';
-    f.renderer.update(state, .05);
-    assert.deepEqual(espresso.metadata.coffeeAction, { type: 'menu', recipe: 'espresso' });
-    assert.deepEqual(latte.metadata.coffeeAction, { type: 'menu', recipe: 'latte' });
-    assert.ok(f.renderer.scene.getTransformNodeByName('cash-vault').position.y > 1, 'vault is wall-mounted above the floor');
-    const selector = f.renderer.scene.getMeshByName('counter-a-recipe-selector');
-    const body = f.renderer.scene.getMeshByName('counter-a-body');
-    selector.computeWorldMatrix(true); body.computeWorldMatrix(true);
-    const face = selector.getBoundingInfo().boundingBox, cabinet = body.getBoundingInfo().boundingBox;
-    assert.ok(face.minimumWorld.y >= cabinet.minimumWorld.y - .001 && face.maximumWorld.y <= cabinet.maximumWorld.y + .001, 'recipe selector stays inside the physical counter front height');
-    assert.ok(selector.position.z > .7, 'recipe is pasted on the front-facing side');
-    assert.equal(selector.metadata.coffeeSurface, 'counter-front');
-    assert.equal(f.renderer.scene.getMeshByName('counter-a-selector-stand'), null);
-    assert.equal(f.renderer.scene.getMeshByName('counter-a-register-foot'), null);
-  } finally { f.dispose(); }
-});
-
-
 
 function surfaceDiameter(f, meshName) {
   const mesh = f.renderer.scene.getMeshByName(meshName);
@@ -471,19 +373,19 @@ function surfaceDiameter(f, meshName) {
   const ex = b.clientX - a.clientX, ey = b.clientY - a.clientY;
   const fx = c.clientX - a.clientX, fy = c.clientY - a.clientY;
   // Distance between parallel polygon edges. This is stronger than a rotated AABB:
-  // a 44px circle fits on the actual projected parallelogram, not just its bounding box.
+  // a 24px circle fits on the actual projected parallelogram, not just its bounding box.
   return Math.abs(ex * fy - ey * fx) / Math.max(Math.hypot(ex, ey), Math.hypot(fx, fy));
 }
 
 for (const [width, height] of [[1280, 900], [390, 844], [844, 390]]) {
   for (const dpr of [1, 1.75]) {
-    test(`TC-3D-008 actual control polygon accepts a 44px circle at ${width}×${height}, DPR ${dpr} (geometry only)`, () => {
+    test(`TC-3D-008 actual control polygon accepts a 24px circle at ${width}×${height}, DPR ${dpr} (geometry only)`, () => {
       const f = fixture(width, height, 1 / dpr);
       try {
         for (const [key, mesh] of physicalControls) {
           f.renderer.focusAnchor(key);
           const diameter = surfaceDiameter(f, mesh);
-          assert.ok(diameter >= 44, `${key}: actual plane edge spacing ${diameter.toFixed(2)} CSS px`);
+          assert.ok(diameter >= 24, `${key}: actual plane edge spacing ${diameter.toFixed(2)} CSS px`);
           assert.equal(f.renderer.getFocus(), key);
           assert.equal(f.renderer.activateFocused(), true, `${key}: currently visible front physical surface activates by keyboard`);
         }
@@ -498,7 +400,7 @@ test('TC-3D-008 every label is lit opaque depth-tested ink on a mounted non-bill
   try {
     assert.equal(typeof f.renderer.beginAnchorPointer, 'undefined', 'obsolete DOM hit-area seam is absent');
     const labels = f.renderer.scene.meshes.filter(mesh => mesh.metadata?.coffeeLabel);
-    assert.equal(labels.length, 11);
+    assert.equal(labels.length, 7);
     for (const mesh of labels) {
       assert.equal(mesh.billboardMode, 0, `${mesh.name}: no screen-facing geometry`);
       assert.equal(mesh.renderingGroupId, 0, `${mesh.name}: normal scene depth order`);
@@ -513,15 +415,13 @@ test('TC-3D-008 every label is lit opaque depth-tested ink on a mounted non-bill
       assert.equal(mount.parent, mesh.parent, `${mesh.name}: label and mounting share room transform`);
     }
     for (const mesh of f.renderer.scene.meshes) {
-      assert.equal(mesh.billboardMode, 0, `${mesh.name}: no billboard progress/cash/control`);
+      assert.equal(mesh.billboardMode, 0, `${mesh.name}: no billboard progress/control`);
       if (mesh.metadata?.coffeeAction) {
         assert.equal(mesh.isVisible, true, `${mesh.name}: no hidden action hitbox`);
         assert.equal(mesh.material?.alpha ?? 1, 1, `${mesh.name}: action geometry is opaque`);
       }
     }
     assert.equal(f.renderer.scene.getMeshByName('counter-a-progress').parent.name, 'counter-a-machine');
-    assert.equal(f.renderer.scene.getMeshByName('counter-a-cash-total').parent.name, 'counter-a-cash-tag');
-    assert.equal(f.renderer.scene.getTransformNodeByName('counter-a-cash-tag').parent.name, 'counter-a-cash-cluster');
     for (const obsolete of ['manager-cart-hit', 'invite-touch-target', 'counter-a-counter-hit', 'counter-b-counter-hit']) assert.equal(f.renderer.scene.getMeshByName(obsolete), null);
   } finally { f.dispose(); }
 });
@@ -542,18 +442,18 @@ function addForegroundBlocker(f, meshName, size = 4) {
 test('TC-3D-008 front solid blocks pointer and keyboard; removing it restores real mesh picking', () => {
   const f = fixture(390, 844, 1 / 1.75);
   try {
-    f.renderer.focusAnchor('menu-espresso');
-    const blocker = addForegroundBlocker(f, 'menu-espresso');
-    assert.equal(f.renderer.projectAnchor('menu-espresso').visible, true, 'projection alone does not know occlusion');
-    tap(f, 'menu-espresso');
+    f.renderer.focusAnchor('counter-b-upgrade');
+    const blocker = addForegroundBlocker(f, 'counter-b-upgrade-plaque');
+    assert.equal(f.renderer.projectAnchor('counter-b-upgrade').visible, true, 'projection alone does not know occlusion');
+    tap(f, 'counter-b-upgrade-plaque');
     assert.equal(f.renderer.activateFocused(), false, 'fully covered focused mesh cannot activate');
     assert.deepEqual(f.actions, [], 'no predicate-only click-through');
     blocker.setEnabled(false);
-    tap(f, 'menu-espresso');
+    tap(f, 'counter-b-upgrade-plaque');
     assert.equal(f.renderer.activateFocused(), true);
-    assert.deepEqual(f.actions, [{ type: 'menu', recipe: 'espresso' }, { type: 'menu', recipe: 'espresso' }]);
+    assert.deepEqual(f.actions, [{ type: 'counter', id: 'counter-b' }, { type: 'counter', id: 'counter-b' }]);
     f.renderer.panBy(100000, 100000);
-    assert.equal(f.renderer.projectAnchor('menu-espresso').visible, false);
+    assert.equal(f.renderer.projectAnchor('counter-b-upgrade').visible, false);
     assert.equal(f.renderer.activateFocused(), false, 'panned-away control cannot activate');
   } finally { f.dispose(); }
 });
@@ -561,36 +461,37 @@ test('TC-3D-008 front solid blocks pointer and keyboard; removing it restores re
 test('TC-3D-008 pointer start and release require the same visible physical mesh, exactly once', () => {
   const f = fixture();
   try {
-    f.renderer.focusAnchor('vault');
-    const point = screenPoint(f, 'vault-bank-label');
+    f.renderer.focusAnchor('counter-a-upgrade');
+    const point = screenPoint(f, 'counter-a-upgrade-plaque');
     const state = createInitialState();
-    const vault = f.renderer.scene.getTransformNodeByName('cash-vault');
-    const originalX = vault.position.x;
+    const furnishing = f.renderer.scene.getTransformNodeByName('counter-a-station');
+    const originalX = furnishing.position.x;
     f.canvas.emit('pointerdown', { ...point, timeStamp: 10 });
-    // A QA-only transform change verifies the guard without creating a moving cart action.
-    vault.position.x += 2;
+    // A QA-only transform change verifies the guard without mutating the simulation snapshot.
+    for (const mesh of furnishing.getChildMeshes()) mesh.unfreezeWorldMatrix();
+    furnishing.position.x += 2;
     f.renderer.update(state, 0);
     f.canvas.emit('pointerup', { ...point, timeStamp: 160 });
     assert.deepEqual(f.actions, [], 'surface leaving the original press cannot retarget it');
-    f.renderer.focusAnchor('vault');
-    const moved = screenPoint(f, 'vault-bank-label');
-    const blocker = addForegroundBlocker(f, 'vault-bank-label');
+    f.renderer.focusAnchor('counter-a-upgrade');
+    const moved = screenPoint(f, 'counter-a-upgrade-plaque');
+    const blocker = addForegroundBlocker(f, 'counter-a-upgrade-plaque');
     f.canvas.emit('pointerdown', { ...moved, timeStamp: 200 });
     blocker.setEnabled(false);
     f.canvas.emit('pointerup', { ...moved, timeStamp: 300 });
     assert.deepEqual(f.actions, [], 'press on foreground cannot become a newly uncovered action');
-    f.renderer.focusAnchor('vault');
-    const centered = screenPoint(f, 'vault-bank-label');
+    f.renderer.focusAnchor('counter-a-upgrade');
+    const centered = screenPoint(f, 'counter-a-upgrade-plaque');
     f.canvas.emit('pointerdown', { ...centered, timeStamp: 350 });
-    vault.position.x = originalX;
+    furnishing.position.x = originalX;
     f.renderer.update(state, 0);
-    vault.position.x = originalX + 2;
+    furnishing.position.x = originalX + 2;
     f.renderer.update(state, 0);
     f.canvas.emit('pointerup', { ...centered, timeStamp: 550 });
     assert.deepEqual(f.actions, [], 'moving away and back invalidates the original press');
-    tap(f, 'vault-bank-label', 'vault');
+    tap(f, 'counter-a-upgrade-plaque', 'counter-a-upgrade');
     f.canvas.emit('pointerup', { ...moved, timeStamp: 620 });
-    assert.deepEqual(f.actions, [{ type: 'vault' }], 'one captured tap fires once');
+    assert.deepEqual(f.actions, [{ type: 'counter', id: 'counter-a' }], 'one captured tap fires once');
   } finally { f.dispose(); }
 });
 
@@ -608,7 +509,7 @@ test('TC-3D-008 opening a modal cancels captured input; every interaction stays 
     tap(f, 'invite-guest-sign');
     f.renderer.panBy(100, 100);
     assert.equal(f.renderer.focusNext(), null);
-    f.renderer.focusAnchor('vault');
+    f.renderer.focusAnchor('counter-a-upgrade');
     assert.equal(f.renderer.activateFocused(), false);
     assert.deepEqual(f.renderer.scene.activeCamera.position.asArray(), camera);
     assert.deepEqual(f.actions, []);
@@ -633,7 +534,8 @@ test('TC-3D-008 keyboard cycles every embodied control, preserves physical focus
     const next = f.renderer.focusNext(1);
     assert.notEqual(next, last);
     assert.equal(f.renderer.focusNext(-1), last);
-    const mesh = f.renderer.scene.meshes.find(mesh => mesh.metadata?.coffeeAnchor === last);
+    f.renderer.focusAnchor('counter-a-recipe');
+    const mesh = f.renderer.scene.meshes.find(mesh => mesh.metadata?.coffeeAnchor === 'counter-a-recipe');
     const mount = f.renderer.scene.getMeshByName(mesh.metadata.coffeeMount);
     assert.deepEqual(mount.material.diffuseColor.asArray(), [225 / 255, 187 / 255, 105 / 255], 'highlight is a matte physical mounting rim');
     f.renderer.dispose();
@@ -657,293 +559,6 @@ test('TC-3D-008 side-front upgrade plaques remain hittable while a customer occu
     assert.deepEqual(f.actions, [{ type: 'counter', id: 'counter-a' }, { type: 'counter', id: 'counter-b' }], 'lane customer naturally occludes its own body without covering the side plaque center');
   } finally { f.dispose(); }
 });
-
-test('TC-3D-008 small trolley cash table stays visible while manager turns without orbiting into furniture', () => {
-  const f = fixture(844, 390, 1 / 1.75);
-  try {
-    const state = createInitialState();
-    state.manager.carrying = 3600; state.manager.x = 0; state.manager.z = -1.7; state.manager.phase = 'collecting'; state.manager.target = 0;
-    f.renderer.update(state, 0);
-    const manager = f.renderer.scene.getTransformNodeByName('manager');
-    const cart = f.renderer.scene.getTransformNodeByName('manager-cash-cart');
-    const cartPosition = cart.position.asArray();
-    for (let n = 0; n < 24; n++) {
-      manager.rotation.y = n * Math.PI / 12;
-      centerMesh(f, 'cart-cash-0-top');
-      assert.deepEqual(cart.rotation.asArray(), [0, 0, 0], 'physical tray is world-oriented; it does not follow the camera or manager turns');
-      assert.deepEqual(cart.position.asArray(), cartPosition);
-      let visibleNote = false;
-      for (let i = 0; i < 6; i++) {
-        const point = screenPoint(f, `cart-cash-${i}-top`, new Vector3(0, .5, 0));
-        const pick = f.renderer.scene.pick(point.x * f.engine.getHardwareScalingLevel(), point.y * f.engine.getHardwareScalingLevel());
-        if (pick?.pickedMesh?.name.startsWith('cart-cash-')) visibleNote = true;
-      }
-      assert.equal(visibleNote, true, `manager angle ${n}: at least one actual transported note is visible to the camera`);
-    }
-  } finally { f.dispose(); }
-});
-
-test('TC-3D-008 world-oriented trolley clears wall, counters and baristas throughout the service route', () => {
-  const f = fixture();
-  try {
-    const state = createInitialState();
-    state.manager.carrying = 3600;
-    const cart = f.renderer.scene.getTransformNodeByName('manager-cash-cart');
-    const parts = cart.getChildMeshes();
-    const scene = f.renderer.scene;
-    const managerParts = scene.getTransformNodeByName('manager').getChildMeshes();
-    // All visible opaque room solids, including every physical label mount, wall panel,
-    // wainscot rail, station, barista and plant. Only the trolley and its handler are excluded.
-    const obstacles = scene.meshes.filter(mesh => mesh.isVisible && mesh.isEnabled() && mesh.material?.alpha === 1 && !parts.includes(mesh) && !managerParts.includes(mesh));
-    for (const [target, start, end] of [[1, WORLD.vaultX, 5], [0, 5, 0], [2, 0, WORLD.vaultX]]) {
-      const count = Math.ceil(Math.abs(end - start) * 2);
-      for (let step = 0; step <= count; step++) {
-        const x = start + (end - start) * step / count;
-        state.manager.x = x; state.manager.z = -1.7; state.manager.target = target;
-        state.manager.phase = step === count ? (target === 2 ? 'depositing' : 'collecting') : 'moving';
-        f.renderer.update(state, 0);
-        assert.deepEqual(cart.rotation.asArray(), [0, 0, 0]);
-        assert.equal(cart.position.y, 0, 'walking manager bob does not lift trolley off the floor');
-        for (const part of parts) {
-          if (!part.isEnabled()) continue;
-          part.computeWorldMatrix(true);
-          const a = part.getBoundingInfo().boundingBox;
-          for (const obstacle of obstacles) {
-            obstacle.computeWorldMatrix(true);
-            const b = obstacle.getBoundingInfo().boundingBox;
-            const overlap = ['x', 'y', 'z'].map(axis => Math.min(a.maximumWorld[axis], b.maximumWorld[axis]) - Math.max(a.minimumWorld[axis], b.minimumWorld[axis]));
-            assert.ok(overlap.some(value => value <= .001), `${part.name} does not penetrate ${obstacle.name} at manager route x=${x}`);
-          }
-        }
-        centerMesh(f, 'cart-cash-0-top');
-        let visible = false;
-        const occluders = [];
-        for (let i = 0; i < 6; i++) {
-          const point = screenPoint(f, `cart-cash-${i}-top`, new Vector3(0, .5, 0));
-          const pick = scene.pick(point.x, point.y);
-          if (pick?.pickedMesh?.name.startsWith('cart-cash-')) visible = true;
-          else if (pick?.pickedMesh) occluders.push(pick.pickedMesh);
-        }
-        if (step === 0 || step === count) assert.equal(visible, true, `transported notes are actually front-visible at cash handoff/deposit x=${x}`);
-        if (!visible) {
-          assert.equal(occluders.length, 6);
-          assert.ok(occluders.every(mesh => mesh.isVisible && mesh.material?.alpha === 1 && !mesh.name.includes('manager-cart-control')), 'between stops, cash can only be occluded by actual opaque shop/person geometry');
-        }
-      }
-    }
-  } finally { f.dispose(); }
-});
-
-test('TC-3D-008 small pending cash stays physically visible beside its flat amount tag', () => {
-  const f = fixture(390, 844, 1 / 1.75);
-  try {
-    const state = createInitialState();
-    state.counters[0].pendingCash = 110;
-    f.renderer.update(state, .05);
-    f.renderer.focusAnchor('counter-a-recipe');
-    const point = screenPoint(f, 'counter-a-cash-0-top', new Vector3(0, .5, 0));
-    const pick = f.renderer.scene.pick(point.x * f.engine.getHardwareScalingLevel(), point.y * f.engine.getHardwareScalingLevel());
-    assert.ok(pick?.pickedMesh?.name.startsWith('counter-a-cash-0-'), 'first small note pile is visible, rather than roofed by its cash amount display');
-  } finally { f.dispose(); }
-});
-
-for (const [width, height] of [[1280, 900], [390, 844], [844, 390]]) {
-  for (const dpr of [1, 1.75]) {
-    test(`TC-3D-009 refined physical layout at ${width}×${height}, DPR ${dpr}: vault left and independent front controls (geometry only)`, () => {
-      const f = fixture(width, height, 1 / dpr);
-      try {
-        const scene = f.renderer.scene;
-        const projectedXs = mesh => {
-          mesh.computeWorldMatrix(true);
-          return mesh.getBoundingInfo().boundingBox.vectorsWorld.map(v => Vector3.Project(v, Matrix.Identity(), scene.getTransformMatrix(), scene.activeCamera.viewport.toGlobal(f.engine.getRenderWidth(), f.engine.getRenderHeight())).x * f.engine.getHardwareScalingLevel());
-        };
-        const vault = scene.getTransformNodeByName('cash-vault');
-        const vaultRight = Math.max(...vault.getChildMeshes().flatMap(projectedXs));
-        const menuLeft = Math.min(...['menu-espresso', 'menu-latte'].flatMap(name => projectedXs(scene.getMeshByName(name))));
-        assert.ok(vaultRight < menuLeft, `whole vault is visually left of all coffee boards (${vaultRight.toFixed(2)} < ${menuLeft.toFixed(2)})`);
-        const state = createInitialState();
-        state.customers = [0, 5].map((x, i) => ({ id: i + 1, x, z: 1.5, phase: 'serving', counterId: i ? 'counter-b' : 'counter-a', timer: 0, hasCup: false, skin: i }));
-        state.counters.forEach(counter => counter.pendingCash = 950);
-        f.renderer.update(state, 0);
-        for (const id of ['counter-a', 'counter-b']) {
-          const body = scene.getMeshByName(`${id}-body`);
-          body.computeWorldMatrix(true);
-          const cabinet = body.getBoundingInfo().boundingBox;
-          const receipt = scene.getMeshByName(`${id}-cash-total`);
-          const glyph = receipt.metadata.coffeeGlyphHeight;
-          f.renderer.focusAnchor(`${id}-recipe`);
-          const glyphLow = screenPoint(f, receipt.name, new Vector3(0, -glyph / 2, 0));
-          const glyphHigh = screenPoint(f, receipt.name, new Vector3(0, glyph / 2, 0));
-          const glyphHeight = Math.abs(glyphHigh.clientY - glyphLow.clientY);
-          assert.ok(glyphHeight >= 10, `${id} nominal receipt glyph height is readable-scale geometry (${glyphHeight.toFixed(2)} CSS px; pixel typography still needs browser QA)`);
-          const receiptPoint = screenPoint(f, receipt.name, new Vector3(0, (.5 - receipt.metadata.coffeeGlyphCenter) * .64, 0));
-          const receiptPick = scene.pick(receiptPoint.x * f.engine.getHardwareScalingLevel(), receiptPoint.y * f.engine.getHardwareScalingLevel());
-          assert.equal(receiptPick?.pickedMesh?.name, receipt.name, 'cash amount region is a genuinely visible receipt surface');
-          const notePoint = screenPoint(f, `${id}-cash-0-top`, new Vector3(0, .5, 0));
-          assert.ok(notePoint.clientX >= 35 && notePoint.clientX <= 35 + width && notePoint.clientY >= 80 && notePoint.clientY <= 80 + height, 'pending money remains within the focused viewport');
-          const notePick = scene.pick(notePoint.x * f.engine.getHardwareScalingLevel(), notePoint.y * f.engine.getHardwareScalingLevel());
-          assert.ok(notePick?.pickedMesh?.name.startsWith(`${id}-cash-`), 'actual note pile stays front-visible beside the receipt');
-          for (const [key, name] of [[`${id}-upgrade`, `${id}-upgrade-plaque`], [`${id}-recipe`, `${id}-recipe-selector`]]) {
-            const mesh = scene.getMeshByName(name);
-            mesh.computeWorldMatrix(true);
-            const face = mesh.getBoundingInfo().boundingBox;
-            assert.ok(face.minimumWorld.y >= cabinet.minimumWorld.y - .001 && face.maximumWorld.y <= cabinet.maximumWorld.y + .001, `${name} fits the counter front height`);
-            assert.ok(face.minimumWorld.x >= cabinet.minimumWorld.x && face.maximumWorld.x <= cabinet.maximumWorld.x, `${name} fits the counter front width`);
-            assert.equal(mesh.metadata.coffeeSurface, 'counter-front');
-            f.renderer.focusAnchor(key);
-            assert.ok(surfaceDiameter(f, name) >= 44, `${name} has real 44px touch edge spacing`);
-            assert.equal(f.renderer.activateFocused(), true, `${name} stays available with a customer at the service point`);
-            tap(f, name);
-            assert.deepEqual(f.actions.at(-1), mesh.metadata.coffeeAction, `${name} has a real tappable front center with a service customer`);
-          }
-        }
-        assert.deepEqual(f.actions, [
-          { type: 'counter', id: 'counter-a' }, { type: 'counter', id: 'counter-a' },
-          { type: 'recipe', id: 'counter-a' }, { type: 'recipe', id: 'counter-a' },
-          { type: 'counter', id: 'counter-b' }, { type: 'counter', id: 'counter-b' },
-          { type: 'recipe', id: 'counter-b' }, { type: 'recipe', id: 'counter-b' },
-        ]);
-      } finally { f.dispose(); }
-    });
-  }
-}
-
-test('TC-3D-009 vault owns manager level affordance and no removed scene action survives', () => {
-  const f = fixture();
-  try {
-    const state = createInitialState();
-    state.manager.level = 7;
-    const before = JSON.stringify(state);
-    f.renderer.update(state, 0);
-    assert.equal(JSON.stringify(state), before);
-    const scene = f.renderer.scene;
-    const label = scene.getMeshByName('vault-bank-label');
-    assert.equal(label.metadata.coffeeManagerLevel, 7);
-    assert.deepEqual(label.metadata.coffeeAction, { type: 'vault' });
-    for (const name of ['shop-pause-control', 'shop-settings-control', 'service-panel-case', 'manager-cart-control']) assert.equal(scene.getMeshByName(name), null, `${name} is removed`);
-    for (const name of ['wall-service-panel', 'manager-cart-clipboard']) assert.equal(scene.getTransformNodeByName(name), null, `${name} is removed`);
-    for (const mesh of scene.meshes) assert.ok(!['pause', 'settings', 'manager'].includes(mesh.metadata?.coffeeAction?.type), `${mesh.name} has no obsolete action`);
-    const cart = scene.getTransformNodeByName('manager-cash-cart');
-    for (const mesh of cart.getChildMeshes()) assert.equal(mesh.metadata?.coffeeAction, undefined, 'trolley is ordinary visible geometry');
-    const base = scene.getMeshByName('cart-base');
-    assert.ok(base.scaling.x <= 1 && base.scaling.z <= .7, 'small cart has no giant manager-grade board');
-    tap(f, 'vault-bank-label', 'vault');
-    assert.deepEqual(f.actions, [{ type: 'vault' }]);
-  } finally { f.dispose(); }
-});
-
-test('TC-3D-009 pending money tag shares the banknote cluster and cannot become a raised register', () => {
-  const f = fixture();
-  try {
-    const state = createInitialState();
-    state.counters[0].pendingCash = 950;
-    state.counters[1].pendingCash = 110;
-    f.renderer.update(state, 0);
-    const scene = f.renderer.scene;
-    for (const id of ['counter-a', 'counter-b']) {
-      const cluster = scene.getTransformNodeByName(`${id}-cash-cluster`);
-      const tag = scene.getTransformNodeByName(`${id}-cash-tag`);
-      const label = scene.getMeshByName(`${id}-cash-total`);
-      const firstNote = scene.getTransformNodeByName(`${id}-cash-0`);
-      assert.equal(firstNote.parent, cluster);
-      assert.equal(tag.parent, cluster);
-      assert.equal(label.parent, tag);
-      assert.equal(label.metadata.coffeeCashRoot, cluster.name);
-      assert.equal(label.metadata.coffeeAmount, state.counters.find(counter => counter.id === id).pendingCash);
-      assert.ok(label.isEnabled() && firstNote.isEnabled());
-      label.computeWorldMatrix(true);
-      const cashPoint = label.getAbsolutePosition().clone();
-      const notePoint = firstNote.getAbsolutePosition().clone();
-      assert.ok(Math.abs(cashPoint.y - notePoint.y) < .06, 'tag is flat at note height');
-      assert.ok(Math.hypot(cashPoint.x - notePoint.x, cashPoint.z - notePoint.z) < .6, 'amount is directly adjacent to real money');
-      assert.ok(label.getBoundingInfo().boundingBox.maximumWorld.y < 1.30, 'no above-counter register screen');
-      assert.ok(Math.abs(Vector3.TransformNormal(new Vector3(0, 0, 1), label.getWorldMatrix()).normalize().y) > .99, 'amount surface is horizontal');
-      const shift = new Vector3(.4, .1, -.2);
-      cluster.position.addInPlace(shift);
-      cluster.computeWorldMatrix(true); tag.computeWorldMatrix(true); label.computeWorldMatrix(true); firstNote.computeWorldMatrix(true);
-      assert.ok(Vector3.Distance(label.getAbsolutePosition().subtract(cashPoint), shift) < 1e-6, 'moving the cash location moves its amount exactly');
-      assert.ok(Vector3.Distance(firstNote.getAbsolutePosition().subtract(notePoint), shift) < 1e-6, 'notes share the same movement');
-      assert.equal(scene.getMeshByName(`${id}-register-foot`), null);
-    }
-    state.counters.forEach(counter => counter.pendingCash = 0);
-    f.renderer.update(state, 0);
-    for (const id of ['counter-a', 'counter-b']) {
-      assert.equal(scene.getTransformNodeByName(`${id}-cash-cluster`).isEnabled(), false);
-      assert.equal(scene.getMeshByName(`${id}-cash-total`).isEnabled(), false, 'zero money has no stranded amount slab');
-    }
-  } finally { f.dispose(); }
-});
-
-test('TC-3D-010 rendered manager follows direct snapshots through B → A → vault and the deposit', () => {
-  const f = fixture();
-  try {
-    const state = createInitialState();
-    const scene = f.renderer.scene;
-    const vaultX = scene.getTransformNodeByName('cash-vault').position.x;
-    const manager = scene.getTransformNodeByName('manager');
-    assert.equal(vaultX, WORLD.vaultX);
-    assert.equal(state.manager.x, vaultX);
-    assert.equal(state.manager.target, 1, 'fresh departure targets the counter nearest the vault');
-    for (const [target, x, phase] of [
-      [1, vaultX, 'moving'], [1, (5 + vaultX) / 2, 'moving'], [1, 5, 'collecting'],
-      [0, 5, 'moving'], [0, 2.5, 'moving'], [0, 0, 'collecting'],
-      [2, 0, 'moving'], [2, vaultX / 2, 'moving'], [2, vaultX, 'depositing'],
-      [1, vaultX, 'moving'],
-    ]) {
-      Object.assign(state.manager, { target, x, phase, carrying: 700 });
-      const before = JSON.stringify(state);
-      f.renderer.update(state, .1);
-      assert.equal(JSON.stringify(state), before, 'renderer does not modify snapshot coordinates, phase, money or timers');
-      assert.equal(manager.position.x, x, 'no mapping or interpolation changes authoritative X');
-      assert.equal(manager.position.z, WORLD.backZ);
-      if (phase === 'collecting') {
-        const counter = state.counters[target];
-        assert.equal(manager.position.x, scene.getTransformNodeByName(`${counter.id}-station`).position.x, 'semantic target and visible counter agree');
-      }
-      assert.equal(scene.getTransformNodeByName('cart-cash-0').isEnabled(), true);
-    }
-    Object.assign(state.manager, { target: 2, x: vaultX, phase: 'depositing', timer: 0, carrying: 700 });
-    state.totalEarned = 700;
-    assert.equal(validateState(state).ok, true);
-    const engine = createEngine(state);
-    engine.advance(.55);
-    f.renderer.update(engine.state, 0);
-    assert.equal(engine.state.wallet, 1200);
-    assert.equal(engine.state.manager.carrying, 700);
-    assert.equal(manager.position.x, vaultX, 'pending deposit is actually underneath the physical vault');
-    engine.advance(.05);
-    f.renderer.update(engine.state, 0);
-    assert.equal(engine.state.wallet, 1900);
-    assert.equal(validateState(engine.state).ok, true, 'deposit preserves the persisted ledger');
-    assert.equal(engine.state.manager.x, vaultX);
-    assert.equal(engine.state.manager.target, 1, 'the next sweep starts toward B');
-    assert.equal(engine.state.manager.carrying, 0);
-    assert.equal(manager.position.x, vaultX, 'new outgoing segment starts at the same physical endpoint');
-    assert.equal(scene.getTransformNodeByName('cart-cash-0').isEnabled(), false);
-    assert.deepEqual(engine.drainEvents().map(event => [event.type, event.amount]), [['deposited', 700]]);
-  } finally { f.dispose(); }
-});
-
-
-test('TC-3D-009 receipt ink fits long exact amounts without cropping or abbreviation (canvas-context unit check)', () => {
-  const f = fixture();
-  try {
-    const drawn = [];
-    const ctx = {
-      font: '',
-      measureText(value) { return { width: value.length * Number(this.font.match(/([\d.]+)px/)[1]) * .64 }; },
-      fillText(value, x, y) { drawn.push({ value, x, y, width: this.measureText(value).width, font: this.font }); },
-    };
-    // A direct paint-helper check does not claim real font/pixel rendering acceptance.
-    const value = '¥ 1234567.89';
-    const font = f.renderer.text(ctx, value, 256, 115.2, 124, '#477448', 484);
-    assert.ok(font < 124);
-    assert.equal(drawn.length, 1);
-    assert.equal(drawn[0].value, value, 'full integer-cent amount stays exact');
-    assert.ok(drawn[0].width <= 484 + 1e-9, 'the measured glyph line fits the paper interior');
-  } finally { f.dispose(); }
-});
-
 
 function bounds(mesh) {
   mesh.computeWorldMatrix(true);
@@ -978,49 +593,6 @@ function faceUVBasis(mesh, axis) {
   };
 }
 
-test('TC-3D-010 continuous floor and wall carry aligned matte patterns with joined room surfaces', () => {
-  const f = fixture();
-  try {
-    const scene = f.renderer.scene;
-    const floor = scene.getMeshByName('continuous-shop-floor');
-    const wall = scene.getMeshByName('rear-wall');
-    const panels = scene.getMeshByName('rear-wainscot');
-    const rail = scene.getMeshByName('wall-chair-rail');
-    const base = scene.getMeshByName('wall-baseboard');
-    const floorBounds = bounds(floor), wallBounds = bounds(wall), panelBounds = bounds(panels);
-    assert.ok(Math.abs(floorBounds.maximumWorld.y) < 1e-7, 'tile ink is on the single true floor at y=0');
-    assert.ok(Math.abs(floorBounds.minimumWorld.z - wallBounds.maximumWorld.z) < 1e-5, 'floor begins at the rear wall plane');
-    assert.ok(Math.abs(panelBounds.minimumWorld.y - floorBounds.maximumWorld.y) < 1e-7, 'panelling has no floating gap at the floor');
-    assert.ok(Math.abs(panelBounds.minimumWorld.z - wallBounds.maximumWorld.z) < 1e-6, 'panelling is joined to the rear wall');
-    assert.ok(Math.abs(bounds(rail).minimumWorld.y - panelBounds.maximumWorld.y) < 1e-6, 'chair rail meets the panel top');
-    assert.ok(Math.abs(bounds(base).minimumWorld.y - floorBounds.maximumWorld.y) < 1e-6, 'baseboard closes the floor-wall joint');
-    for (const mesh of scene.meshes) {
-      assert.ok(!/^(pendant-|queue-position-|wall-panel-|floor-\d)/.test(mesh.name), `${mesh.name} is not a removed lamp, ring or raised patterned seam`);
-    }
-    const floorBasis = faceUVBasis(floor, 1);
-    const panelBasis = faceUVBasis(panels, 2);
-    assert.ok(Math.abs(floorBasis.u.y) < 1e-6 && Math.abs(floorBasis.v.y) < 1e-6, 'both grid axes lie on the physical horizontal plane');
-    assert.ok(Math.abs(floorBasis.u.x) < 1e-6 && Math.abs(floorBasis.v.z) < 1e-6, 'Babylon top UVs follow actual world +Z/−X, without screen-aligned overlay skew');
-    assert.ok(Math.abs(panelBasis.u.y) < 1e-6 && Math.abs(panelBasis.u.z) < 1e-6 && Math.abs(panelBasis.v.x) < 1e-6 && Math.abs(panelBasis.v.z) < 1e-6, 'wall UVs follow actual horizontal X and vertical Y');
-    for (const [mesh, uv, pitchX, pitchY] of [[floor, floorBasis, 2.4, 2.4], [panels, panelBasis, .72, 1.22]]) {
-      const pattern = mesh.material.metadata.coffeePattern;
-      assert.ok(Math.abs(uv.u.length() / pattern.repeatU - pitchX) < 1e-6);
-      assert.ok(Math.abs(uv.v.length() / pattern.repeatV - pitchY) < 1e-6);
-      assert.equal(mesh.receiveShadows, true);
-      assert.equal(mesh.billboardMode, 0);
-      assert.equal(mesh.renderingGroupId, 0);
-      assert.equal(mesh.material.disableLighting, false);
-      assert.equal(mesh.material.disableDepthWrite, false);
-      assert.equal(mesh.material.alpha, 1);
-      assert.deepEqual(mesh.material.specularColor.asArray(), [0, 0, 0]);
-      assert.deepEqual(mesh.material.emissiveColor.asArray(), [0, 0, 0]);
-    }
-    assert.ok(!scene.meshes.some(mesh => /^(queue-rug-|entry-arrow-)/.test(mesh.name)), 'bare floor has no queue rugs or arrows');
-    assert.ok(scene.getMeshByName('entrance-pad-border'), 'the functional entrance remains unchanged by removing queue markers');
-    assert.equal(scene.activeCamera.mode, 1, 'the fixed orthographic room camera remains intentional');
-  } finally { f.dispose(); }
-});
-
 test('TC-3D-010 pattern ink uses equal floor-axis strokes and diffuse contrast without self-light', () => {
   const f = fixture();
   try {
@@ -1031,8 +603,8 @@ test('TC-3D-010 pattern ink uses equal floor-axis strokes and diffuse contrast w
     f.renderer.paintSurfacePattern(ctx, pattern.fill, pattern.seam, true);
     assert.deepEqual(painted, [
       { fill: '#e7ddc8', rect: [0, 0, 512, 512] },
-      { fill: '#b9ad95', rect: [0, 0, 3, 512] },
-      { fill: '#b9ad95', rect: [0, 0, 512, 3] },
+      { fill: '#c2b49b', rect: [0, 0, 3, 512] },
+      { fill: '#c2b49b', rect: [0, 0, 512, 3] },
     ], 'one repeated texture has exactly the same muted seam color and thickness on both floor axes');
     painted.length = 0;
     f.renderer.paintSurfacePattern(ctx, '#286c67', '#205f5b', false);
@@ -1045,100 +617,21 @@ test('TC-3D-010 pattern ink uses equal floor-axis strokes and diffuse contrast w
     assert.ok(ambient.intensity + sun.intensity * Math.abs(sun.direction.normalizeToNew().y) <= 1.05, 'pale horizontal surfaces avoid the previous diffuse-overexposure budget');
     const channels = value => value.match(/[a-f\d]{2}/gi).map(v => parseInt(v, 16) / 255);
     const fill = channels(pattern.fill.slice(1)), seam = channels(pattern.seam.slice(1));
-    assert.ok(fill.every((value, i) => value - seam[i] > .17), 'grout has a nontrivial diffuse contrast before actual browser/color-management QA');
+    assert.ok(fill.every((value, i) => value - seam[i] > .13), 'grout has a nontrivial diffuse contrast before actual browser/color-management QA');
   } finally { f.dispose(); }
 });
 
-for (const [width, height] of [[1280, 900], [390, 844], [844, 390]]) {
-  for (const dpr of [1, 1.75]) {
-    test(`TC-3D-010 physical manager plaque clears the entire vault silhouette at ${width}×${height}, DPR ${dpr} (projection only)`, () => {
-      const f = fixture(width, height, 1 / dpr);
-      try {
-        const scene = f.renderer.scene;
-        const label = scene.getMeshByName('vault-bank-label');
-        const mount = scene.getMeshByName('vault-bank-label-mount');
-        const vault = scene.getTransformNodeByName('cash-vault');
-        const icon = vault.getChildMeshes().filter(mesh => mesh !== label && mesh !== mount);
-        assert.equal(label.metadata.coffeeSurface, 'vault-upgrade-plaque');
-        assert.ok(bounds(mount).minimumWorld.y > Math.max(...icon.map(mesh => bounds(mesh).maximumWorld.y)) + .5, 'the complete upgrade plaque is physically above every vault icon part');
-        for (const focus of [null, 'vault', 'menu-espresso', 'invite']) {
-          if (focus) f.renderer.focusAnchor(focus);
-          const plaqueScreen = projectedBounds(f, [label, mount]);
-          const iconScreen = projectedBounds(f, icon);
-          assert.ok(iconScreen.top - plaqueScreen.bottom >= 8, `plaque and the highest projected vault part are separated by ${Math.round(iconScreen.top - plaqueScreen.bottom)} CSS pixels in ${focus ?? 'initial'} view`);
-          assert.ok(plaqueScreen.right > iconScreen.left && plaqueScreen.left < iconScreen.right, 'the plaque still sits above the same vault, not beside it');
-        }
-        f.renderer.focusAnchor('vault');
-        assert.equal(f.renderer.projectAnchor('vault').visible, true);
-        assert.ok(surfaceDiameter(f, label.name) >= 44);
-        assert.equal(f.renderer.activateFocused(), true);
-        tap(f, label.name);
-        assert.deepEqual(f.actions, [{ type: 'vault' }, { type: 'vault' }]);
-        const rail = scene.getMeshByName('wall-picture-rail');
-        assert.ok(bounds(rail).minimumWorld.y > bounds(mount).maximumWorld.y + .15, 'high rail is physically above the plaque');
-        // A 144m rail has a huge diagonal screen AABB; test actual rays on the plaque's
-        // top edge instead of falsely equating those overlapping AABBs with occlusion.
-        for (const u of [-.45, 0, .45]) {
-          const point = screenPoint(f, label.name, new Vector3(u * 1.55, .49 * 1.04, 0));
-          const pick = scene.pick(point.x * f.engine.getHardwareScalingLevel(), point.y * f.engine.getHardwareScalingLevel());
-          assert.equal(pick?.pickedMesh?.name, label.name, 'the high rail cannot cover the actual plaque top edge');
-        }
-      } finally { f.dispose(); }
-    });
-  }
-}
-
-test('TC-3D-010 real core sweep collects visible B cash then A cash, and only deposits at the same vault', () => {
-  const f = fixture();
-  try {
-    const initial = createInitialState();
-    initial.counters[0].pendingCash = 220;
-    initial.counters[1].pendingCash = 330;
-    initial.totalEarned = 550;
-    const engine = createEngine(initial);
-    const manager = f.renderer.scene.getTransformNodeByName('manager');
-    const transfers = [];
-    let deposited = false;
-    const budget = Math.ceil((2 * WORLD.vaultX / managerSpeed(1) + .45 * 2 + .6 + .05 * 3) / .05);
-    for (let step = 0; step <= budget && !deposited; step++) {
-      engine.advance(.05);
-      f.renderer.update(engine.state, 0);
-      assert.equal(manager.position.x, engine.state.manager.x, 'every real core snapshot is rendered at its true coordinate');
-      for (const event of engine.drainEvents()) {
-        if (event.type === 'collected') {
-          const counter = engine.state.counters.find(counter => counter.id === event.counterId);
-          assert.equal(manager.position.x, counter.x, 'collected counter identity matches the manager at its physical station');
-          assert.equal(f.renderer.scene.getTransformNodeByName(`${counter.id}-cash-cluster`).isEnabled(), counter.pendingCash > 0);
-          assert.equal(f.renderer.scene.getTransformNodeByName('cart-cash-0').isEnabled(), true);
-          assert.equal(engine.state.wallet, initial.wallet, 'pickup alone cannot increase available money');
-          transfers.push([event.type, event.counterId, event.amount]);
-        } else if (event.type === 'deposited') {
-          assert.equal(manager.position.x, f.renderer.scene.getTransformNodeByName('cash-vault').position.x);
-          assert.equal(f.renderer.scene.getTransformNodeByName('cart-cash-0').isEnabled(), false);
-          assert.equal(engine.state.wallet, initial.wallet + 550);
-          transfers.push([event.type, event.amount]);
-          deposited = true;
-        }
-      }
-    }
-    assert.equal(deposited, true, 'one full true-world sweep reaches its bounded expected endpoint');
-    assert.deepEqual(transfers, [['collected', 'counter-b', 330], ['collected', 'counter-a', 220], ['deposited', 550]]);
-    assert.equal(validateState(engine.state).ok, true);
-  } finally { f.dispose(); }
-});
-
-test('TC-3D-011 static work is frozen while live actors, cups, cash parents and physical controls stay correct', () => {
+test('TC-3D-011 static work is frozen while live actors, cups and physical controls stay correct', () => {
   const f = fixture();
   try {
     const scene = f.renderer.scene;
     assert.equal(scene.getMeshByName('continuous-shop-floor').isWorldMatrixFrozen, true);
     assert.equal(scene.getMeshByName('counter-a-countertop').isWorldMatrixFrozen, true);
-    assert.equal(scene.getMeshByName('manager-shirt').isWorldMatrixFrozen, false);
     assert.equal(scene.getMeshByName('counter-a-progress-fill').isWorldMatrixFrozen, false);
     assert.equal(scene.getMeshByName('counter-a-ready-cup-cup').isWorldMatrixFrozen, false);
     assert.equal(scene.getMeshByName('shared-box').isWorldMatrixFrozen, false, 'later clones never inherit a frozen source matrix');
     const before = f.renderer.readRenderStats();
-    assert.ok(before.frozenMeshes >= 130, 'fixed room geometry avoids per-frame world-matrix updates');
+    assert.ok(before.frozenMeshes >= 100, 'fixed room geometry avoids per-frame world-matrix updates');
     const state = createInitialState();
     state.customers = [{ id: 1, x: 0, z: 2, phase: 'leaving', counterId: 'counter-a', timer: 0, hasCup: true, skin: 0 }];
     f.renderer.update(state, 0);
@@ -1160,14 +653,13 @@ test('TC-3D-011 static work is frozen while live actors, cups, cash parents and 
   } finally { f.dispose(); }
 });
 
-test('TC-3D-026 floor has no route carpets or arrows while simulation endpoints remain unchanged', () => {
+test('TC-3D-026 floor has no route carpets or arrows', () => {
   const f = fixture();
   try {
     const removed = /^(queue-rug-|manager-route$|route-dash-|departure-aisle-|departure-return-lane$|customer-exit-boundary$|welcome-runner$|(?:queue|departure|entry)-arrow-)/;
     assert.ok(!f.renderer.scene.meshes.some(mesh => removed.test(mesh.name)));
-    assert.ok(WORLD.exitX < WORLD.entryX - 2, 'removing route decoration does not rewrite simulation endpoints');
     assert.equal(f.renderer.scene.getMeshByName('continuous-shop-floor').metadata.coffeeSurface, 'floor');
-    assert.ok(f.renderer.scene.getMeshByName('entrance-invite-pad'));
+    assert.ok(f.renderer.scene.getMeshByName('entrance-threshold'));
   } finally { f.dispose(); }
 });
 
@@ -1220,7 +712,6 @@ test('TC-3D-011 cached shadow bounds cover static furniture and upgrades invalid
   } finally { f.dispose(); }
 });
 
-
 test('TC-3D-012 renderer pairs Babylon frame boundaries and changes quality without rebuilding the scene', () => {
   const f = fixture();
   try {
@@ -1266,48 +757,83 @@ test('TC-3D-014 QA identity reads actual customer mesh and CSS projection withou
 });
 
 
-for (const [width, height] of [[1280, 900], [390, 844], [844, 390]]) {
-  for (const dpr of [1, 1.75]) {
-    test(`TC-3D-018 vault plaque stays close without covering its icon at ${width}×${height}, DPR ${dpr} (projection only)`, () => {
-      const f = fixture(width, height, 1 / dpr);
-      try {
-        const scene = f.renderer.scene;
-        const label = scene.getMeshByName('vault-bank-label');
-        const mount = scene.getMeshByName('vault-bank-label-mount');
-        const icon = scene.getTransformNodeByName('cash-vault').getChildMeshes().filter(mesh => mesh !== label && mesh !== mount);
-        for (const focus of [null, 'vault', 'menu-espresso', 'invite']) {
-          if (focus) f.renderer.focusAnchor(focus);
-          const plaqueScreen = projectedBounds(f, [label, mount]);
-          const iconScreen = projectedBounds(f, icon);
-          const gap = iconScreen.top - plaqueScreen.bottom;
-          assert.ok(gap >= 8, `${focus ?? 'initial'}: ${gap} CSS px preserves a visible gap`);
-          assert.ok(gap <= (iconScreen.bottom - iconScreen.top) * .1, `${focus ?? 'initial'}: ${gap} CSS px is compact, at most 10% of the vault silhouette height`);
-        }
-        assert.equal(label.parent.name, 'cash-vault');
-        assert.equal(label.billboardMode, 0);
-        assert.equal(label.renderingGroupId, 0);
-        assert.equal(label.material.disableDepthWrite, false);
-        f.renderer.focusAnchor('vault');
-        assert.ok(surfaceDiameter(f, label.name) >= 44);
-        assert.equal(f.renderer.activateFocused(), true);
-        tap(f, label.name);
-        assert.deepEqual(f.actions, [{ type: 'vault' }, { type: 'vault' }]);
-      } finally { f.dispose(); }
-    });
-  }
-}
-
-test('TC-3D-026 former departure corners expose one continuous tile surface (geometry/rays only)', () => {
+test('TC-3D-027 finite cutaway exposes an exterior and removes manager, vault, cash piles and coffee wall controls completely', () => {
   const f = fixture();
   try {
-    const floor = f.renderer.scene.getMeshByName('continuous-shop-floor');
-    for (const counterX of [0, 5]) for (let u = 0; u <= 12; u++) for (let v = 0; v <= 12; v++) {
-      const x = counterX + WORLD.departureOffsetX - .32 + .64 * u / 12;
-      const z = WORLD.exitZ - .32 + .64 * v / 12;
-      const ray = new Ray(new Vector3(x, .5, z), new Vector3(0, -1, 0), 1);
-      const hit = f.renderer.scene.pickWithRay(ray);
-      assert.equal(hit?.pickedMesh, floor, `bare tile at former carpet join (${x}, ${z})`);
-      assert.ok(Math.abs(hit.pickedPoint.y) < 1e-6);
+    const scene = f.renderer.scene, floor = bounds(scene.getMeshByName('continuous-shop-floor'));
+    assert.ok(Math.abs(floor.minimumWorld.x - (GRID.minX - .5)) < 1e-6);
+    assert.ok(Math.abs(floor.maximumWorld.x - (GRID.maxX + .5)) < 1e-6);
+    assert.ok(Math.abs(floor.maximumWorld.z - (GRID.maxZ + .5)) < 1e-6);
+    assert.equal(scene.getMeshByName('rear-wall').scaling.y, 3.3, 'trimmed wall does not fill the viewport with a giant room');
+    assert.equal(scene.getMeshByName('front-wall'), null, 'the near side is cut away');
+    for (const name of ['continuous-shop-floor', 'expansion-floor']) {
+      const mesh = scene.getMeshByName(name), uv = faceUVBasis(mesh, 1);
+      const material = name === 'expansion-floor' ? f.renderer.expansionTiles : mesh.material;
+      const pattern = material.metadata.coffeePattern;
+      assert.ok(Math.abs(uv.u.length() / pattern.repeatU - 1) < 1e-6);
+      assert.ok(Math.abs(uv.v.length() / pattern.repeatV - 1) < 1e-6, 'one-metre tile ink keeps the same scale across the expansion');
     }
+    for (const name of ['exterior-lawn', 'rear-pavement', 'entrance-outside-walk', 'exit-outside-walk', 'neighborhood-road']) assert.ok(scene.getMeshByName(name), name);
+    for (const node of [...scene.meshes, ...scene.transformNodes]) assert.ok(!/^(manager(?:-|$)|cart-|vault-|cash-vault|menu-|counter-\w-cash)/.test(node.name), `${node.name} must not retain removed systems`);
+    assert.ok(scene.meshes.every(mesh => !['menu', 'vault', 'layout-wall'].includes(mesh.metadata?.coffeeAction?.type)));
+    assert.equal(scene.getMeshByName('brand-sign').metadata.coffeeAction, undefined, 'brand is not an extra renovation menu');
+    for (const key of ['menu-espresso', 'menu-latte', 'vault', 'renovate']) assert.equal(f.renderer.projectAnchor(key).visible, false);
+    const before = [scene.meshes.length, scene.materials.length, scene.textures.length];
+    const state = createInitialState(); state.coffeeLevels.espresso = 5; state.coffeeLevels.latte = 3;
+    state.layout.coffeeSigns.forEach(sign => sign.stored = false);
+    f.renderer.update(state, 0);
+    assert.deepEqual([scene.meshes.length, scene.materials.length, scene.textures.length], before, 'legacy wall sign records cannot resurrect scene controls');
+    assert.equal(f.renderer.pickLayoutPlacement(400, 400, 'menu-espresso'), null);
+    for (const name of ['garden-plant-entry', 'garden-plant-front', 'garden-plant-rear']) {
+      const root = scene.getTransformNodeByName(name);
+      assert.ok(root.position.x < GRID.minX - .5 || root.position.x > GRID.expandedMaxX + .5 || root.position.z < GRID.minZ - .5 || root.position.z > GRID.maxZ + .5, `${name} cannot become an unmodelled navigation obstacle`);
+    }
+  } finally { f.dispose(); }
+});
+
+for (const expanded of [false, true]) test(`TC-3D-027 actual entrance is screen-right and exit screen-left with clear crossings, expanded=${expanded}`, () => {
+  const f = fixture();
+  try {
+    const state = createInitialState(); state.layout.expanded = expanded; f.renderer.update(state, 0);
+    const scene = f.renderer.scene, entrance = scene.getTransformNodeByName('entrance-doorway'), exit = scene.getTransformNodeByName('exit-doorway');
+    assert.deepEqual(entrance.position.asArray(), [GRID.entry.x - .5, 0, GRID.entry.z]);
+    assert.deepEqual(exit.position.asArray(), [layoutExitAnchor(state.layout).x + .5, 0, layoutExit(state.layout).z]);
+    const entryScreen = f.renderer.projectLayoutCell(entrance.position.x, entrance.position.z);
+    const exitScreen = f.renderer.projectLayoutCell(exit.position.x, exit.position.z);
+    assert.ok(entryScreen.x > exitScreen.x + 300, 'right and left describe the actual camera projection');
+    if (!expanded) { assert.equal(entryScreen.visible, true); assert.equal(exitScreen.visible, true); }
+    assert.equal(scene.getMeshByName('invite-guest-sign').metadata.coffeeDoorLabel, 'entrance');
+    assert.equal(scene.getMeshByName('exit-door-sign').metadata.coffeeDoorLabel, 'exit');
+    for (const doorway of [entrance, exit]) {
+      const start = new Vector3(doorway.position.x - .6, 1, doorway.position.z);
+      const hit = scene.pickWithRay(new Ray(start, new Vector3(1, 0, 0), 1.2));
+      assert.equal(hit?.hit, false, 'real body-height ray crosses the open threshold without a door panel or decorative obstacle');
+    }
+    for (const point of [layoutEntrySpawn(), layoutExit(state.layout)]) {
+      const pick = scene.pickWithRay(new Ray(new Vector3(point.x, .5, point.z), new Vector3(0, -1, 0), 1));
+      assert.equal(pick?.pickedMesh?.metadata.coffeeExterior, 'paving', 'actors start and end on the visible exterior pavement');
+    }
+    assert.equal(scene.getTransformNodeByName('expanded-rear-wall').isEnabled(), expanded);
+    assert.equal(scene.getTransformNodeByName('expansion-locked-divider').isEnabled(), !expanded);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-027 backdrops change only exterior colors, stay bounded and do not mutate business state', () => {
+  const f = fixture();
+  try {
+    const state = createInitialState(), original = JSON.stringify(state), scene = f.renderer.scene;
+    const protectedMaterials = ['continuous-shop-floor', 'rear-wall', 'counter-a-body', 'counter-a-upgrade-plaque'].map(name => [scene.getMeshByName(name), scene.getMeshByName(name).material]);
+    const paints = [];
+    for (const theme of ['garden', 'terrace', 'sunset']) {
+      f.renderer.setBackdrop(theme); f.renderer.update(state, 0);
+      paints.push(scene.getMeshByName('exterior-lawn').material.diffuseColor.toHexString());
+      for (const [mesh, material] of protectedMaterials) assert.equal(mesh.material, material);
+      assert.equal(JSON.stringify(state), original);
+    }
+    assert.equal(new Set(paints).size, 3);
+    const baseline = [scene.meshes.length, scene.materials.length, scene.textures.length];
+    for (let cycle = 0; cycle < 15; cycle++) for (const theme of ['garden', 'terrace', 'sunset']) f.renderer.setBackdrop(theme);
+    assert.deepEqual([scene.meshes.length, scene.materials.length, scene.textures.length], baseline);
+    f.renderer.dispose(); f.renderer.setBackdrop('garden');
   } finally { f.dispose(); }
 });

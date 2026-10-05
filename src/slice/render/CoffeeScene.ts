@@ -19,26 +19,23 @@ import { CreateTorus } from '@babylonjs/core/Meshes/Builders/torusBuilder.js';
 import { CreatePlane } from '@babylonjs/core/Meshes/Builders/planeBuilder.js';
 // Registers the scene ray-picking extension used by physical shop controls.
 import '@babylonjs/core/Culling/ray.js';
-import type { Counter, CounterId, Customer, RecipeId, ShopLayout, SliceState } from '../core/types';
-import { coffeeBrewSeconds, coffeePrice, WORLD } from '../core/engine';
-import { COFFEE_WALL, coffeeWallSlots, furnitureCells, getCoffeeSigns, getLayout, interactionPoint } from '../core/layout';
+import type { Counter, CounterId, Customer, ShopLayout, SliceState } from '../core/types';
+import { GRID, furnitureCells, getLayout, interactionPoint, layoutExitAnchor } from '../core/layout';
 import { DEFAULT_RENDER_MODE, RENDER_MODES, renderPixelRatio, type RenderMode } from './RenderBudget';
 
 export type CoffeeSceneAction =
   | { type: 'invite' }
   | { type: 'counter'; id: CounterId }
   | { type: 'recipe'; id: CounterId }
-  | { type: 'menu'; recipe: RecipeId }
-  | { type: 'vault' }
   | { type: 'renovate' }
   | { type: 'layout-select'; id: string }
   | { type: 'layout-cell'; x: number; z: number }
-  | { type: 'layout-wall'; x: number }
   | { type: 'layout-drag'; phase: 'start' | 'move' | 'end' | 'cancel'; id: string; clientX: number; clientY: number };
 
 export type CoffeeSceneAnchor =
   | 'invite' | `${CounterId}-upgrade` | `${CounterId}-recipe`
-  | 'menu-espresso' | 'menu-latte' | 'vault' | 'renovate' | 'expansion';
+  | 'expansion';
+export type CoffeeBackdrop = 'garden' | 'terrace' | 'sunset';
 export interface AnchorProjection { x: number; y: number; visible: boolean }
 
 /** The optional engine is a QA seam; normal callers only supply canvas and action callback. */
@@ -47,7 +44,6 @@ export interface CoffeeSceneOptions { engine?: AbstractEngine; shadows?: boolean
 type Shape = 'box' | 'cylinder' | 'sphere' | 'ring';
 type PointerGesture = { id: number; x: number; y: number; lastX: number; lastY: number; time: number; dragged: boolean; target: Mesh | null; targetPoint: Vector3 | null; invalidated: boolean; action?: CoffeeSceneAction };
 type Label = { mesh: Mesh; texture: DynamicTexture | null; key: string };
-type Menu = { root: TransformNode; label: Label; level: number };
 type Person = {
   root: TransformNode;
   leftArm: TransformNode;
@@ -66,15 +62,11 @@ type Station = {
   progressFill: Mesh;
   plaque: Label;
   selector: Label;
-  cashLabel: Label;
-  cashRoot: TransformNode;
-  cash: TransformNode[];
   machineExtras: TransformNode[];
   readyCup: TransformNode;
   selection: Mesh;
   level: number;
   recipe: string;
-  pendingCash: number;
 };
 
 const COLORS = {
@@ -92,8 +84,8 @@ const TAU = Math.PI * 2;
 const CONTACT_SHADOW_Y = .074;
 const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
 // Fixed-camera room coordinates, shared by its solids and their world-scaled patterns.
-const ROOM = { width: 144, depth: 144, floorY: 0, rearZ: -3.6, tilePitch: 2.4, panelPitch: .72 };
-const cashText = (cents: number) => `¥ ${(cents / 100).toFixed(2)}`;
+const ROOM = { width: 18, depth: 13, centerX: 1.5, centerZ: 3, floorY: 0, rearZ: -3.5, sideX: -7.5, height: 3.3, tilePitch: 1, panelPitch: .72 };
+const BACKDROPS = { garden: { lawn: '#a8ba83', paving: '#d7c9ae', sky: '#b5c598ff' }, terrace: { lawn: '#c1bdac', paving: '#b1aaa0', sky: '#cec9b8ff' }, sunset: { lawn: '#b4a27c', paving: '#d9b49b', sky: '#dbc2a0ff' } } as const;
 
 /**
  * Original, asset-free immersive coffee-shop room. It only presents snapshots: all movement,
@@ -106,14 +98,13 @@ export class CoffeeScene {
   private readonly engine: AbstractEngine;
   private readonly ownsEngine: boolean;
   private readonly camera: FreeCamera;
-  private readonly baseTarget = new Vector3(1.1, 0.9, 1.2);
+  private readonly baseTarget = new Vector3(2.1, .6, 2.8);
   private readonly cameraOffset = new Vector3(10, 16, 22);
   private readonly screenRight: Vector3;
   private readonly screenUp: Vector3;
   private readonly anchors = new Map<CoffeeSceneAnchor, Mesh>();
   private panX = 0;
   private panY = 0;
-  private hasSized = false;
   private panBounds = { left: 0, right: 0, bottom: 0, top: 0 };
   private readonly staticCasters = new Set<Mesh>();
   private renderedFrames = 0;
@@ -122,13 +113,15 @@ export class CoffeeScene {
   private readonly shapes = new Map<Shape, Mesh>();
   private readonly customers = new Map<number, Person>();
   private readonly stations = new Map<CounterId, Station>();
-  private readonly menus = new Map<RecipeId, Menu>();
   private readonly tables = new Map<string, TransformNode>();
-  private readonly legacyFurniture: TransformNode[] = [];
   private readonly gridCells = new Map<string, Mesh>();
-  private readonly wallCells = new Map<number, Mesh>();
+  private exteriorLawn!: Mesh;
+  private readonly exteriorPaving: Mesh[] = [];
+  private exitRoot!: TransformNode;
+  private expandedRear!: TransformNode;
   private expansionRoot!: TransformNode;
   private expansionFloor!: Mesh;
+  private expansionTiles!: StandardMaterial;
   private expansionGate!: TransformNode;
   private renovationGhost: Mesh | null = null;
   private previewLayout: ShopLayout | null = null;
@@ -139,18 +132,11 @@ export class CoffeeScene {
   private renovationSelected: string | null = null;
   private renovationValid = true;
   private readonly labels: Label[] = [];
-  private readonly manager: Person;
-  private readonly vaultLabel: Label;
-  private managerCart!: TransformNode;
-  private readonly cartCash: TransformNode[] = [];
   private readonly invite: Label;
-  private readonly vaultLamp: Mesh;
   private readonly shadowGenerator: ShadowGenerator | null;
   private disposed = false;
   private interactionEnabled = true;
   private animationTime = 0;
-  private lastManagerLevel = -1;
-  private lastCartStacks = -1;
   private lastInviteKey = '';
   private selected: CounterId | null = null;
   private focused: CoffeeSceneAnchor | null = null;
@@ -203,20 +189,7 @@ export class CoffeeScene {
     this.makeEnvironment();
     this.stations.set('counter-a', this.makeStation('counter-a', 0, COLORS.teal, COLORS.tealDark, 'A'));
     this.stations.set('counter-b', this.makeStation('counter-b', 5, COLORS.rose, COLORS.roseDark, 'B'));
-    this.makeMenu('espresso', 0);
-    this.makeMenu('latte', 5);
     this.invite = this.makeEntrance();
-    const vault = this.makeVault();
-    this.vaultLamp = vault.lamp;
-    this.vaultLabel = vault.label;
-    this.manager = this.makePerson('manager', 1, '#e0ad52', false, true);
-    this.manager.root.position.set(WORLD.vaultX, 0, WORLD.backZ);
-    this.manager.previousX = WORLD.vaultX;
-    this.manager.previousZ = WORLD.backZ;
-    this.manager.root.scaling.setAll(0.97);
-    this.makeCart(this.manager.root);
-    // Append new controls after the established keyboard sequence.
-    this.registerAnchor('renovate', this.scene.getMeshByName('brand-sign') as Mesh);
     this.makeExpansion();
     this.prepareStaticGeometry();
     canvas.addEventListener('pointerdown', this.handleDown);
@@ -233,15 +206,16 @@ export class CoffeeScene {
   update(state: Readonly<SliceState>, dt: number): void {
     if (this.disposed) return;
     const frame = Number.isFinite(dt) ? clamp(dt, 0, 0.1) : 0;
-    if (!state.paused) this.animationTime += frame;
-    const motion = state.paused ? 0 : frame;
+    // Closing admissions drains guests online; only the empty closed shop is still.
+    const animating = !state.paused || state.customers.length > 0;
+    if (animating) this.animationTime += frame;
+    const motion = animating ? frame : 0;
     this.liveLayout = getLayout(state);
     this.reconcileLayout(this.previewLayout ?? this.liveLayout);
     for (const counter of state.counters) {
       const station = this.stations.get(counter.id);
-      if (station) this.updateStation(station, counter, state.paused);
+      if (station) this.updateStation(station, counter, !animating);
     }
-    for (const [recipe, menu] of this.menus) this.updateMenu(recipe, menu, state.coffeeLevels[recipe]);
     const live = new Set<number>();
     for (const customer of state.customers) {
       live.add(customer.id);
@@ -263,16 +237,14 @@ export class CoffeeScene {
         this.customers.delete(id);
       }
     }
-    this.updateManager(state, motion);
     const inviteKey = state.inviteCooldown > 0 ? `wait-${Math.ceil(state.inviteCooldown)}` : 'ready';
     if (inviteKey !== this.lastInviteKey) {
       this.paintLabel(this.invite, inviteKey, (ctx, w, h) => {
         this.roundRect(ctx, 8, 8, w - 16, h - 16, 30, state.inviteCooldown > 0 ? '#a89973' : '#dca84b');
-        this.text(ctx, state.inviteCooldown > 0 ? `稍候 ${Math.ceil(state.inviteCooldown)} 秒` : '迎接顾客  +', w / 2, h / 2 + 2, 94, '#ffffff');
+        this.text(ctx, state.inviteCooldown > 0 ? `入口 · ${Math.ceil(state.inviteCooldown)} 秒` : '入口 · 迎客 +', w / 2, h / 2 + 2, 94, '#ffffff');
       });
       this.lastInviteKey = inviteKey;
     }
-    this.vaultLamp.material = this.material(state.manager.phase === 'depositing' && state.manager.carrying > 0 ? '#f6dc79' : '#92bfa3', true);
     if (this.down?.target && this.down.targetPoint) {
       const point = this.projectWorld(this.anchorWorld(this.down.target));
       if (this.down.target.isDisposed() || Math.hypot(point.x - this.down.targetPoint.x, point.y - this.down.targetPoint.y) > 9) this.down.invalidated = true;
@@ -308,9 +280,8 @@ export class CoffeeScene {
   projectLayoutItem(id: string): AnchorProjection {
     const layout = this.previewLayout ?? this.displayedLayout;
     const item = layout?.furniture.find(item => item.id === id);
-    const sign = layout && getCoffeeSigns(layout).find(item => item.id === id);
-    if (!item && !sign || this.disposed) return { x: 0, y: 0, visible: false };
-    const p = this.projectWorld(sign ? new Vector3(sign.x, COFFEE_WALL.y, COFFEE_WALL.z + .12) : new Vector3(item!.x, .55, item!.z));
+    if (!item || this.disposed) return { x: 0, y: 0, visible: false };
+    const p = this.projectWorld(new Vector3(item.x, .55, item.z));
     const rect = this.canvas.getBoundingClientRect();
     return { x: p.x, y: p.y, visible: p.z >= 0 && p.z <= 1 && p.x >= 0 && p.x <= rect.width && p.y >= 0 && p.y <= rect.height };
   }
@@ -318,22 +289,20 @@ export class CoffeeScene {
   /**
    * Pointer projection is independent of foreground furniture, people and editor ink.
    * Keep out-of-bounds rounded coordinates for a red draft; never clamp an illegal drop.
-   * Wall items only project within the physical board-height band, not onto the floor.
    */
   pickLayoutPlacement(clientX: number, clientY: number, id: string): { x: number; z: number } | null {
     const layout = this.previewLayout ?? this.displayedLayout;
     const coordinates = this.pickCoordinates(clientX, clientY);
     if (!layout || !coordinates) return null;
-    const wall = getCoffeeSigns(layout).some(sign => sign.id === id);
+    if (id.startsWith('menu-')) return null;
     this.scene.updateTransformMatrix(true);
     const ray = this.scene.createPickingRay(coordinates.x, coordinates.y, Matrix.Identity(), this.camera);
-    const denominator = wall ? ray.direction.z : ray.direction.y;
+    const denominator = ray.direction.y;
     if (Math.abs(denominator) < 1e-8) return null;
-    const distance = ((wall ? COFFEE_WALL.z : ROOM.floorY) - (wall ? ray.origin.z : ray.origin.y)) / denominator;
+    const distance = (ROOM.floorY - ray.origin.y) / denominator;
     if (!Number.isFinite(distance) || distance < 0) return null;
     const position = ray.origin.add(ray.direction.scale(distance));
-    if (wall && Math.abs(position.y - COFFEE_WALL.y) > 1.15) return null;
-    return { x: Math.round(position.x) || 0, z: wall ? COFFEE_WALL.z : Math.round(position.z) || 0 };
+    return { x: Math.round(position.x) || 0, z: Math.round(position.z) || 0 };
   }
 
   /** Cancel only the current gesture, without re-entering the host's draft controller. */
@@ -341,12 +310,10 @@ export class CoffeeScene {
 
   private reconcileLayout(layout: ShopLayout): void {
     // Traffic scheduling and economy ticks do not rebuild or reallocate furniture.
-    const signs = getCoffeeSigns(layout);
-    const signature = JSON.stringify([layout.active, layout.expanded, layout.furniture.map(item => [item.id, item.kind, item.counterId, item.x, item.z, item.rotation, item.stored]), signs.map(sign => [sign.id, sign.x, sign.stored])]);
+    const signature = JSON.stringify([layout.active, layout.expanded, layout.furniture.map(item => [item.id, item.kind, item.counterId, item.x, item.z, item.rotation, item.stored])]);
     this.displayedLayout = layout;
     if (signature === this.layoutSignature) return;
     this.layoutSignature = signature;
-    for (const node of this.legacyFurniture) node.setEnabled(!layout.active);
     const items = layout.furniture.filter(item => !item.stored);
     const counters = new Set(items.filter(item => item.kind === 'counter').map(item => item.counterId!));
     for (const [id, station] of this.stations) {
@@ -388,19 +355,12 @@ export class CoffeeScene {
         for (const mesh of root.getChildMeshes()) mesh.computeWorldMatrix(true);
       }
     }
-    for (const sign of signs) {
-      const menu = this.menus.get(sign.recipe);
-      if (!menu) continue;
-      menu.root.setEnabled(!sign.stored);
-      if (menu.root.position.x !== sign.x) {
-        for (const mesh of menu.root.getChildMeshes()) mesh.unfreezeWorldMatrix();
-        menu.root.position.x = sign.x;
-        menu.root.computeWorldMatrix(true);
-        for (const mesh of menu.root.getChildMeshes()) mesh.computeWorldMatrix(true);
-      }
-    }
     this.expansionGate.setEnabled(!layout.expanded);
-    this.expansionFloor.material = this.material(layout.expanded ? '#e7ddc8' : '#d1ceb8');
+    this.expandedRear.setEnabled(layout.expanded);
+    for (const mesh of this.exitRoot.getChildMeshes()) mesh.unfreezeWorldMatrix();
+    this.exitRoot.position.x = layoutExitAnchor(layout).x + .5;
+    this.exitRoot.computeWorldMatrix(true);
+    this.expansionFloor.material = layout.expanded ? this.expansionTiles : this.material('#ccd0ac');
     this.expansionFloor.metadata = { coffeeExpansion: layout.expanded ? 'open' : 'locked', coffeeAction: { type: 'renovate' } };
     this.prepareStaticGeometry();
     this.shadowGenerator?.getShadowMap()?.resetRefreshCounter();
@@ -409,7 +369,7 @@ export class CoffeeScene {
   }
 
   private positionCounterControls(station: Station, rotation: number): void {
-    // The machine and notes fill the top. On away-facing turns the same two
+    // The machine and stacked cups fill the top. On away-facing turns the same two
     // wooden plaques attach to the visible long face, never to a floating HUD.
     // Projection reverses local X at turns 1/2, so preserve recipe-left/upgrade-right.
     const reverse = rotation === 1 || rotation === 2;
@@ -466,23 +426,24 @@ export class CoffeeScene {
 
   private makeExpansion(): void {
     this.expansionRoot = new TransformNode('adjacent-expansion', this.scene);
-    this.expansionFloor = this.box('expansion-floor', 6, .022, 13, 13.5, .012, 3, '#d1ceb8', this.expansionRoot, false);
+    this.expansionFloor = this.box('expansion-floor', 6, .12, 13, 13.5, -.06, 3, '#ccd0ac', this.expansionRoot, false);
+    this.expansionTiles = this.surfacePattern('expansion-tile-ink', COLORS.tile, '#c2b49b', ROOM.depth / ROOM.tilePitch, 6 / ROOM.tilePitch, true);
     this.expansionFloor.metadata = { coffeeExpansion: 'locked', coffeeAction: { type: 'renovate' } };
     for (const z of [-3.42, 9.42]) this.box(`expansion-edge-${z}`, 6, .025, .08, 13.5, .03, z, '#a5b197', this.expansionRoot, false);
     this.box('expansion-far-edge', .08, .025, 13, 16.45, .03, 3, '#a5b197', this.expansionRoot, false);
     this.expansionGate = new TransformNode('expansion-locked-divider', this.scene);
     this.expansionGate.parent = this.expansionRoot;
-    for (const z of [-2.8, .1, 3, 5.9, 8.8]) {
+    for (const z of [-2.8, .1, 3, 8.8]) {
       this.box(`expansion-post-${z}`, .14, .8, .14, 10.63, .4, z, COLORS.woodDark, this.expansionGate);
       this.cylinder(`expansion-post-cap-${z}`, .21, .075, 10.63, .84, z, COLORS.gold, this.expansionGate);
     }
-    for (const z of [-1.35, 1.55, 4.45, 7.35]) this.box(`expansion-rope-${z}`, .055, .065, 2.8, 10.63, .66, z, '#a88c60', this.expansionGate, false);
+    for (const z of [-1.35, 1.55]) this.box(`expansion-rope-${z}`, .055, .065, 2.8, 10.63, .66, z, '#a88c60', this.expansionGate, false);
     // A timber building marker, with an embodied plus, is also the expansion entry.
-    const marker = this.box('expansion-marker', 1.15, .9, .1, 12, 1.48, -2.8, COLORS.tealDark, this.expansionRoot);
+    const marker = this.box('expansion-marker', 1.15, .9, .1, 13.5, 1.48, -4.4, COLORS.tealDark, this.expansionRoot);
     marker.metadata = { coffeeAction: { type: 'renovate' }, coffeeExpansionSign: true };
-    this.box('expansion-marker-post', .13, 1.2, .13, 12, .6, -2.86, COLORS.woodDark, this.expansionRoot);
+    this.box('expansion-marker-post', .13, 1.2, .13, 13.5, .6, -4.46, COLORS.woodDark, this.expansionRoot);
     for (const [name, w, h] of [['horizontal', .56, .105], ['vertical', .105, .56]] as const) {
-      const plus = this.box(`expansion-plus-${name}`, w, h, .025, 12, 1.48, -2.735, COLORS.gold, this.expansionRoot, false);
+      const plus = this.box(`expansion-plus-${name}`, w, h, .025, 13.5, 1.48, -4.335, COLORS.gold, this.expansionRoot, false);
       plus.metadata = { coffeeAction: { type: 'renovate' } };
     }
     this.registerAnchor('expansion', marker);
@@ -494,8 +455,6 @@ export class CoffeeScene {
     if (signature !== this.gridSignature) {
       for (const mesh of this.gridCells.values()) mesh.dispose(false, false);
       this.gridCells.clear();
-      for (const mesh of this.wallCells.values()) mesh.dispose(false, false);
-      this.wallCells.clear();
       this.gridSignature = signature;
       if (layout) {
         for (let x = -7; x <= (layout.expanded ? 16 : 10); x++) for (let z = -3; z <= 9; z++) {
@@ -506,14 +465,7 @@ export class CoffeeScene {
           cell.freezeWorldMatrix();
           this.gridCells.set(`${x},${z}`, cell);
         }
-        for (const x of coffeeWallSlots(layout)) {
-          const cell = this.box(`renovation-wall-${x}`, .94, 2.16, .015, x, COFFEE_WALL.y, COFFEE_WALL.z - .105, '#f6edcd', undefined, false);
-          cell.material = this.material('#f6edcd', false, .25);
-          cell.receiveShadows = false;
-          cell.metadata = { coffeeAction: { type: 'layout-wall', x }, coffeeRenovationWall: true };
-          cell.freezeWorldMatrix();
-          this.wallCells.set(x, cell);
-        }
+
       }
     }
     if (!layout) {
@@ -521,10 +473,8 @@ export class CoffeeScene {
       this.renovationGhost = null;
       return;
     }
-    const sign = getCoffeeSigns(layout).find(item => item.id === this.renovationSelected && !item.stored);
-    for (const cell of this.wallCells.values()) cell.setEnabled(Boolean(this.renovationSelected?.startsWith('menu-')));
     const selected = layout.furniture.find(item => item.id === this.renovationSelected && !item.stored);
-    if (!selected && !sign) { this.renovationGhost?.setEnabled(false); return; }
+    if (!selected) { this.renovationGhost?.setEnabled(false); return; }
     if (!this.renovationGhost) {
       this.renovationGhost = this.box('renovation-footprint-ghost', 1, .055, 1, 0, .115, 0, '#71b684', undefined, false);
       this.renovationGhost.isPickable = false;
@@ -532,18 +482,13 @@ export class CoffeeScene {
     }
     this.renovationGhost.unfreezeWorldMatrix();
     this.renovationGhost.setEnabled(true);
-    if (sign) {
-      this.renovationGhost.scaling.set(COFFEE_WALL.width + .18, 2.3, .025);
-      this.renovationGhost.position.set(sign.x, COFFEE_WALL.y, COFFEE_WALL.z - .095);
-    } else {
-      const cells = furnitureCells(selected!);
-      const minX = Math.min(...cells.map(cell => cell.x)), maxX = Math.max(...cells.map(cell => cell.x));
-      const minZ = Math.min(...cells.map(cell => cell.z)), maxZ = Math.max(...cells.map(cell => cell.z));
-      this.renovationGhost.scaling.set(maxX - minX + .98, .055, maxZ - minZ + .98);
-      this.renovationGhost.position.set((minX + maxX) / 2, .115, (minZ + maxZ) / 2);
-    }
+    const cells = furnitureCells(selected);
+    const minX = Math.min(...cells.map(cell => cell.x)), maxX = Math.max(...cells.map(cell => cell.x));
+    const minZ = Math.min(...cells.map(cell => cell.z)), maxZ = Math.max(...cells.map(cell => cell.z));
+    this.renovationGhost.scaling.set(maxX - minX + .98, .055, maxZ - minZ + .98);
+    this.renovationGhost.position.set((minX + maxX) / 2, .115, (minZ + maxZ) / 2);
     this.renovationGhost.material = this.material(this.renovationValid ? '#71b684' : '#d76262', true, .55);
-    this.renovationGhost.metadata = { coffeeFootprint: (sign ?? selected)!.id, coffeePlacementValid: this.renovationValid, coffeePlacementSurface: sign ? 'wall' : 'floor' };
+    this.renovationGhost.metadata = { coffeeFootprint: selected.id, coffeePlacementValid: this.renovationValid, coffeePlacementSurface: 'floor' };
   }
 
   /** Read the actual presented mesh after update; viewport bounds do not assert occlusion. */
@@ -651,16 +596,14 @@ export class CoffeeScene {
     }
     this.engine.resize();
     const aspect = Math.max(0.1, rect.width / Math.max(1, rect.height));
-    // Phones crop a room at useful object scale. Landscape sees a close counter-and-wall view;
-    // portrait has vertical room for queues, while dragging reveals the other shop areas.
-    const halfHeight = aspect > 1.8 ? 3.65 : 6.15;
+    // A desktop frames the finite shop and its outside paths. Compact viewports retain
+    // readable furniture with bounded panning; the DOM dock provides larger touch controls.
+    const halfHeight = rect.width >= 1000 ? 10.4 : aspect > 1.8 ? 5.0 : 6.15;
     this.camera.orthoLeft = -halfHeight * aspect;
     this.camera.orthoRight = halfHeight * aspect;
     this.camera.orthoTop = halfHeight;
     this.camera.orthoBottom = -halfHeight;
     this.refreshPanBounds();
-    if (!this.hasSized && aspect > 1.8) { this.panX = -3.4; this.panY = 1.8; }
-    this.hasSized = true;
     this.setPan(this.panX, this.panY);
   }
 
@@ -681,11 +624,8 @@ export class CoffeeScene {
     if (this.ownsEngine) this.engine.dispose();
     this.customers.clear();
     this.stations.clear();
-    this.menus.clear();
     this.tables.clear();
     this.gridCells.clear();
-    this.wallCells.clear();
-    this.legacyFurniture.length = 0;
     this.previewLayout = this.liveLayout = this.displayedLayout = null;
     this.materials.clear();
     this.shapes.clear();
@@ -742,7 +682,7 @@ export class CoffeeScene {
       const point = this.projectWorld(this.anchorWorld(target));
       if (Math.hypot(point.x - down.targetPoint.x, point.y - down.targetPoint.y) > 9) return;
     }
-    // Both ends must hit the same actual mesh. A moving cart, new foreground customer,
+    // Both ends must hit the same actual mesh. A moved furnishing, foreground customer,
     // a background press or a camera jump cannot retarget a captured press on release.
     if (target && target === down.target && action && down.action && JSON.stringify(action) === JSON.stringify(down.action)) this.onAction(action);
   };
@@ -840,8 +780,8 @@ export class CoffeeScene {
         minX = Math.min(minX, sx); maxX = Math.max(maxX, sx); minY = Math.min(minY, sy); maxY = Math.max(maxY, sy);
       }
     }
-    // Each anchor can be centered. The continuous room extends beyond these bounded views;
-    // there is no zoom-out fitting step and keyboard and pointer use identical limits.
+    // Each furniture cell and exterior doorway can be centered with the same
+    // bounded camera, without changing any simulation coordinates.
     this.panBounds = { left: minX, right: maxX, bottom: minY, top: maxY };
   }
 
@@ -927,41 +867,70 @@ export class CoffeeScene {
   }
 
   private makeEnvironment(): void {
-    // This is a continuous room, not an island/plinth floating inside a blank canvas.
-    // Surfaces deliberately extend beyond every bounded view, including portrait crops.
-    // One continuous solid carries one square, world-scaled tile pattern. Raised per-tile
-    // boxes gave the two grid directions different shadows and left a step at the wall.
+    // Finite floor and two trimmed walls expose the surrounding garden. These visual
+    // solids never participate in grid navigation; every decorative prop sits outside it.
+    this.exteriorLawn = this.box('exterior-lawn', 144, .14, 144, 4, -.28, 2, '#a8ba83', undefined, false);
+    this.exteriorLawn.metadata = { coffeeExterior: 'lawn' };
+    const paving = (name: string, w: number, d: number, x: number, z: number) => {
+      const mesh = this.box(name, w, .1, d, x, -.05, z, '#d7c9ae', undefined, false);
+      mesh.metadata = { coffeeExterior: 'paving' }; this.exteriorPaving.push(mesh); return mesh;
+    };
+    paving('rear-pavement', 38, 2.2, 3, -4.75);
+    paving('entrance-outside-walk', 2.8, 14.2, -9, 2.85);
+    paving('front-garden-walk', 31, 1.45, 3, 10.3);
+    const road = this.box('neighborhood-road', 64, .08, 4.6, 4, -.19, -8.15, '#8b8980', undefined, false);
+    road.metadata = { coffeeExterior: 'road' };
+    for (let i = -3; i <= 4; i++) this.box(`street-mark-${i}`, 2.3, .012, .11, i * 5, -.14, -8.15, '#e6dbc1', undefined, false);
+
     const floor = this.box('continuous-shop-floor', ROOM.width, .12, ROOM.depth,
-      0, ROOM.floorY - .06, ROOM.rearZ + ROOM.depth / 2, COLORS.tile, undefined, false);
-    // Babylon box top UVs run U along +Z and V along −X, so use the matching spans.
-    floor.material = this.surfacePattern('floor-tile-ink', COLORS.tile, '#b9ad95', ROOM.depth / ROOM.tilePitch, ROOM.width / ROOM.tilePitch, true);
-    floor.receiveShadows = true; floor.isPickable = true;
-    floor.metadata = { coffeeEnvironment: true, coffeeSurface: 'floor', coffeePattern: { axes: 'xz', pitch: ROOM.tilePitch, originX: -ROOM.width / 2, originZ: ROOM.rearZ } };
-    const wall = this.box('rear-wall', ROOM.width, 28, .22, 0, 14, ROOM.rearZ - .11, COLORS.cream, undefined, false);
-    wall.isPickable = true; wall.metadata = { coffeeEnvironment: true, coffeeSurface: 'rear-wall' };
-    // The wall panelling meets the floor and its seams are ink on the actual front plane,
-    // rather than separately lit rods suspended ahead of the wall.
-    const panels = this.box('rear-wainscot', ROOM.width, 1.22, .1, 0, .61, ROOM.rearZ + .05, COLORS.tealDark, undefined, false);
-    panels.material = this.surfacePattern('wall-panel-ink', COLORS.tealDark, '#205f5b', ROOM.width / ROOM.panelPitch, 1, false);
-    panels.metadata = { coffeeSurface: 'wall-panels', coffeePattern: { axes: 'xy', pitch: ROOM.panelPitch, originX: -ROOM.width / 2 } };
-    this.box('wall-baseboard', ROOM.width, .08, .06, 0, .04, ROOM.rearZ + .13, COLORS.tealDark, undefined, false);
-    this.box('wall-chair-rail', ROOM.width, .12, .17, 0, 1.28, ROOM.rearZ + .085, COLORS.woodLight, undefined, false);
-    // The high rail is above the vault's separate wall-mounted upgrade plaque.
-    this.box('wall-picture-rail', ROOM.width, .12, .15, 0, 4.82, ROOM.rearZ + .075, COLORS.woodLight, undefined, false);
-    const brand = this.makeLabel('brand-sign', 3.9, 0.72, new Vector3(-6.45, 2.92, -3.42), undefined, { type: 'renovate' });
+      ROOM.centerX, ROOM.floorY - .06, ROOM.centerZ, COLORS.tile, undefined, false);
+    floor.material = this.surfacePattern('floor-tile-ink', COLORS.tile, '#c2b49b', ROOM.depth / ROOM.tilePitch, ROOM.width / ROOM.tilePitch, true);
+    floor.metadata = { coffeeEnvironment: true, coffeeSurface: 'floor', coffeePattern: { axes: 'xz', pitch: ROOM.tilePitch, originX: ROOM.sideX, originZ: ROOM.rearZ } };
+    this.box('front-floor-trim', ROOM.width, .16, .1, ROOM.centerX, -.035, 9.5, '#c2af8b', undefined, false);
+    this.makeWall('rear', ROOM.width + .22, ROOM.height, .22, ROOM.centerX, ROOM.rearZ - .11);
+    // A real opening covers the entry and the one-time old-route exit lane at z=6.
+    this.makeWall('right-rear', .22, ROOM.height, 7.05, ROOM.sideX - .11, .025);
+    this.makeWall('right-front', .22, ROOM.height, 2.65, ROOM.sideX - .11, 8.175);
+    this.expandedRear = new TransformNode('expanded-rear-wall', this.scene);
+    this.makeWall('expansion-rear', 6, ROOM.height, .22, 13.5, ROOM.rearZ - .11, this.expandedRear);
+    this.expandedRear.setEnabled(false);
+    const brand = this.makeLabel('brand-sign', 3.7, .66, new Vector3(1.2, 2.6, -3.34));
     this.paintLabel(brand, 'brand', (ctx, w, h) => {
       this.roundRect(ctx, 8, 8, w - 16, h - 16, 20, '#315d54');
-      this.text(ctx, 'MELLOW BEAN', w / 2, h * .28, 36, '#b9d0b6');
-      this.text(ctx, '装修 / 扩建  +', w / 2, h * .68, 62, '#fff5df');
+      this.text(ctx, 'MELLOW BEAN', w / 2, h / 2 + 2, 64, '#fff5df');
     });
-    this.makePlant('tall-plant-left', -9.08, -2.65, 1.12);
-    this.makePlant('plant-right', 11.3, -2.55, 0.85);
-    this.makePlant('entrance-plant', -9.0, 2.55, 0.7);
-    this.makeBench();
-    // Customer and manager routes belong to the simulation; the floor stays bare tile.
-    for (const node of [...this.scene.meshes, ...this.scene.transformNodes]) {
-      if (/^(left-waiting-bench$|plant-right$)/.test(node.name)) this.legacyFurniture.push(node);
+    this.makePlant('garden-plant-entry', -10.4, 2.6, .9);
+    this.makePlant('garden-plant-front', -6.1, 11.8, .7);
+    this.makePlant('garden-plant-rear', 9.7, -4.65, .82);
+    // Every shrub is outside the owned grid, including the expanded shop footprint.
+    for (const [i, x, z] of [[0, -12, -1], [1, 20, 1], [2, 17.8, 11.8], [3, -3, 14]] as const) {
+      const shrub = this.shape('sphere', `garden-shrub-${i}`, new Vector3(1.5, .85, 1.3), new Vector3(x, .25, z), '#83a078', undefined, false);
+      shrub.metadata = { coffeeExterior: 'decoration' };
     }
+    this.setBackdrop('garden');
+  }
+
+  private makeWall(name: string, width: number, height: number, depth: number, x: number, z: number, parent?: TransformNode): void {
+    const wall = this.box(`${name}-wall`, width, height, depth, x, height / 2, z, COLORS.cream, parent, false);
+    wall.metadata = { coffeeEnvironment: true, coffeeSurface: 'cutaway-wall' };
+    this.box(`${name}-wall-cap`, width + .04, .12, depth + .04, x, height + .02, z, '#f7f0df', parent, false);
+    const side = width < depth;
+    const panel = this.box(`${name}-wainscot`, side ? .08 : width, .83, side ? depth : .08,
+      x + (side ? .15 : 0), .42, z + (side ? 0 : .15), COLORS.tealDark, parent, false);
+    panel.metadata = { coffeeSurface: 'wall-panels' };
+    this.box(`${name}-chair-rail`, side ? .12 : width, .1, side ? depth : .12,
+      x + (side ? .16 : 0), .89, z + (side ? 0 : .16), COLORS.woodLight, parent, false);
+    this.box(`${name}-baseboard`, side ? .1 : width, .09, side ? depth : .1,
+      x + (side ? .16 : 0), .045, z + (side ? 0 : .16), COLORS.woodDark, parent, false);
+  }
+
+  /** Device-only appearance setting; no simulation data or indoor material is changed. */
+  setBackdrop(theme: CoffeeBackdrop): void {
+    if (this.disposed || !this.exteriorLawn || !Object.hasOwn(BACKDROPS, theme)) return;
+    const colors = BACKDROPS[theme];
+    this.exteriorLawn.material = this.material(colors.lawn);
+    for (const mesh of this.exteriorPaving) mesh.material = this.material(colors.paving);
+    this.scene.clearColor = Color4.FromHexString(colors.sky);
   }
 
   private makeStation(id: CounterId, x: number, accent: string, deep: string, letter: string): Station {
@@ -1037,28 +1006,6 @@ export class CoffeeScene {
       stacked.scaling.setAll(0.82);
     }
     this.box(`${id}-napkins`, 0.32, 0.075, 0.29, 1.26, 1.258, 0.26, '#fbf8ec', root);
-    // Notes and their amount tag share one counter-mounted cash location. The tag lies flat
-    // immediately beside the real notes, rather than becoming an above-counter register.
-    const cashRoot = new TransformNode(`${id}-cash-cluster`, this.scene);
-    cashRoot.parent = root;
-    cashRoot.position.set(-1.08, 1.25, .04);
-    const cash: TransformNode[] = [];
-    for (let pile = 0; pile < 6; pile++) {
-      const stack = this.makeCashStack(`${id}-cash-${pile}`, cashRoot);
-      stack.position.set(-.20 + (pile % 2) * .40, Math.floor(pile / 2) * .095, -.08 + (pile % 2) * .16);
-      stack.setEnabled(false);
-      cash.push(stack);
-    }
-    const cashTag = new TransformNode(`${id}-cash-tag`, this.scene);
-    cashTag.parent = cashRoot;
-    cashTag.position.set(0, .012, .40);
-    cashTag.rotation.x = -Math.PI / 2;
-    const cashLabel = this.makeLabel(`${id}-cash-total`, 1.4, .64, new Vector3(0, 0, .012), cashTag, undefined, 512, 192, .025);
-    cashLabel.mesh.metadata = {
-      ...cashLabel.mesh.metadata, coffeeDisplay: 'pending-cash', coffeeCashRoot: cashRoot.name,
-      coffeeGlyphHeight: .64 * 124 / 192, coffeeGlyphCenter: .60,
-    };
-    cashRoot.setEnabled(false);
     // The meter is a physical inset on the espresso machine front, not a floating bar.
     const progressRoot = CreateBox(`${id}-progress`, { width: .98, height: .13, depth: .018 }, this.scene);
     progressRoot.parent = machine;
@@ -1068,46 +1015,10 @@ export class CoffeeScene {
     const progressFill = this.box(`${id}-progress-fill`, 1, .072, .018, -.45, 0, .018, accent, progressRoot, false);
     progressRoot.metadata = { coffeeDisplay: 'brew-progress' };
     progressRoot.setEnabled(false);
-    const station: Station = { root, barista, progressRoot, progressFill, plaque, selector, cashLabel, cashRoot, cash, machineExtras: extras, readyCup, selection, level: -1, recipe: '', pendingCash: -1 };
+    const station: Station = { root, barista, progressRoot, progressFill, plaque, selector, machineExtras: extras, readyCup, selection, level: -1, recipe: '' };
     // Build the initial labels even before the first simulation frame arrives.
     this.updateStation(station, { id, x, level: 1, recipe: letter === 'A' ? 'espresso' : 'latte', pendingCash: 0, brewed: 0, brew: null }, false);
     return station;
-  }
-
-  private makeMenu(recipe: RecipeId, x: number): void {
-    const action: CoffeeSceneAction = { type: 'menu', recipe };
-    const root = new TransformNode(`menu-${recipe}-furniture`, this.scene);
-    root.position.set(x, COFFEE_WALL.y, COFFEE_WALL.z);
-    root.metadata = { coffeeFurnitureId: `menu-${recipe}`, coffeeFurnitureKind: 'coffee-sign' };
-    const frame = this.box(`menu-${recipe}-frame`, COFFEE_WALL.width, 2.1, .17, 0, 0, 0, COLORS.woodDark, root);
-    frame.isPickable = true; frame.metadata = { coffeeAction: action };
-    for (const dx of [-1.15, 1.15]) this.box(`menu-${recipe}-hanger-${dx}`, .045, .36, .06, dx, 1.14, .06, COLORS.gold, root, false);
-    const board = this.makeLabel(`menu-${recipe}`, 3.3, 1.90, new Vector3(0, 0, .12), root, action, 768, 448);
-    this.registerAnchor(`menu-${recipe}`, board.mesh);
-    const menu: Menu = { root, label: board, level: -1 };
-    this.menus.set(recipe, menu);
-    this.updateMenu(recipe, menu, 1);
-  }
-
-  private updateMenu(recipe: RecipeId, menu: Menu, level: number): void {
-    if (menu.level === level) return;
-    const espresso = recipe === 'espresso';
-    const price = coffeePrice(recipe, level), brewSeconds = coffeeBrewSeconds(recipe, level);
-    // This is shared coffee progression, before any counter-specific modifier.
-    menu.label.mesh.metadata = { ...menu.label.mesh.metadata, coffeeMenu: { recipe, level, price, brewSeconds } };
-    this.paintLabel(menu.label, `${recipe}-${level}`, (ctx, w, h) => {
-      this.roundRect(ctx, 1, 1, w - 2, h - 2, 15, '#2e4843');
-      this.text(ctx, '咖啡菜单', w / 2, 55, 44, '#ead4a1');
-      ctx.strokeStyle = '#648275'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(62, 87); ctx.lineTo(w - 62, 87); ctx.stroke();
-      ctx.fillStyle = espresso ? '#d49c5b' : '#91bab0';
-      ctx.beginPath(); ctx.moveTo(w / 2 - 58, 116); ctx.lineTo(w / 2 + 58, 116); ctx.lineTo(w / 2 + 43, 209); ctx.lineTo(w / 2 - 43, 209); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = '#f7ebd7'; ctx.fillRect(w / 2 - 63, 109, 126, 18);
-      ctx.fillStyle = '#523c2f'; ctx.fillRect(w / 2 - 50, 133, 100, 18);
-      this.text(ctx, espresso ? '浓缩咖啡' : '拿铁咖啡', w / 2, 263, 78, '#faf1db');
-      this.text(ctx, `${cashText(price)}  ·  ${brewSeconds.toFixed(2)}s`, w / 2, 328, 52, '#ead4a1');
-      this.text(ctx, `Lv. ${level} · 查看 +`, w / 2, 400, 50, '#ead4a1');
-    });
-    menu.level = level;
   }
 
   private updateStation(station: Station, counter: Counter, paused: boolean): void {
@@ -1130,19 +1041,6 @@ export class CoffeeScene {
       });
       station.recipe = counter.recipe;
     }
-    if (station.pendingCash !== counter.pendingCash) {
-      const piles = counter.pendingCash > 0 ? Math.min(6, Math.max(1, Math.ceil(counter.pendingCash / 450))) : 0;
-      station.cash.forEach((stack, i) => stack.setEnabled(i < piles));
-      station.cashRoot.setEnabled(counter.pendingCash > 0);
-      station.cashLabel.mesh.metadata = { ...station.cashLabel.mesh.metadata, coffeeAmount: counter.pendingCash };
-      if (counter.pendingCash > 0) this.paintLabel(station.cashLabel, `${counter.pendingCash}`, (ctx, w, h) => {
-        this.roundRect(ctx, 5, 5, w - 10, h - 10, 24, '#f4f5df');
-        // Front receipt region is clear of the notes. Longer precise amounts scale to fit.
-        const font = this.text(ctx, cashText(counter.pendingCash), w / 2, h * .60, 124, '#477448', w - 28);
-        station.cashLabel.mesh.metadata = { ...station.cashLabel.mesh.metadata, coffeePaintedFontSize: font };
-      });
-      station.pendingCash = counter.pendingCash;
-    }
     const brew = counter.brew;
     const progress = brew ? clamp(brew.elapsed / Math.max(0.001, brew.duration)) : 0;
     station.progressRoot.setEnabled(Boolean(brew));
@@ -1163,7 +1061,7 @@ export class CoffeeScene {
     station.selection.setEnabled(this.selected === counter.id);
   }
 
-  private makePerson(name: string, skinIndex: number, shirt: string, guest: boolean, manager = false): Person {
+  private makePerson(name: string, skinIndex: number, shirt: string, guest: boolean): Person {
     const skin = SKINS[Math.abs(skinIndex) % SKINS.length];
     const hair = HAIR[Math.abs(skinIndex) % HAIR.length];
     const root = new TransformNode(name, this.scene);
@@ -1193,15 +1091,10 @@ export class CoffeeScene {
     const leftLeg = new TransformNode(`${name}-left-hip`, this.scene); leftLeg.parent = root; leftLeg.position.set(-0.15, 0.70, 0);
     const rightLeg = new TransformNode(`${name}-right-hip`, this.scene); rightLeg.parent = root; rightLeg.position.set(0.15, 0.70, 0);
     for (const [side, leg] of [['left', leftLeg], ['right', rightLeg]] as const) {
-      this.box(`${name}-${side}-trouser`, 0.21, 0.49, 0.24, 0, -0.245, 0, manager ? '#384957' : '#485451', leg);
+      this.box(`${name}-${side}-trouser`, 0.21, 0.49, 0.24, 0, -0.245, 0, '#485451', leg);
       this.box(`${name}-${side}-shoe`, 0.24, 0.14, 0.37, 0, -0.58, 0.063, guest ? '#f4eddd' : '#51483d', leg);
     }
-    if (manager) {
-      this.box(`${name}-vest`, 0.52, 0.45, 0.042, 0, 0.96, 0.225, '#425e61', root);
-      this.box(`${name}-vest-pocket`, 0.15, 0.10, 0.026, 0.13, 1.02, 0.251, '#e0ad52', root, false);
-      this.box(`${name}-cap`, 0.63, 0.18, 0.57, 0, 1.81, 0, '#d6a647', root);
-      this.box(`${name}-cap-visor`, 0.52, 0.055, 0.21, 0, 1.745, 0.31, '#a77b31', root);
-    } else if (guest && skinIndex % 3 === 0) {
+    if (guest && skinIndex % 3 === 0) {
       for (const eyeX of [-0.115, 0.115]) {
         this.box(`${name}-glasses-top-${eyeX}`, 0.15, 0.024, 0.023, eyeX, 1.567, 0.29, '#544839', root, false);
         this.box(`${name}-glasses-bottom-${eyeX}`, 0.15, 0.024, 0.023, eyeX, 1.46, 0.29, '#544839', root, false);
@@ -1266,75 +1159,6 @@ export class CoffeeScene {
     person.previousZ = customer.z;
   }
 
-  private updateManager(state: Readonly<SliceState>, dt: number): void {
-    const person = this.manager;
-    const manager = state.manager;
-    if (this.lastManagerLevel !== manager.level) {
-      this.paintLabel(this.vaultLabel, `manager-${manager.level}`, (ctx, w, h) => {
-        this.roundRect(ctx, 6, 6, w - 12, h - 12, 22, '#f1dd9f');
-        this.text(ctx, '金库', w / 2, h * .23, 100, '#405a45');
-        this.text(ctx, `经理 Lv.${manager.level} ↑`, w / 2, h * .58, 70, '#405a45');
-        this.text(ctx, '存款 / 升级', w / 2, h * .84, 48, '#405a45');
-      });
-      this.vaultLabel.mesh.metadata = { ...this.vaultLabel.mesh.metadata, coffeeManagerLevel: manager.level };
-      this.lastManagerLevel = manager.level;
-    }
-    const x = manager.x;
-    const dx = x - person.previousX;
-    const dz = manager.z - person.previousZ;
-    const activeLayout = Boolean(this.displayedLayout?.active);
-    // A moving phase can be waiting for the shared aisle. No path means no
-    // actual step in an active layout; retain the previous legacy animation.
-    const moving = manager.phase === 'moving' && dt > 0 && (!activeLayout || Boolean(manager.nav?.length));
-    person.root.scaling.setAll(activeLayout ? .8 : .97);
-    // Shared interpolated snapshots keep the cart, manager and handoff state together;
-    // raw core positions otherwise jump at 20Hz even when the GPU draws at 60Hz.
-    person.root.position.x = x;
-    person.root.position.z = manager.z;
-    if (moving && Math.hypot(dx, dz) > 0.003) person.root.rotation.y = Math.atan2(dx, dz);
-    else if (manager.phase === 'collecting') {
-      const station = this.displayedLayout?.active ? this.stations.get(state.counters[manager.target]?.id) : undefined;
-      person.root.rotation.y = station ? Math.atan2(station.root.position.x - x, station.root.position.z - manager.z) : 0;
-    }
-    else if (manager.phase === 'depositing') person.root.rotation.y = -Math.PI / 2;
-    if (dt > 0) {
-      const gait = moving ? Math.sin(this.animationTime * 10.5) * 0.3 : 0;
-      person.leftLeg.rotation.x = gait;
-      person.rightLeg.rotation.x = -gait;
-      person.leftArm.rotation.x = activeLayout ? (moving ? -.3 : -.12) : moving ? -.75 : -.25;
-      person.rightArm.rotation.x = activeLayout
-        ? manager.phase === 'collecting' || manager.phase === 'depositing' ? -.4 + Math.sin(this.animationTime * 5) * .04 : moving ? -.3 : -.12
-        : manager.phase === 'collecting' || manager.phase === 'depositing' ? -1 + Math.sin(this.animationTime * 5) * .12 : -.65;
-      person.root.position.y = moving ? Math.abs(gait) * 0.026 : 0;
-    }
-    if (activeLayout) {
-      // Also bound a frozen pose carried across the first legacy-to-layout frame.
-      person.leftArm.rotation.x = clamp(person.leftArm.rotation.x, -.3, .3);
-      person.rightArm.rotation.x = clamp(person.rightArm.rotation.x, -.44, .3);
-    }
-    // The trolley follows the bounded service lane in world orientation. The manager
-    // turns to reach stations; that turn must not orbit a wide trolley through the wall.
-    if (activeLayout) {
-      // The core reserves actor centres one metre apart. Keep the whole live
-      // manager + small close-in trolley inside a <.5 m radial footprint, rather
-      // than trailing a full trolley into another actor's tile at a corner.
-      this.managerCart.scaling.setAll(.43);
-      this.managerCart.rotation.y = person.root.rotation.y;
-      this.managerCart.position.set(person.root.position.x + Math.cos(person.root.rotation.y) * .22, 0, person.root.position.z - Math.sin(person.root.rotation.y) * .22);
-    } else {
-      this.managerCart.scaling.setAll(1); this.managerCart.rotation.y = 0;
-      this.managerCart.position.set(person.root.position.x + .70, 0, person.root.position.z - .55);
-    }
-    const stacks = manager.carrying > 0 ? Math.min(6, Math.max(1, Math.ceil(manager.carrying / 600))) : 0;
-    if (stacks !== this.lastCartStacks) {
-      this.cartCash.forEach((cash, i) => cash.setEnabled(i < stacks));
-      this.lastCartStacks = stacks;
-    }
-    person.shadow.position.set(person.root.position.x, CONTACT_SHADOW_Y, person.root.position.z);
-    person.previousX = x;
-    person.previousZ = manager.z;
-  }
-
   private makeCup(name: string, sleeve: string, parent?: TransformNode): TransformNode {
     const root = new TransformNode(name, this.scene);
     if (parent) root.parent = parent;
@@ -1345,72 +1169,39 @@ export class CoffeeScene {
     return root;
   }
 
-  private makeCashStack(name: string, parent: TransformNode): TransformNode {
-    const root = new TransformNode(name, this.scene); root.parent = parent;
-    this.box(`${name}-notes`, 0.36, 0.073, 0.22, 0, 0.036, 0, COLORS.moneyDark, root, false);
-    this.box(`${name}-top`, 0.35, 0.017, 0.21, 0, 0.081, 0, COLORS.money, root, false);
-    this.box(`${name}-band`, 0.078, 0.025, 0.218, 0.03, 0.092, 0, '#edf0c0', root, false);
-    this.box(`${name}-note-line`, 0.29, 0.007, 0.016, 0, 0.058, 0.112, '#b9d399', root, false);
-    return root;
-  }
-
-  private makeCart(parent: TransformNode): void {
-    const root = new TransformNode('manager-cash-cart', this.scene);
-    this.managerCart = root;
-    root.position.set(parent.position.x + .70, 0, parent.position.z - .55);
-    // A small, fixed-world-orientation money trolley. It has no action metadata or clipboard.
-    this.box('cart-base', .92, .10, .64, 0, .29, 0, '#866748', root);
-    for (const x of [-.42, .42]) {
-      this.box(`cart-rail-${x}`, .045, .12, .62, x, .38, 0, COLORS.gold, root);
-      for (const z of [-.25, .25]) this.cylinder(`cart-wheel-${x}-${z}`, .18, .065, x, .14, z, '#394844', root).rotation.z = Math.PI / 2;
-    }
-    this.box('cart-handle-post', .04, .47, .04, -.44, .58, .25, COLORS.steel, root);
-    this.box('cart-handle', .30, .055, .055, -.48, .78, .25, COLORS.dark, root);
-    this.box('cart-cash-table', .88, .08, .44, 0, .74, 0, COLORS.woodLight, root);
-    for (const x of [-.32, .32]) this.box(`cart-cash-support-${x}`, .055, .43, .055, x, .51, 0, COLORS.woodDark, root);
-    for (let pile = 0; pile < 6; pile++) {
-      const stack = this.makeCashStack(`cart-cash-${pile}`, root);
-      stack.position.set(-.20 + (pile % 2) * .40, .785 + Math.floor(pile / 2) * .085, 0);
-      stack.setEnabled(false);
-      this.cartCash.push(stack);
-    }
-  }
-
   private makeEntrance(): Label {
-    const pad = this.cylinder('entrance-invite-pad', 2.1, 0.03, -8, 0.03, 5, '#d8b66b', undefined, false);
-    pad.receiveShadows = true;
-    const edge = this.shape('ring', 'entrance-pad-border', new Vector3(2.04, 0.8, 2.04), new Vector3(-8, 0.057, 5), '#f9e6b1', undefined, false);
-    edge.material = this.material('#f9e6b1', true);
-    this.box('entry-sign-post-left', 0.11, 1.16, 0.11, -8.68, 0.59, 5.62, COLORS.woodDark);
-    this.box('entry-sign-post-right', 0.11, 1.16, 0.11, -7.32, 0.59, 5.62, COLORS.woodDark);
-    const label = this.makeLabel('invite-guest-sign', 2.48, 1.05, new Vector3(-8, 1.48, 5.62), undefined, { type: 'invite' }, 768, 288);
-    this.registerAnchor('invite', label.mesh);
-    this.paintLabel(label, 'ready', (ctx, w, h) => {
-      this.roundRect(ctx, 8, 8, w - 16, h - 16, 30, '#dca84b');
-      this.text(ctx, '迎接顾客  +', w / 2, h / 2 + 2, 94, '#ffffff');
-    });
-    pad.isPickable = true; pad.metadata = { coffeeAction: { type: 'invite' } };
-    return label;
+    const entrance = this.makeDoorway('entrance', ROOM.sideX, GRID.entry.z, true);
+    this.exitRoot = this.makeDoorway('exit', GRID.maxX + .5, 6, false).root;
+    return entrance.label;
   }
 
-  private makeVault(): { lamp: Mesh; label: Label } {
-    const vault = new TransformNode('cash-vault', this.scene); vault.position.set(WORLD.vaultX, 1.18, -3.09);
-    this.box('vault-wall-bracket', 1.63, .12, .75, 0, .09, -.02, COLORS.woodDark, vault);
-    this.box('vault-body', 1.48, 1.28, 0.88, 0, 0.77, 0, '#466660', vault);
-    const door = this.box('vault-door', 1.26, 1.06, 0.08, 0, 0.79, 0.48, '#739286', vault);
-    door.isPickable = true; door.metadata = { coffeeAction: { type: 'vault' } };
-    this.box('vault-door-inset', 1.04, 0.86, 0.035, 0, 0.78, 0.534, '#405f58', vault);
-    const wheel = this.cylinder('vault-wheel', 0.34, 0.072, 0, 0.78, 0.594, '#d8be76', vault); wheel.rotation.x = Math.PI / 2;
-    this.box('vault-wheel-spoke', 0.29, 0.065, 0.045, 0, 0.78, 0.642, '#775d35', vault, false);
-    this.box('vault-slot', 0.54, 0.063, 0.07, 0, 1.13, 0.55, '#213e37', vault, false);
-    // Mount this plaque on the wall ABOVE the whole vault silhouette. A front-door
-    // label would overlap its icon under the fixed oblique view even with a small Y gap.
-    // Keep a compact visible gap above the complete icon rather than a distant wall sign.
-    const label = this.makeLabel('vault-bank-label', 1.55, 1.04, new Vector3(0, 2.59, -.46), vault, { type: 'vault' }, 512, 384);
-    label.mesh.metadata = { ...label.mesh.metadata, coffeeSurface: 'vault-upgrade-plaque' };
-    this.registerAnchor('vault', label.mesh);
-    const lamp = this.cylinder('vault-deposit-light', 0.12, 0.045, 0.48, 1.14, 0.56, '#92bfa3', vault, false); lamp.rotation.x = Math.PI / 2;
-    return { lamp, label };
+  private makeDoorway(kind: 'entrance' | 'exit', x: number, z: number, invite: boolean): { root: TransformNode; label: Label } {
+    const root = new TransformNode(`${kind}-doorway`, this.scene);
+    root.position.set(x, 0, z);
+    root.metadata = { coffeeDoor: kind, coffeeOpeningWidth: 2.55, coffeeOutsideDirection: invite ? -1 : 1 };
+    const threshold = this.box(`${kind}-threshold`, .52, .035, 2.6, 0, .018, 0, '#b89a68', root, false);
+    threshold.metadata = { coffeeDoorThreshold: kind };
+    const outside = invite ? -.08 : .08;
+    for (const edge of [-1.38, 1.38]) {
+      this.box(`${kind}-door-jamb-${edge}`, .22, 2.65, .18, outside, 1.325, edge, COLORS.woodDark, root);
+      this.box(`${kind}-door-inlay-${edge}`, .235, 2.42, .06, outside + .015, 1.3, edge, COLORS.woodLight, root, false);
+    }
+    this.box(`${kind}-door-lintel`, .24, .24, 2.95, 0, 2.77, 0, COLORS.woodDark, root);
+    const signRoot = new TransformNode(`${kind}-sign-mount`, this.scene);
+    signRoot.parent = root; signRoot.position.set(.15, 3.07, 0); signRoot.rotation.y = Math.atan2(this.cameraOffset.x, this.cameraOffset.z);
+    const label = this.makeLabel(invite ? 'invite-guest-sign' : 'exit-door-sign', 2.45, .9, Vector3.Zero(), signRoot,
+      invite ? { type: 'invite' } : undefined, 768, 192);
+    label.mesh.metadata = { ...label.mesh.metadata, coffeeDoorLabel: kind };
+    this.paintLabel(label, kind, (ctx, w, h) => {
+      this.roundRect(ctx, 8, 8, w - 16, h - 16, 22, invite ? '#dca84b' : '#416b5b');
+      this.text(ctx, invite ? '入口 · 迎客 +' : '出口 · 再见', w / 2, h / 2 + 2, 88, '#ffffff');
+    });
+    if (invite) this.registerAnchor('invite', label.mesh);
+    else {
+      const path = this.box('exit-outside-walk', 2.4, .08, 3.2, 1.2, -.03, 0, '#d7c9ae', root, false);
+      path.metadata = { coffeeExterior: 'paving' }; this.exteriorPaving.push(path);
+    }
+    return { root, label };
   }
 
   private makePlant(name: string, x: number, z: number, scale: number): void {
@@ -1426,14 +1217,6 @@ export class CoffeeScene {
       shape.rotation.z = Math.sin(angle) * 0.65;
       shape.rotation.x = Math.cos(angle) * 0.65;
     }
-  }
-
-  private makeBench(): void {
-    const root = new TransformNode('left-waiting-bench', this.scene); root.position.set(-7.8, 0, 1.46);
-    this.box('bench-seat', 2.3, 0.15, 0.66, 0, 0.55, 0, COLORS.woodLight, root);
-    this.box('bench-back', 2.3, 0.50, 0.10, 0, 0.89, -0.30, COLORS.wood, root);
-    for (const x of [-0.84, 0.84]) this.box(`bench-leg-${x}`, 0.17, 0.49, 0.43, x, 0.25, 0, COLORS.woodDark, root);
-    this.box('bench-cushion', 0.86, 0.1, 0.53, -0.5, 0.67, 0.01, '#7e9c7e', root);
   }
 
   private makeLabel(name: string, width: number, height: number, position: Vector3, parent?: TransformNode, action?: CoffeeSceneAction, pixels = 768, pixelHeight = 192, rim = .10): Label {
@@ -1516,13 +1299,13 @@ export class CoffeeScene {
   }
 
   private prepareStaticGeometry(): void {
-    // Freeze only truly immobile world geometry. Cash clusters intentionally retain
-    // parent-transform semantics; people, cups, progress, trolley and contact shadows move.
-    const moving = new Set<TransformNode>([this.manager.root, this.manager.shadow, this.managerCart]);
+    // Freeze only truly immobile world geometry. People, cups, brew progress
+    // and contact shadows keep their animated parent-transform semantics.
+    const moving = new Set<TransformNode>();
     for (const person of this.customers.values()) { moving.add(person.root); moving.add(person.shadow); }
     if (this.renovationGhost) moving.add(this.renovationGhost);
     for (const station of this.stations.values()) {
-      for (const root of [station.barista.root, station.barista.shadow, station.readyCup, station.progressFill, station.cashRoot]) moving.add(root);
+      for (const root of [station.barista.root, station.barista.shadow, station.readyCup, station.progressFill]) moving.add(root);
     }
     const isMoving = (mesh: Mesh): boolean => {
       for (let node: TransformNode | null = mesh; node; node = node.parent as TransformNode | null) if (moving.has(node)) return true;
@@ -1533,7 +1316,7 @@ export class CoffeeScene {
       if (isMoving(mesh)) { mesh.unfreezeWorldMatrix(); this.staticCasters.delete(mesh); continue; }
       // Keep reusable source geometries and interactive anchor hierarchies unfrozen.
       // They must retain correct picking if a diagnostic/layout move occurs.
-      if (mesh.name.startsWith('shared-') || mesh.name.startsWith('vault-')) continue;
+      if (mesh.name.startsWith('shared-')) continue;
       mesh.freezeWorldMatrix();
     }
     for (const mesh of this.staticCasters) {

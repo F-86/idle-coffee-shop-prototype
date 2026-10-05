@@ -10,20 +10,32 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 const { FrameInterpolator } = await import('../src/slice/render/FrameInterpolator.ts');
 const { RenderBudget } = await import('../src/slice/render/RenderBudget.ts');
-const { createEngine, createInitialState, managerSpeed, STEP_SECONDS, WORLD } = await import('../src/slice/core/engine.ts');
+const { createEngine, createInitialState, STEP_SECONDS, WORLD } = await import('../src/slice/core/engine.ts');
+const { validateState } = await import('../src/slice/core/persistence.ts');
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} ≠ ${expected}`);
 
+const legacyArchives = JSON.parse(await (await import('node:fs/promises')).readFile(new URL('./fixtures/economy3-operations-migration.json', import.meta.url), 'utf8'));
+function legacyInitial() {
+  const state = structuredClone(legacyArchives.inactive);
+  state.customers = []; state.nextCustomerId = 1; state.elapsed = 0; state.stepCarry = 0; state.arrivalTimer = 0; state.inviteCooldown = 0;
+  state.wallet = 1200; state.totalEarned = 0; state.totalServed = 0; state.spend = 0; state.eventSequence = 0;
+  state.manager = { x: 8.8, z: -1.7, carrying: 0, phase: 'moving', target: 1, timer: 0, level: 1 };
+  for (const counter of state.counters) { counter.pendingCash = 0; counter.brewed = 0; counter.brew = null; counter.level = 1; }
+  return state;
+}
+
 for (const hz of [30, 60, 90, 120, 144, 240]) {
-  test(`TC-3D-012 ${hz}Hz presents constant-speed manager/customer motion between 20Hz ticks`, () => {
+  test(`TC-3D-012 ${hz}Hz presents constant-speed customer motion with a stationary retired manager between 20Hz ticks`, () => {
     const initial = createInitialState();
-    initial.customers = [{ id: 1, x: -8, z: 5, phase: 'entering', counterId: 'counter-a', timer: 0, hasCup: false, skin: 0, routeLeg: 0 }];
+    initial.customers = [{ id: 1, x: -8, z: 5, phase: 'entering', counterId: 'counter-a', timer: 0, hasCup: false, skin: 0, nav: [{ x: -7, z: 5 }, { x: -6, z: 5 }, { x: -5, z: 5 }, { x: -4, z: 5 }, { x: -3, z: 5 }, { x: -3, z: 4 }, { x: -3, z: 3 }, { x: -3, z: 2 }, { x: -2, z: 2 }, { x: -1, z: 2 }, { x: 0, z: 2 }] }];
     initial.nextCustomerId = 2;
+    assert.equal(validateState(initial).ok, true);
     const engine = createEngine(initial), frames = new FrameInterpolator(engine.state);
     let previous;
     for (let i = 1; i <= hz * .6; i++) {
       const view = frames.advance(engine, 1 / hz);
       if (i / hz > STEP_SECONDS * 2 && previous) {
-        close(previous.manager.x - view.manager.x, managerSpeed(1) / hz);
+        close(previous.manager.x, view.manager.x);
         // Independently derive the steady customer's per-tick velocity from two core ticks.
         const expectedCustomerSpeed = 2.5;
         close(view.customers[0].x - previous.customers[0].x, expectedCustomerSpeed / hz);
@@ -45,7 +57,7 @@ test('TC-3D-012 multi-step stalls interpolate the final adjacent ticks, never th
   assert.deepEqual(engine.snapshot(), saved, 'sampling does not mutate the economy');
 });
 
-test('TC-3D-012 pause freezes pose; replacement and offline reset never blend old routes', () => {
+test('TC-3D-012 paused empty shops hold their pose; replacement and offline reset never blend old routes', () => {
   const engine = createEngine(), frames = new FrameInterpolator(engine.state);
   const view = frames.advance(engine, .123);
   engine.togglePause();
@@ -98,7 +110,7 @@ test('TC-3D-012 max-level actors stay continuous through turns, stops and handof
   initial.counters.forEach(counter => { counter.level = 20; });
   const engine = createEngine(initial), frames = new FrameInterpolator(engine.state);
   let previous, minClearance = Infinity;
-  for (let i = 0; i < 144 * 90; i++) {
+  for (let i = 0; i < 144 * 180; i++) {
     if (i % (144 * 18) === 0) engine.invite();
     const view = frames.advance(engine, 1 / 144);
     if (previous) {
@@ -111,7 +123,7 @@ test('TC-3D-012 max-level actors stay continuous through turns, stops and handof
           minClearance = Math.min(minClearance, Math.hypot(customer.x - other.x, customer.z - other.z));
         }
       }
-      assert.ok(Math.hypot(view.manager.x - previous.manager.x, view.manager.z - previous.manager.z) <= managerSpeed(20) / 144 + 1e-8);
+      assert.deepEqual(view.manager, previous.manager, 'retired manager cannot animate');
     }
     previous = view;
   }
@@ -122,7 +134,7 @@ test('TC-3D-012 max-level actors stay continuous through turns, stops and handof
 
 test('TC-3D-012 removed departure finishes its final interpolated leg instead of freezing ahead of its follower', () => {
   for (const legacy of [false, true]) {
-    const initial = createInitialState();
+    const initial = legacyInitial();
     const endpoint = legacy ? { x: WORLD.entryX, z: WORLD.entryZ } : { x: WORLD.exitX, z: WORLD.exitZ };
     const customer = (id, x) => ({ id, x, z: endpoint.z, phase: 'leaving', counterId: 'counter-a', timer: legacy ? 2 : 0, hasCup: true, skin: 0, ...(legacy ? { finishLegacyRoute: true } : { routeLeg: 2 }) });
     initial.customers = [customer(1, endpoint.x + .125), customer(2, endpoint.x + .875)];
@@ -139,18 +151,63 @@ test('TC-3D-012 removed departure finishes its final interpolated leg instead of
   }
 });
 
-test('TC-3D-025 active grid departure interpolates to its own exit, never the legacy boundary', () => {
-  const initial = createInitialState();
-  initial.layout.active = true;
+test('TC-3D-027 active grid departure interpolates to the opposite exit in base and expanded shops', () => {
+  for (const expanded of [false, true]) {
+    const initial = createInitialState(), endpoint = expanded ? 17 : 11;
+    initial.layout.expanded = expanded;
+    initial.customers = [{ id: 1, x: endpoint - .125, z: 6, phase: 'leaving', counterId: 'counter-a', timer: 0, hasCup: true, skin: 0, nav: [{ x: endpoint, z: 6 }] }];
+    initial.nextCustomerId = 2; initial.totalServed = expanded ? 40 : 1; initial.totalEarned = expanded ? 10000 : 110;
+    initial.spend = expanded ? 6000 : 0; initial.wallet += initial.totalEarned - initial.spend; initial.counters[0].brewed = initial.totalServed;
+    const engine = createEngine(initial), frames = new FrameInterpolator(engine.state);
+    frames.advance(engine, .05); assert.equal(engine.state.customers.length, 0);
+    const view = frames.advance(engine, .025); assert.equal(view.customers.length, 1);
+    close(view.customers[0].x, endpoint - .0625); close(view.customers[0].z, 6);
+    assert.equal(frames.advance(engine, .025).customers.length, 0);
+  }
+});
+
+
+test('TC-3D-027 final legacy grid departure completes its old exit while authority switches to layout3', () => {
+  const initial = legacyInitial(); initial.layout.active = true;
   initial.customers = [{ id: 1, x: -7.875, z: 6, phase: 'leaving', counterId: 'counter-a', timer: 0, hasCup: true, skin: 0, nav: [{ x: -8, z: 6 }] }];
-  initial.nextCustomerId = 2; initial.totalServed = 1; initial.totalEarned = 110;
-  initial.counters[0].brewed = 1; initial.counters[0].pendingCash = 110;
-  initial.manager.target = 2;
+  initial.nextCustomerId = 2; initial.totalServed = 1; initial.totalEarned = 110; initial.wallet += 110; initial.counters[0].brewed = 1;
+  assert.equal(validateState(initial).ok, true);
   const engine = createEngine(initial), frames = new FrameInterpolator(engine.state);
-  frames.advance(engine, .05);
-  assert.equal(engine.state.customers.length, 0);
+  assert.equal(engine.state.layout.version, 2); frames.advance(engine, .05);
+  assert.equal(engine.state.customers.length, 0); assert.equal(engine.state.layout.version, 3); assert.equal(engine.state.customerRouteVersion, 4);
   const view = frames.advance(engine, .025);
-  assert.equal(view.customers.length, 1);
-  close(view.customers[0].x, -7.9375); close(view.customers[0].z, 6);
+  assert.equal(view.customers.length, 1); close(view.customers[0].x, -7.9375); close(view.customers[0].z, 6);
   assert.equal(frames.advance(engine, .025).customers.length, 0);
+});
+
+test('TC-3D-027 business pause keeps existing customer presentation moving until they finish', () => {
+  const engine = createEngine(), frames = new FrameInterpolator(engine.state); engine.invite(); frames.advance(engine, 8);
+  const arrivals = engine.state.nextCustomerId, served = engine.state.totalServed; engine.togglePause();
+  let moved = false, previous = frames.sample(engine.state);
+  for (let i = 0; i < 60 * 50; i++) {
+    const view = frames.advance(engine, 1 / 60);
+    assert.equal(view.paused, true); assert.equal(engine.state.nextCustomerId, arrivals);
+    for (const customer of view.customers) {
+      const old = previous.customers.find(other => other.id === customer.id);
+      if (old) { const distance = Math.hypot(customer.x - old.x, customer.z - old.z); assert.ok(distance <= 2.5 / 60 + 1e-8); moved ||= distance > 0; }
+    }
+    previous = view;
+  }
+  assert.equal(moved, true); assert.equal(engine.state.customers.length, 0); assert.ok(engine.state.totalServed > served);
+  const closed = engine.snapshot(); frames.advance(engine, 600); assert.deepEqual(engine.snapshot(), closed);
+});
+
+test('TC-3D-027 paused final guest finishes the presentation-only half-step then stays gone', () => {
+  const initial = createInitialState(); initial.paused = true;
+  initial.customers = [{ id: 1, x: 10.875, z: 6, phase: 'leaving', counterId: 'counter-a', timer: 0, hasCup: true, skin: 0, nav: [{ x: 11, z: 6 }] }];
+  initial.nextCustomerId = 2; initial.totalServed = 1; initial.totalEarned = 110; initial.wallet += 110; initial.counters[0].brewed = 1;
+  assert.equal(validateState(initial).ok, true);
+  const engine = createEngine(initial), frames = new FrameInterpolator(engine.state);
+  const last = frames.advance(engine, .05); assert.equal(last.customers.length, 1); close(last.customers[0].x, 10.875);
+  assert.equal(engine.state.customers.length, 0); const stopped = engine.snapshot();
+  const half = frames.advance(engine, .025); assert.equal(half.customers.length, 1); close(half.customers[0].x, 10.9375);
+  assert.deepEqual(engine.snapshot(), stopped, 'presentation completion never advances paused authoritative time');
+  assert.deepEqual(frames.sample(engine.state), half, 'sampling alone does not consume presentation time');
+  assert.equal(frames.advance(engine, .025).customers.length, 0);
+  for (const seconds of [.01, .05, 1, 600]) { assert.equal(frames.advance(engine, seconds).customers.length, 0); assert.deepEqual(engine.snapshot(), stopped); }
 });

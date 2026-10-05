@@ -6,7 +6,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
   catch (error) { if (specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier)) return nextResolve(`${specifier}.ts`, context); throw error; }
 } });
 const { createEngine, createInitialState } = await import('../../src/slice/core/engine.ts');
-const { addFurniture, moveCoffeeSign, storeCoffeeSign, storeFurniture } = await import('../../src/slice/core/layout.ts');
+const { addFurniture, storeFurniture } = await import('../../src/slice/core/layout.ts');
 const { createPortableSave, overviewOf } = await import('../../src/slice/core/portableSave.ts');
 const { validateState } = await import('../../src/slice/core/persistence.ts');
 const destination = process.argv[2];
@@ -17,7 +17,7 @@ const funded = createInitialState();
 funded.wallet += 30000; funded.totalEarned = 30000;
 funded.totalServed = 40; funded.counters[0].brewed = 40; funded.nextCustomerId = 41;
 const scenarios = [['funded-before-renovation', funded]];
-const engine = createEngine(funded); engine.beginLayoutEdit();
+const engine = createEngine(funded); engine.togglePause(); engine.beginLayoutEdit();
 const draft = engine.createLayoutDraft();
 if (!draft) throw Error('Initial QA shop did not enter safe renovation.');
 draft.expanded = true;
@@ -35,14 +35,12 @@ for (let step = 0; step < 4000 && storedEngine.layoutEditStatus() !== 'ready'; s
 const storedDraft = storedEngine.createLayoutDraft();
 if (!storedDraft) throw Error('QA storage draft unavailable');
 storeFurniture(storedDraft, 'counter-d');
-storeCoffeeSign(storedDraft, 'menu-latte');
-moveCoffeeSign(storedDraft, 'menu-espresso', -2);
 if (!storedEngine.commitLayout(storedDraft).ok) throw Error('QA storage commit failed');
-scenarios.push(['stored-coffee-and-counter', storedEngine.snapshot()]);
-engine.advance(180);
+scenarios.push(['stored-counter-upgraded-coffee', storedEngine.snapshot()]);
+engine.togglePause(); engine.advance(180);
 scenarios.push(['expanded-in-flight', engine.snapshot()]);
 for (const [name, state] of scenarios) {
   const checked = validateState(state); if (!checked.ok) throw Error(`${name}: ${checked.message}`);
-  const file = await createPortableSave({ saveId: `qa-layout-${name}`, revision: 1, gameSchemaVersion: 1, economyVersion: 3, offlinePolicyVersion: 3, savedAt: 0, exportedAt: 0, overview: overviewOf(state), state });
+  const file = await createPortableSave({ saveId: `qa-layout-${name}`, revision: 1, gameSchemaVersion: 1, economyVersion: 4, offlinePolicyVersion: 3, savedAt: 0, exportedAt: 0, overview: overviewOf(state), state });
   const path = resolve(out, `mellow-bean-QA-${name}.json`); await writeFile(path, file.text); console.log(path);
 }

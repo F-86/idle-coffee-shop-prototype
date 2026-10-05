@@ -6,12 +6,14 @@ registerHooks({ resolve(specifier, context, nextResolve) {
   catch (error) { if (specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier)) return nextResolve(`${specifier}.ts`, context); throw error; }
 } });
 const core = await import('../src/slice/core/engine.ts');
-const { createEngine, createInitialState, INITIAL_WALLET, MAX_ELAPSED_SECONDS, STEP_SECONDS, WORLD } = core;
+const { createEngine, createInitialState, INITIAL_WALLET, MAX_ELAPSED_SECONDS, STEP_SECONDS } = core;
 const { LocalSaveRepository, createMemoryStorage, SAVE_KEY, validateState, OFFLINE_POLICY_VERSION, OFFLINE_STEP_BATCH, OFFLINE_SLICE_BUDGET_MS } = await import('../src/slice/core/persistence.ts');
+
+const legacyArchives = JSON.parse(await (await import('node:fs/promises')).readFile(new URL('./fixtures/economy3-operations-migration.json', import.meta.url), 'utf8'));
 
 // Online fixed-step advance is the independent oracle. The expected values below
 // never call the offline policy helper or derive expected prices from its output.
-const checkpoint = () => { const engine = createEngine(); engine.upgrade('counter-a'); engine.advance(16.137); engine.setRecipe('counter-a', 'latte'); return engine.snapshot(); };
+const checkpoint = () => { const engine = createEngine(); engine.upgrade('counter-a'); engine.advance(7.437); engine.setRecipe('counter-a', 'latte'); return engine.snapshot(); };
 const business = state => { const copy = structuredClone(state); delete copy.lastOfflineClaimId; delete copy.offlineClaimIds; return copy; };
 const advanced = (state, seconds) => { const engine = createEngine(state); engine.advance(seconds); return engine.snapshot(); };
 const assets = state => state.wallet + state.spend + state.manager.carrying + state.counters.reduce((sum, counter) => sum + counter.pendingCash, 0);
@@ -141,29 +143,21 @@ test('TC-3D-020 in-flight production retains full prices and frozen recipe/durat
   const current = engine.state.counters[0].brew;
   for (const key of ['recipe', 'price', 'duration', 'customerId']) assert.equal(current[key], brew[key]);
   near(current.elapsed, brew.elapsed + .4); assert.equal(engine.state.wallet, initial.wallet);
-  engine.applyOffline(2.5, 'brew-payment');
-  assert.deepEqual(business(engine.snapshot()), business(advanced(initial, 2.4)));
+  engine.applyOffline(3.5, 'brew-payment');
+  assert.deepEqual(business(engine.snapshot()), business(advanced(initial, 3.2)));
   assert.equal(engine.state.totalEarned - initial.totalEarned, 123, 'the completed cup pays its entire frozen price, not 80% of its price');
   assertValidMoney(engine.snapshot());
 });
 
-test('TC-3D-020 manager collection only moves existing cash; it is not reported as newly generated income', () => {
-  const initial = createInitialState(); initial.counters[0].pendingCash = 600; initial.counters[1].pendingCash = 600; initial.totalEarned = 1200;
-  const engine = createEngine(initial), job = engine.beginOffline(11.25, 'old-cash-only');
-  const stops = []; let lastPhase = initial.manager.phase, deposited = false;
-  while (!job.done) {
-    job.advance(1); const state = engine.state;
-    assert.equal(state.totalEarned, initial.totalEarned, 'no customer has paid yet');
-    assertValidMoney(engine.snapshot());
-    if (state.manager.phase !== lastPhase && state.manager.phase !== 'moving') stops.push([state.manager.target, state.manager.phase]);
-    lastPhase = state.manager.phase;
-    if (state.wallet > initial.wallet) deposited = true;
-    if (!deposited) assert.equal(state.wallet, initial.wallet, 'carried and counter cash is not spendable');
-  }
-  assert.deepEqual(stops.slice(0, 3), [[1, 'collecting'], [0, 'collecting'], [2, 'depositing']]);
-  assert.equal(job.result().amount, 1200); assert.equal(job.result().generatedAmount, 0);
-  assert.equal(job.result().pendingCash, 0); assert.equal(job.result().carrying, 0);
-  assert.equal(engine.state.wallet, INITIAL_WALLET + 1200);
+test('TC-3D-027 legacy cash is transferred before offline simulation and never reported as new income', () => {
+  const initial = structuredClone(legacyArchives.inactive); initial.paused = true;
+  const receipts = initial.manager.carrying + initial.counters.reduce((sum, counter) => sum + counter.pendingCash, 0);
+  const engine = createEngine(initial), migrated = engine.snapshot();
+  assert.ok(receipts > 0); assert.equal(migrated.wallet, initial.wallet + receipts); assert.equal(migrated.totalEarned, initial.totalEarned);
+  const result = engine.applyOffline(11.25, 'old-cash-only');
+  assert.equal(result.amount, 0); assert.equal(result.generatedAmount, 0);
+  assert.equal(result.pendingCash, 0); assert.equal(result.carrying, 0);
+  assert.deepEqual(business(engine.snapshot()), business(migrated)); assertValidMoney(engine.snapshot());
 });
 
 test('TC-3D-020 every legacy anchor uses its own policy once, then all subsequent short gaps use v3', () => {
@@ -236,8 +230,8 @@ test('TC-3D-020 numeric-limit refusal never truncates a gap, consumes its endpoi
 });
 
 test('TC-3D-020 integer-money overflow refuses the whole candidate in synchronous and asynchronous settlement', async () => {
-  const initial = createInitialState(); initial.wallet = 1e12; initial.totalEarned = 1e12 - INITIAL_WALLET + 1;
-  initial.manager = { ...initial.manager, carrying: 1, phase: 'depositing', target: 2, x: WORLD.vaultX, timer: .55 };
+  const initial = checkpoint(); initial.wallet = 1e12; initial.totalEarned = 1e12 + initial.spend - INITIAL_WALLET;
+  initial.counters[0].brew.elapsed = initial.counters[0].brew.duration - .05;
   assertValidMoney(initial);
   for (const deferOffline of [false, true]) {
     const { memory, raw, repo } = fixture(initial); let result = repo.load(100100, { deferOffline });
@@ -413,7 +407,7 @@ test('TC-3D-020 exact live sources may retry zero, sub-step and paused write fai
     assert.equal(memory.getItem(SAVE_KEY), raw);
     const retry = repo.settleOffline(live, 105000, 105000 + deltaMs, { deferOffline: true });
     assert.equal(retry.status, 'loaded');
-    assert.deepEqual(business(retry.state), business(advanced(original, deltaMs / 1000 * .8)));
+    assert.deepEqual(business(retry.state), business(paused ? original : advanced(original, deltaMs / 1000 * .8)));
     assert.equal(JSON.parse(memory.getItem(SAVE_KEY)).savedAt, 105000 + deltaMs);
     assert.deepEqual(live, original); assertValidMoney(retry.state);
   }
@@ -497,15 +491,16 @@ test('TC-3D-023 failed or cancelled coffee settlement preserves upgraded source 
   assert.deepEqual(done.state.coffeeLevels, initial.coffeeLevels);
 });
 
-test('TC-3D-023 legacy economy migrates independently of one-time legacy offline policy and preserves snapshots', () => {
+test('TC-3D-023 legacy economy migrates independently of one-time offline policy and preserves snapshots', () => {
   for (const policy of ['unmarked', 1, 2, 3]) {
-    const modern = checkpoint(), legacy = structuredClone(modern); legacy.economyVersion = 1; delete legacy.coffeeLevels;
+    const legacy = structuredClone(legacyArchives.inactive); legacy.economyVersion = 1; delete legacy.coffeeLevels; delete legacy.layout;
+    const modern = validateState(legacy); assert.equal(modern.ok, true, modern.message);
     const { memory, repo } = fixture(legacy, policy);
-    const loaded = repo.load(160000), expected = advanced(modern, policy === 3 ? 48 : 30);
+    const loaded = repo.load(160000), expected = advanced(modern.state, policy === 3 ? 48 : 30);
     assert.equal(loaded.status, 'loaded'); assert.equal(loaded.offline.accepted, true);
-    assert.deepEqual(business(loaded.state), business(expected)); assert.equal(loaded.state.economyVersion, 3);
+    assert.deepEqual(business(loaded.state), business(expected)); assert.equal(loaded.state.economyVersion, 4);
     assert.deepEqual(loaded.state.coffeeLevels, { espresso: 1, latte: 1 });
-    const durable = JSON.parse(memory.getItem(SAVE_KEY)); assert.equal(durable.state.economyVersion, 3); assert.equal(durable.offlinePolicyVersion, 3);
+    const durable = JSON.parse(memory.getItem(SAVE_KEY)); assert.equal(durable.state.economyVersion, 4); assert.equal(durable.offlinePolicyVersion, 3);
     assert.deepEqual(new LocalSaveRepository(memory).load(160000).state, loaded.state);
   }
 });
