@@ -138,3 +138,19 @@ test('TC-3D-012 removed departure finishes its final interpolated leg instead of
     assert.ok(!next.customers.some(c => c.id === 1));
   }
 });
+
+test('TC-3D-025 active grid departure interpolates to its own exit, never the legacy boundary', () => {
+  const initial = createInitialState();
+  initial.layout.active = true;
+  initial.customers = [{ id: 1, x: -7.875, z: 6, phase: 'leaving', counterId: 'counter-a', timer: 0, hasCup: true, skin: 0, nav: [{ x: -8, z: 6 }] }];
+  initial.nextCustomerId = 2; initial.totalServed = 1; initial.totalEarned = 110;
+  initial.counters[0].brewed = 1; initial.counters[0].pendingCash = 110;
+  initial.manager.target = 2;
+  const engine = createEngine(initial), frames = new FrameInterpolator(engine.state);
+  frames.advance(engine, .05);
+  assert.equal(engine.state.customers.length, 0);
+  const view = frames.advance(engine, .025);
+  assert.equal(view.customers.length, 1);
+  close(view.customers[0].x, -7.9375); close(view.customers[0].z, 6);
+  assert.equal(frames.advance(engine, .025).customers.length, 0);
+});

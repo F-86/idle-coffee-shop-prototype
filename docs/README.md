@@ -41,3 +41,5 @@
 咖啡独立升级与柜台双入口：[规格](product/specs/coffee-upgrades-and-counter-controls.md)、[计划](testing/plans/coffee-upgrades-and-counter-controls.md)、[TC-3D-023](testing/cases/slice/TC-3D-023.md)。咖啡墙升级配方，柜台左选咖啡/右升级分别开面板；经济2与文件2保留等级并兼容旧档读入。数值暂定，平衡延后。
 
 设置与首次开店引导：[规格](product/specs/settings-onboarding.md)、[计划](testing/plans/settings-onboarding.md)、[TC-3D-024](testing/cases/slice/TC-3D-024.md)。设置只有收起的画面与小店存档，故障恢复并入存档情境；新店四步可跳过引导只在当前浏览器首次出现，不改变经营/文件版本。
+
+家具到扩建闭环：[规格](product/specs/furniture-expansion.md)、[计划](testing/plans/furniture-expansion.md)、[TC-3D-025](testing/cases/slice/TC-3D-025.md)。独立装修草稿、功能柜台/桌椅、可达网格路径、堂食与外带及一次相邻扩建；经济3/布局1/文件3，旧双柜台原位迁移，数值仍暂定。

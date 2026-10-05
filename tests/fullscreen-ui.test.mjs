@@ -19,6 +19,7 @@ const { RouteQAPanel } = await import('../src/slice/qa/RouteQAPanel.ts');
 const { PerformanceQAPanel } = await import('../src/slice/qa/PerformanceQAPanel.ts');
 const { createEngine, createInitialState, recipeById, counterPrice, counterBrewSeconds, coffeePrice, coffeeBrewSeconds, COFFEE_MAX_LEVEL, managerSpeed } = await import('../src/slice/core/engine.ts');
 const { LocalSaveRepository, SAVE_KEY, createMemoryStorage } = await import('../src/slice/core/persistence.ts');
+const { addFurniture, getLayout, GRID, LAYOUT_PRICES, layoutCost, MAX_COUNTERS, MAX_TABLES, moveFurniture, rotateFurniture, storeFurniture, validateLayout } = await import('../src/slice/core/layout.ts');
 const { createPortableSave, parsePortableSave, overviewOf, portableFilename, MAX_PORTABLE_BYTES } = await import('../src/slice/core/portableSave.ts');
 
 // These checks inspect actual markup/CSS and execute actual app handlers with a fake
@@ -32,7 +33,7 @@ const html = runInNewContext(`${stripTypeScriptTypes(`globalThis.html = ${templa
 const modalStart = html.indexOf('<dialog '), modalEnd = html.indexOf('</dialog>') + '</dialog>'.length;
 const modal = html.slice(modalStart, modalEnd);
 const outsideModal = html.slice(0, modalStart) + html.slice(modalEnd);
-const permanentOutsideModal = outsideModal.replace(/<aside id="welcome-guide"[\s\S]*?<\/aside>/, "");
+const permanentOutsideModal = outsideModal.replace(/<aside id="(?:welcome-guide|renovation-panel)"[\s\S]*?<\/aside>/g, "");
 const ONBOARDING_KEY = "mellow-bean:welcome-guide:v1";
 function rules(selector) {
   const found = [];
@@ -65,8 +66,8 @@ class FakeElement {
   children = [];
   get className() { return this.getAttribute('class') ?? ''; }
   set className(value) { this.setAttribute('class', value); }
-  append(...nodes) { for (const node of nodes) { this.children.push(node); if (!this.ownerDocument._nodes.includes(node)) this.ownerDocument._nodes.push(node); } }
-  remove() { for (const child of this.children) child.remove(); const index = this.ownerDocument._nodes.indexOf(this); if (index >= 0) this.ownerDocument._nodes.splice(index, 1); this.isConnected = false; }
+  append(...nodes) { for (const node of nodes) { this.children.push(node); node.parentElement = this; if (!this.ownerDocument._nodes.includes(node)) this.ownerDocument._nodes.push(node); } }
+  remove() { for (const child of this.children) child.remove(); const index = this.ownerDocument._nodes.indexOf(this); if (index >= 0) this.ownerDocument._nodes.splice(index, 1); if (this.parentElement) { const childIndex = this.parentElement.children.indexOf(this); if (childIndex >= 0) this.parentElement.children.splice(childIndex, 1); } this.isConnected = false; }
   constructor(tag, document) {
     this.tagName = tag.toUpperCase(); this.ownerDocument = document;
     const classes = new Set();
@@ -187,6 +188,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
     update(state, dt) { this.updates.push({ state: structuredClone(state), dt }); }
     readRenderStats() { this.statsReads++; return { targetFps: this.renderMode === 'smooth' ? null : this.renderMode === 'low-power' ? 30 : 60, renderWidth: 800, renderHeight: 1100, meshCount: 200, renderedFrames: this.updates.length }; }
     readCustomerPose(id) { this.poseReads++; const customer = this.updates.at(-1)?.state.customers.find(customer => customer.id === id); return customer ? { x: customer.x, z: customer.z, screenX: 200, screenY: 250, inViewport: true } : null; }
+    setRenovationPreview(layout, selectedId, valid) { this.renovation = layout ? structuredClone({ layout, selectedId, valid }) : null; }
     selectedCounter(id) { this.selection.push(id); }
     resize() { this.resizeCalls++; }
     focusAnchor(key) { if (!this.interactionEnabled || !['counter-a-recipe', 'counter-a-upgrade', 'counter-b-recipe', 'counter-b-upgrade', 'menu-espresso', 'menu-latte', 'vault', 'invite'].includes(key)) return; this.focusCalls.push(key); this.focused = key; }
@@ -216,7 +218,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   }
   class FakeDate extends Date { constructor(...args) { super(...(args.length ? args : [clock.now])); } static now() { return clock.now; } }
   const source = main.replace(/^import\s[\s\S]*?;\n/gm, '').replace(/if \(import\.meta\.hot\) import\.meta\.hot\.dispose\(\(\) => cleanup\(\)\);/, 'captureCleanup(() => cleanup());');
-  const context = { document, window, location: { search: query }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, HTMLInputElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, RouteDiagnostics, isRouteQA, RouteQAPanel, PerformanceQAPanel, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, createEngine, recipeById, counterPrice, counterBrewSeconds, coffeePrice, coffeeBrewSeconds, COFFEE_MAX_LEVEL, managerSpeed, LocalSaveRepository, SAVE_KEY, createPortableSave: trackFileTask(portableOverrides.createPortableSave ?? createPortableSave), parsePortableSave: trackFileTask(portableOverrides.parsePortableSave ?? parsePortableSave), overviewOf, portableFilename, MAX_PORTABLE_BYTES, crypto: globalThis.crypto, TextEncoder, File, navigator, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL: url => revokedUrls.push(url) }, Blob, console, setTimeout: (callback, delay = 0) => { const id = ++nextId; timers.set(id, callback); timerDelays.set(id, delay); return id; }, clearTimeout: id => { timers.delete(id); timerDelays.delete(id); }, requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
+  const context = { document, window, location: { search: query }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, HTMLInputElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, RouteDiagnostics, isRouteQA, RouteQAPanel, PerformanceQAPanel, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, createEngine, recipeById, counterPrice, counterBrewSeconds, coffeePrice, coffeeBrewSeconds, COFFEE_MAX_LEVEL, managerSpeed, addFurniture, getLayout, GRID, LAYOUT_PRICES, layoutCost, MAX_COUNTERS, MAX_TABLES, moveFurniture, rotateFurniture, storeFurniture, validateLayout, LocalSaveRepository, SAVE_KEY, createPortableSave: trackFileTask(portableOverrides.createPortableSave ?? createPortableSave), parsePortableSave: trackFileTask(portableOverrides.parsePortableSave ?? parsePortableSave), overviewOf, portableFilename, MAX_PORTABLE_BYTES, crypto: globalThis.crypto, TextEncoder, File, navigator, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL: url => revokedUrls.push(url) }, Blob, console, setTimeout: (callback, delay = 0) => { const id = ++nextId; timers.set(id, callback); timerDelays.set(id, delay); return id; }, clearTimeout: id => { timers.delete(id); timerDelays.delete(id); }, requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
   runInNewContext(stripTypeScriptTypes(source), context, { timeout: 1500 });
   const debug = window.__coffeeSliceDebug;
   const state = () => structuredClone(debug.readState());
@@ -2936,7 +2938,7 @@ test('TC-3D-023 REQ-3D-033 portable preview, cancellation, replacement and recov
   const current = fundedInitial(50000); current.coffeeLevels = { espresso: 3, latte: 5 };
   const source = fundedInitial(30000); source.coffeeLevels = { espresso: 7, latte: 2 };
   const incoming = await portableFixture({ state: source, savedAt: 1000, exportedAt: 2000, saveId: 'coffee-progress-source' });
-  assert.equal(JSON.parse(incoming.text).formatVersion, 2);
+  assert.equal(JSON.parse(incoming.text).formatVersion, 3);
   const f = fixture({ initial: current, now: 130000 });
   try {
     const before = f.state(), bytes = f.memory.getItem(SAVE_KEY);
@@ -2965,9 +2967,9 @@ test('TC-3D-023 REQ-3D-033 portable preview, cancellation, replacement and recov
     assert.equal(f.element('#file-download').disabled, false);
     f.click('#file-download');
     const recoveryText = await f.blobs.at(-1).text(), recovery = await parsePortableSave(recoveryText);
-    assert.equal(JSON.parse(recoveryText).formatVersion, 2, 'recovery download uses the coffee-aware portable format');
+    assert.equal(JSON.parse(recoveryText).formatVersion, 3, 'recovery download uses the coffee-aware portable format');
     assert.equal(recovery.ok, true);
-    assert.equal(recovery.file.payload.economyVersion, 2);
+    assert.equal(recovery.file.payload.economyVersion, 3);
     assert.deepEqual(recovery.file.payload.state, before, 'recovery export preserves the entire pre-import live snapshot');
     assert.deepEqual(recovery.file.payload.overview.coffeeLevels, current.coffeeLevels);
     assert.deepEqual(f.state(), source, 'exporting the old shop cannot replace current progress');
@@ -3319,5 +3321,104 @@ test('TC-3D-024 hidden first entry and disposal never force a modal, keyboard ca
     f.click('#guide-next'); f.click('#guide-skip');
     assert.equal(f.renderer.focusCalls.length, focusCalls);
     assert.equal(f.memory.getItem(ONBOARDING_KEY), 'shown');
+  } finally { f.dispose(); }
+});
+
+function openRenovation(f) {
+  f.action({ type: 'renovate' });
+  assert.equal(f.element('#renovation-panel').hidden, false);
+  for (let i = 0; i < 2500 && f.element('#renovation-tools').hidden; i++) f.tick(.25);
+  assert.equal(f.element('#renovation-tools').hidden, false, 'safe draining reaches editable state');
+}
+
+test('TC-3D-025 REQ-3D-035 renovation draft does not mutate wallet, saved pause or committed furniture; invalid placement is blocked', () => {
+  const f = fixture();
+  try {
+    openRenovation(f);
+    const before = f.state();
+    f.click('#buy-table');
+    assert.deepEqual(f.state(), before, 'buy is a detached draft until apply');
+    assert.equal(f.renderer.renovation.layout.furniture.length, 3);
+    f.action({ type: 'layout-cell', x: -7, z: 5 });
+    assert.equal(f.element('#renovation-apply').disabled, true);
+    assert.equal(f.renderer.renovation.valid, false);
+    f.tick(9);
+    assert.deepEqual(f.state(), before, 'editing time is frozen without changing saved paused');
+    assert.equal(f.renderer.updates.at(-1).state.paused, true, 'only presentation is frozen while editing');
+    assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, before, 'auto-save contains only committed furniture');
+    f.click('#renovation-cancel');
+    assert.equal(f.element('#renovation-panel').hidden, true);
+    assert.equal(f.renderer.renovation, null);
+    assert.deepEqual(f.state(), before);
+    f.tick(.2); assert.ok(f.state().elapsed > before.elapsed);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-025 renovation commit charges table once and resumes; repeated apply cannot charge again', () => {
+  const f = fixture();
+  try {
+    openRenovation(f);
+    const before = f.state();
+    f.click('#buy-table');
+    assert.equal(f.element('#renovation-apply').disabled, false);
+    f.click('#renovation-apply');
+    const committed = f.state();
+    assert.equal(committed.layout.active, true);
+    assert.equal(committed.layout.furniture.filter(item => item.kind === 'table').length, 1);
+    assert.equal(committed.wallet, before.wallet - LAYOUT_PRICES.table);
+    assert.equal(committed.spend, before.spend + LAYOUT_PRICES.table);
+    assert.equal(committed.paused, before.paused);
+    assert.equal(f.element('#renovation-panel').hidden, true);
+    f.click('#renovation-apply');
+    assert.deepEqual(f.state(), committed);
+    assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, committed);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-025 hiding or losing storage authority cancels uncommitted renovation safely', () => {
+  for (const boundary of ['hidden', 'conflict']) {
+    const f = fixture();
+    try {
+      openRenovation(f); const before = f.state(); f.click('#buy-table');
+      if (boundary === 'hidden') { f.document.hidden = true; f.document.emit('visibilitychange'); }
+      else f.window.emit('storage', { key: SAVE_KEY, newValue: 'different-tab' });
+      assert.equal(f.element('#renovation-panel').hidden, true);
+      assert.deepEqual(f.state().layout, before.layout);
+      assert.equal(f.state().wallet, before.wallet);
+      assert.equal(f.state().paused, boundary === 'conflict');
+      if (boundary === 'hidden') assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state.layout, before.layout);
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-025 rotate, store, restore and Escape remain draft-only and last counter cannot be stored', () => {
+  const f = fixture();
+  try {
+    openRenovation(f); const before = f.state();
+    f.click('#rotate-furniture');
+    assert.equal(f.renderer.renovation.layout.furniture[0].rotation, 1);
+    f.click('#store-furniture');
+    assert.equal(f.renderer.renovation.layout.furniture[0].stored, true);
+    f.action({ type: 'layout-select', id: 'counter-b' });
+    f.click('#store-furniture');
+    assert.equal(f.renderer.renovation.layout.furniture[1].stored, false);
+    f.action({ type: 'layout-select', id: 'counter-a' });
+    f.click('#store-furniture');
+    assert.equal(f.renderer.renovation.layout.furniture[0].stored, false);
+    f.element('#renovation-panel').emit('keydown', { key: 'Escape' });
+    assert.equal(f.element('#renovation-panel').hidden, true);
+    assert.deepEqual(f.state(), before);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-025 Escape discards renovation even after focus leaves its workbench', () => {
+  const f = fixture();
+  try {
+    openRenovation(f); const before = f.state(); f.click('#buy-table');
+    f.element('#settings').focus();
+    f.window.emit('keydown', { key: 'Escape' });
+    assert.equal(f.element('#renovation-panel').hidden, true);
+    assert.deepEqual(f.state(), before);
+    assert.equal(f.document.activeElement, f.element('#coffee-canvas'));
   } finally { f.dispose(); }
 });

@@ -1,10 +1,12 @@
+import { copyLayout, initialLayout, layoutCost, validateLayout, GRID } from './layout';
+import { createLayoutSimulation } from './layoutSimulation';
 import type { RouteObserver, RouteTraceEvent } from './routeTrace';
 import type { Counter, CounterId, CounterQuote, CoffeeQuote, Customer, OfflineJob, OfflinePolicyVersion, Recipe, RecipeId, SliceEngine, SliceEvent, SliceState } from './types';
 
 /** Draft balance for this small playable slice, expressed in cents and metres. */
 export const STEP_SECONDS = .05;
 export const MAX_LEVEL = 20;
-export const ECONOMY_VERSION = 2;
+export const ECONOMY_VERSION = 3;
 /** Temporary feature values, not a settled balance design. */
 export const COFFEE_UPGRADE_CONFIG = Object.freeze({
   maxLevel: 10, pricePerLevel: .08, speedPerLevel: .025, costGrowth: 1.55,
@@ -35,7 +37,7 @@ export const recipes: readonly Recipe[] = Object.freeze([
   Object.freeze({ id: 'latte', name: '拿铁', price: 220, brewSeconds: 6.8, color: '#f0c793', description: '制作较慢、每杯收入更高。' })
 ]);
 export const recipeById = Object.freeze(Object.fromEntries(recipes.map(recipe => [recipe.id, recipe])) as Record<RecipeId, Recipe>);
-export const counterAffinities = Object.freeze({ 'counter-a': '浓缩制作时间 −25%', 'counter-b': '拿铁杯价 +12%' });
+export const counterAffinities = Object.freeze({ 'counter-a': '浓缩制作时间 −25%', 'counter-b': '拿铁杯价 +12%', 'counter-c': '通用柜台', 'counter-d': '通用柜台' });
 export const coffeePrice = (recipe: RecipeId, level = 1): number => Math.round(recipeById[recipe].price * (1 + COFFEE_UPGRADE_CONFIG.pricePerLevel * (level - 1)));
 export const coffeeBrewSeconds = (recipe: RecipeId, level = 1): number => recipeById[recipe].brewSeconds / (1 + COFFEE_UPGRADE_CONFIG.speedPerLevel * (level - 1));
 export const counterPrice = (recipe: RecipeId, level: number, id?: CounterId, coffeeLevel = 1): number => Math.round(coffeePrice(recipe, coffeeLevel) * (1 + .12 * (level - 1)) * (id === 'counter-b' && recipe === 'latte' ? 1.12 : 1));
@@ -46,13 +48,18 @@ const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const roundTime = (value: number): number => Math.round(value * 1e9) / 1e9;
 
 /** Only legacy economy1 can omit recipe levels. Never downgrade or repair malformed progression. */
-export function migrateCoffeeEconomy(state: { economyVersion: number; coffeeLevels?: Record<RecipeId, number> }): void {
+export function migrateCoffeeEconomy(state: { economyVersion: number; coffeeLevels?: Record<RecipeId, number>; layout?: SliceState['layout'] }): void {
+  if (state.layout !== undefined && (!state.layout || typeof state.layout !== 'object' || Array.isArray(state.layout))) throw new Error('Invalid layout.');
+  if (state.economyVersion !== ECONOMY_VERSION && state.layout?.active) throw new Error('Legacy economy cannot contain an active layout.');
+  if (state.economyVersion === ECONOMY_VERSION && state.layout === undefined) throw new Error('Current economy requires explicit layout.');
   if (state.economyVersion === 1) {
     if (state.coffeeLevels !== undefined) throw new Error('Legacy economy cannot contain coffee levels.');
     state.coffeeLevels = { espresso: 1, latte: 1 };
+    state.layout ??= initialLayout();
     state.economyVersion = ECONOMY_VERSION;
     return;
   }
+  if (state.economyVersion === 2) { state.layout ??= initialLayout(); state.economyVersion = ECONOMY_VERSION; }
   if (state.economyVersion !== ECONOMY_VERSION) throw new Error('Unsupported economy version.');
   const levels = state.coffeeLevels;
   if (!levels || typeof levels !== 'object' || Array.isArray(levels) || Object.keys(levels).sort().join() !== 'espresso,latte' ||
@@ -95,7 +102,7 @@ export function migrateCustomerRoutes(state: SliceState): void {
 
 export function createInitialState(): SliceState {
   return {
-    schemaVersion: 1, economyVersion: ECONOMY_VERSION, coffeeLevels: { espresso: 1, latte: 1 }, managerRouteVersion: MANAGER_ROUTE_VERSION, customerRouteVersion: CUSTOMER_ROUTE_VERSION, elapsed: 0, wallet: INITIAL_WALLET,
+    schemaVersion: 1, economyVersion: ECONOMY_VERSION, layout: initialLayout(), coffeeLevels: { espresso: 1, latte: 1 }, managerRouteVersion: MANAGER_ROUTE_VERSION, customerRouteVersion: CUSTOMER_ROUTE_VERSION, elapsed: 0, wallet: INITIAL_WALLET,
     totalEarned: 0, totalServed: 0, spend: 0, nextCustomerId: 1,
     arrivalTimer: 0, inviteCooldown: 0, paused: false, stepCarry: 0, eventSequence: 0, offlineClaimIds: [],
     counters: [
@@ -117,6 +124,13 @@ export function createEngine(initial: SliceState = createInitialState(), observe
   state.offlineClaimIds ??= state.lastOfflineClaimId ? [state.lastOfflineClaimId] : [];
   let events: SliceEvent[] = [];
   let silent = false;
+  let editing: 'idle' | 'draining' | 'ready' = 'idle';
+  const activeLayout = () => !!state.layout?.active;
+  const counterDrained = (counter: Counter): boolean => !counter.brew && (!counter.pendingCash || !!state.layout?.furniture.some(item => item.counterId === counter.id && item.stored));
+  const layoutSimulation = createLayoutSimulation(state, { emit, traceCustomer, traceManager, stepSeconds: STEP_SECONDS, customerSpeed: CUSTOMER_SPEED,
+    price: counter => counterPrice(counter.recipe, counter.level, counter.id, state.coffeeLevels[counter.recipe]),
+    duration: counter => counterBrewSeconds(counter.recipe, counter.level, counter.id, state.coffeeLevels[counter.recipe]),
+    speed: () => managerSpeed(state.manager.level), capacity: () => managerCapacity(state.manager.level) });
   function trace(event: Omit<RouteTraceEvent, 'time'>): void {
     if (!observeRoute || silent) return;
     // The observer receives detached scalar data and cannot break the simulation.
@@ -143,6 +157,8 @@ export function createEngine(initial: SliceState = createInitialState(), observe
   const findCounter = (id: CounterId): Counter | undefined => state.counters.find(counter => counter.id === id);
   const lane = (counterId: CounterId): Customer[] => state.customers.filter(customer => customer.counterId === counterId && customer.phase !== 'leaving').sort((a, b) => a.id - b.id);
   function arrive(): boolean {
+    if (editing !== 'idle') return false;
+    if (activeLayout()) return layoutSimulation.arrive();
     if (state.customers.length >= 32) return false;
     const counts = state.counters.map(counter => lane(counter.id).length);
     const smallest = Math.min(...counts);
@@ -364,10 +380,12 @@ export function createEngine(initial: SliceState = createInitialState(), observe
     // Deterministic small cadence variation; no wall clock or Math.random.
     const interval = 2.4 + (state.nextCustomerId % 3) * .15;
     if (state.arrivalTimer + 1e-9 >= interval) { state.arrivalTimer = roundTime(state.arrivalTimer - interval); arrive(); }
-    advanceCustomers(); advanceBrews(); advanceManager();
+    if (activeLayout()) { layoutSimulation.advanceCustomers(); advanceBrews(); layoutSimulation.advanceManager(); }
+    else { advanceCustomers(); advanceBrews(); advanceManager(); }
+    if (editing === 'draining' && !state.customers.length && state.counters.every(counterDrained) && state.manager.carrying === 0 && state.manager.x === (activeLayout() ? GRID.vault.x : WORLD.vaultX) && state.manager.z === (activeLayout() ? GRID.vault.z : WORLD.backZ)) editing = 'ready';
   }
   function advance(seconds: number, beforeLastStep?: (state: Readonly<SliceState>) => void): void {
-    if (state.paused || !Number.isFinite(seconds) || seconds <= 0) return;
+    if (editing === 'ready' || state.paused && editing !== 'draining' || !Number.isFinite(seconds) || seconds <= 0) return;
     // Keep fractional frames instead of rounding each incoming delta. Rounding
     // 1/60 per call, for example, would drift relative to one whole second.
     const total = (state.stepCarry ?? 0) + seconds;
@@ -378,6 +396,7 @@ export function createEngine(initial: SliceState = createInitialState(), observe
       // Optional read-only presentation seam; offline/core callers pay no snapshot cost.
       if (i === steps - 1) beforeLastStep?.(state);
       tick();
+      if ((editing as string) === 'ready') break;
     }
   }
   function quote(id: CounterId): CounterQuote {
@@ -409,37 +428,69 @@ export function createEngine(initial: SliceState = createInitialState(), observe
   }
   return {
     get state() { return state; }, advance,
+    beginLayoutEdit() {
+      if (editing !== 'idle') return false;
+      editing = 'draining';
+      if (!state.customers.length && state.counters.every(counterDrained) && !state.manager.carrying && state.manager.x === (activeLayout() ? GRID.vault.x : WORLD.vaultX) && state.manager.z === (activeLayout() ? GRID.vault.z : WORLD.backZ)) editing = 'ready';
+      return true;
+    },
+    layoutEditStatus() { return editing; },
+    createLayoutDraft() { return editing === 'ready' ? copyLayout(state) : null; },
+    cancelLayoutEdit() { editing = 'idle'; },
+    commitLayout(draft) {
+      if (editing !== 'ready') return { ok: false, message: '请等顾客离店、经理送回现金后再装修。' };
+      const checked = validateLayout(draft); if (!checked.ok) return checked;
+      const offer = layoutCost(state, draft); if (!offer.ok) return offer;
+      const next = clone(draft); next.active = true; next.trafficTurn = 'customer';
+      for (const item of next.furniture.filter(item => item.kind === 'counter')) {
+        const counter = state.counters.find(counter => counter.id === item.counterId);
+        if (counter) counter.x = item.x;
+        else state.counters.push({ id: item.counterId!, x: item.x, level: 1, recipe: 'espresso', pendingCash: 0, brewed: 0, brew: null });
+      }
+      state.counters.sort((a, b) => a.id.localeCompare(b.id));
+      state.wallet -= offer.cost!; state.spend += offer.cost!; state.layout = next;
+      // Drain-to-vault preserves the manager's exact physical location. The first
+      // dynamic leg walks the 36cm to its grid anchor rather than teleporting.
+      state.manager.target = state.counters.length; state.manager.phase = 'moving'; state.manager.timer = 0;
+      delete state.manager.nav; delete state.manager.finishLegacySweep;
+      editing = 'idle'; emit('layout-changed', { amount: offer.cost });
+      return { ok: true, message: '装修已保存，小店继续营业。', cost: offer.cost };
+    },
     invite() {
-      if (state.paused || state.inviteCooldown > 0) return false;
+      if (editing !== 'idle' || state.paused || state.inviteCooldown > 0) return false;
       let arrivals = 0;
       for (let i = 0; i < 3; i++) if (arrive()) arrivals++;
       if (!arrivals) return false;
       state.inviteCooldown = INVITE_COOLDOWN_SECONDS; emit('invited'); return true;
     },
     upgrade(id) {
+      if (editing !== 'idle') return false;
       const counter = findCounter(id), offer = quote(id);
       if (!counter || offer.capped || state.wallet < offer.cost) return false;
       state.wallet -= offer.cost; state.spend += offer.cost; counter.level++;
       emit('upgraded', { counterId: id, amount: offer.cost }); return true;
     },
     upgradeCoffee(recipe) {
+      if (editing !== 'idle') return false;
       const offer = coffeeQuote(recipe);
       if (offer.capped || state.wallet < offer.cost) return false;
       state.wallet -= offer.cost; state.spend += offer.cost; state.coffeeLevels[recipe]++;
       emit('coffee-upgraded', { recipeId: recipe, amount: offer.cost }); return true;
     },
     upgradeManager() {
+      if (editing !== 'idle') return false;
       const offer = managerQuote();
       if (offer.capped || state.wallet < offer.cost) return false;
       state.wallet -= offer.cost; state.spend += offer.cost; state.manager.level++;
       emit('upgraded', { amount: offer.cost }); return true;
     },
     setRecipe(id, recipe) {
+      if (editing !== 'idle') return false;
       const counter = findCounter(id);
       if (!counter || !Object.hasOwn(recipeById, recipe) || counter.recipe === recipe) return false;
       counter.recipe = recipe; emit('recipe-changed', { counterId: id }); return true;
     },
-    togglePause() { state.paused = !state.paused; }, quote, managerQuote, coffeeQuote,
+    togglePause() { if (editing === 'idle') state.paused = !state.paused; }, quote, managerQuote, coffeeQuote,
     drainEvents() { const result = events; events = []; return result; },
     snapshot() {
       const snapshot = clone(state);
@@ -457,7 +508,7 @@ export function createEngine(initial: SliceState = createInitialState(), observe
   };
   function beginOffline(seconds: number, claimId: string, policy: OfflinePolicyVersion = 3): OfflineJob {
     const effective = state.paused ? 0 : offlineEffectiveSeconds(seconds, policy);
-    const valid = typeof claimId === 'string' && !!claimId && claimId.length <= 256 && claimId !== state.lastOfflineClaimId && !state.offlineClaimIds!.includes(claimId) && Number.isFinite(seconds) && seconds >= 0 && [1, 2, 3].includes(policy) && effective + state.elapsed <= MAX_ELAPSED_SECONDS;
+    const valid = editing === 'idle' && typeof claimId === 'string' && !!claimId && claimId.length <= 256 && claimId !== state.lastOfflineClaimId && !state.offlineClaimIds!.includes(claimId) && Number.isFinite(seconds) && seconds >= 0 && [1, 2, 3].includes(policy) && effective + state.elapsed <= MAX_ELAPSED_SECONDS;
     const total = (state.stepCarry ?? 0) + effective;
     const steps = valid && !state.paused ? Math.floor((total + 1e-12) / STEP_SECONDS) : 0;
     const carry = total - steps * STEP_SECONDS;

@@ -24,13 +24,14 @@ const independentOverview = state => ({
   wallet: state.wallet, totalEarned: state.totalEarned, totalServed: state.totalServed, elapsed: state.elapsed,
   counterLevels: [state.counters[0].level, state.counters[1].level], coffeeLevels: { ...state.coffeeLevels }, managerLevel: state.manager.level,
   pendingCash: state.counters[0].pendingCash + state.counters[1].pendingCash, carrying: state.manager.carrying,
+  placedCounters: state.layout.furniture.filter(item => item.kind === 'counter' && !item.stored).length, placedSeats: state.layout.furniture.filter(item => item.kind === 'table' && !item.stored).length, expanded: state.layout.expanded,
 });
 const payload = (state = checkpoint(), changes = {}) => ({
-  saveId: 'export-source-001', revision: 19, gameSchemaVersion: 1, economyVersion: 2,
+  saveId: 'export-source-001', revision: 19, gameSchemaVersion: 1, economyVersion: 3,
   offlinePolicyVersion: 3, savedAt: 1000, exportedAt: 2000,
   overview: independentOverview(state), state: copy(state), ...changes,
 });
-const fileWithPayloadText = (payloadText, formatVersion = 2) => JSON.stringify({
+const fileWithPayloadText = (payloadText, formatVersion = 3) => JSON.stringify({
   format: 'mellow-bean-portable-save', formatVersion, payloadText,
   integrity: { algorithm: 'SHA-256', sha256: sha256(payloadText) },
 });
@@ -74,7 +75,7 @@ const assertMoney = state => {
 
 test('TC-3D-021 file export is detached, deeply frozen, complete and independently SHA-256 verifiable', async () => {
   const original = payload(), before = copy(original), result = await createPortableSave(original);
-  assert.equal(PORTABLE_FORMAT, 'mellow-bean-portable-save'); assert.equal(PORTABLE_VERSION, 2);
+  assert.equal(PORTABLE_FORMAT, 'mellow-bean-portable-save'); assert.equal(PORTABLE_VERSION, 3);
   assert.equal(OFFLINE_POLICY_VERSION, 3); assert.equal(MAX_PORTABLE_BYTES, 256 * 1024);
   const outer = JSON.parse(result.text), decoded = JSON.parse(outer.payloadText);
   assert.deepEqual(Object.keys(outer).sort(), ['format', 'formatVersion', 'integrity', 'payloadText']);
@@ -93,7 +94,7 @@ test('TC-3D-021 file export is detached, deeply frozen, complete and independent
 
 test('TC-3D-021 checksum covers exact payload bytes and every metadata field, not parsed JSON', async () => {
   const original = payload(), text = independentlyWrittenFile(original), wrapper = JSON.parse(text);
-  for (const [key, value] of [['saveId', 'different-identity'], ['revision', 20], ['savedAt', 999], ['exportedAt', 2001], ['gameSchemaVersion', 2], ['economyVersion', 3], ['offlinePolicyVersion', 2]]) {
+  for (const [key, value] of [['saveId', 'different-identity'], ['revision', 20], ['savedAt', 999], ['exportedAt', 2001], ['gameSchemaVersion', 2], ['economyVersion', 4], ['offlinePolicyVersion', 2]]) {
     const changed = copy(wrapper); changed.payloadText = JSON.stringify({ ...original, [key]: value });
     const result = await parsePortableSave(JSON.stringify(changed));
     assert.equal(result.ok, false, key); assert.match(result.message, /完整性/, key);
@@ -113,7 +114,7 @@ test('TC-3D-021 parser rejects malformed, raw recovery, future, and extra-key fi
   const original = JSON.parse(independentlyWrittenFile(payload()));
   const cases = [null, [], 1, 'save', {}, { format: 'mellow-bean-import-backup', version: 1, originalRaw: rawEnvelope() }, JSON.parse(rawEnvelope())];
   for (const change of [
-    { format: 'other-game' }, { formatVersion: 3 }, { formatVersion: '1' }, { payloadText: {} }, { extra: true },
+    { format: 'other-game' }, { formatVersion: 4 }, { formatVersion: '1' }, { payloadText: {} }, { extra: true },
     { integrity: null }, { integrity: { algorithm: 'MD5', sha256: original.integrity.sha256 } },
     { integrity: { ...original.integrity, sha256: 'A'.repeat(64) } },
     { integrity: { ...original.integrity, sha256: '0'.repeat(63) } },
@@ -128,7 +129,7 @@ test('TC-3D-021 signed-but-invalid lineage, schema, policy and timestamps are re
   const mutations = [
     ['saveId', ''], ['saveId', '../shop'], ['saveId', '<script>'], ['saveId', 'x'.repeat(101)], ['saveId', 19],
     ['revision', 0], ['revision', -1], ['revision', 1.5], ['revision', Number.MAX_SAFE_INTEGER], ['revision', '1'],
-    ['gameSchemaVersion', 2], ['economyVersion', 3], ['offlinePolicyVersion', 1], ['offlinePolicyVersion', 2], ['offlinePolicyVersion', 4],
+    ['gameSchemaVersion', 2], ['economyVersion', 4], ['offlinePolicyVersion', 1], ['offlinePolicyVersion', 2], ['offlinePolicyVersion', 4],
     ['savedAt', -1], ['savedAt', 8.64e15 + 1], ['exportedAt', -1], ['exportedAt', 8.64e15 + 1], ['savedAt', '1000'], ['exportedAt', null],
     ['unrecognized', true],
   ];
@@ -139,7 +140,7 @@ test('TC-3D-021 signed-but-invalid lineage, schema, policy and timestamps are re
 
 test('TC-3D-021 even a recomputed checksum cannot hide invalid finite values, economy or relationships', async () => {
   const mutations = [
-    state => { state.schemaVersion = 2; }, state => { state.economyVersion = 3; },
+    state => { state.schemaVersion = 2; }, state => { state.economyVersion = 4; },
     state => { state.wallet = -1; }, state => { state.wallet = 1.5; }, state => { state.wallet = Number.MAX_SAFE_INTEGER + 1; },
     state => { state.wallet += 1; }, state => { state.totalEarned += 1; }, state => { state.spend += 1; },
     state => { state.counters[0].pendingCash += 1; }, state => { state.manager.carrying += 1; },
@@ -432,7 +433,7 @@ test('TC-3D-021 portable assets preserve spendable, pending and carried cash wit
   assertMoney(incoming);
   const expectedOverview = {
     wallet: INITIAL_WALLET - 300, totalEarned: 900, totalServed: 0, elapsed: 0,
-    counterLevels: [1, 1], coffeeLevels: { espresso: 1, latte: 1 }, managerLevel: 1, pendingCash: 700, carrying: 200,
+    counterLevels: [1, 1], coffeeLevels: { espresso: 1, latte: 1 }, managerLevel: 1, pendingCash: 700, carrying: 200, placedCounters: 2, placedSeats: 0, expanded: false,
   };
   assert.deepEqual(overviewOf(incoming), expectedOverview);
   const file = await createPortableSave(payload(incoming)), parsed = await parsePortableSave(file.text); assert.equal(parsed.ok, true);
@@ -480,15 +481,16 @@ test('TC-3D-021 valid large local revisions remain readable in the import recove
 
 function legacyPayload() {
   const value = payload(); value.economyVersion = 1; value.state.economyVersion = 1;
-  delete value.state.coffeeLevels; delete value.overview.coffeeLevels;
+  delete value.state.coffeeLevels; delete value.state.layout; delete value.overview.coffeeLevels;
+  delete value.overview.placedCounters; delete value.overview.placedSeats; delete value.overview.expanded;
   return value;
 }
 
-test('TC-3D-023 v2 files preserve and fingerprint coffee levels through import, reload and backup recovery', async () => {
+test('TC-3D-023 v3 files preserve and fingerprint coffee levels through import, reload and backup recovery', async () => {
   const engine = createEngine(); engine.advance(200); engine.upgradeCoffee('espresso'); engine.upgradeCoffee('latte');
   assert.deepEqual(engine.state.coffeeLevels, { espresso: 2, latte: 2 });
   const original = payload(engine.snapshot()), file = await createPortableSave(original), outer = JSON.parse(file.text);
-  assert.equal(outer.formatVersion, 2); assert.equal(file.payload.economyVersion, 2); assert.equal(file.payload.state.economyVersion, 2);
+  assert.equal(outer.formatVersion, 3); assert.equal(file.payload.economyVersion, 3); assert.equal(file.payload.state.economyVersion, 3);
   assert.deepEqual(file.payload.overview.coffeeLevels, { espresso: 2, latte: 2 });
   assert.equal(file.fingerprint, sha256(outer.payloadText));
   assert.equal(Object.isFrozen(file.payload.state.coffeeLevels), true); assert.equal(Object.isFrozen(file.payload.overview.coffeeLevels), true);
@@ -504,27 +506,27 @@ test('TC-3D-023 v2 files preserve and fingerprint coffee levels through import, 
   assertMoney(imported.state);
 });
 
-test('TC-3D-023 valid v1 files verify original bytes then migrate once to Lv1 and export v2', async () => {
+test('TC-3D-023 valid v1 files verify original bytes then migrate once to Lv1 and export v3', async () => {
   const legacy = legacyPayload(), before = copy(legacy), payloadText = JSON.stringify(legacy, null, 2), text = fileWithPayloadText(payloadText, 1);
   const parsed = await parsePortableSave(text); assert.equal(parsed.ok, true);
   assert.equal(parsed.file.text, text); assert.equal(parsed.file.fingerprint, sha256(payloadText)); assert.deepEqual(legacy, before);
-  assert.equal(parsed.file.payload.economyVersion, 2); assert.equal(parsed.file.payload.state.economyVersion, 2);
+  assert.equal(parsed.file.payload.economyVersion, 3); assert.equal(parsed.file.payload.state.economyVersion, 3);
   assert.deepEqual(parsed.file.payload.state.coffeeLevels, { espresso: 1, latte: 1 });
   assert.deepEqual(parsed.file.payload.overview.coffeeLevels, { espresso: 1, latte: 1 });
   assert.deepEqual(parsed.file.payload.state.counters, legacy.state.counters, 'in-flight prices and times are untouched');
   const f = fixture(), result = f.repo.importSnapshot(parsed.file.payload.state, importOptions(f, { fingerprint: parsed.file.fingerprint }), 200000);
   assert.equal(result.ok, true); assert.deepEqual(result.state, parsed.file.payload.state); assert.equal(result.state.elapsed, legacy.state.elapsed);
-  assert.equal(JSON.parse(f.storage.data.get(SAVE_KEY)).state.economyVersion, 2);
+  assert.equal(JSON.parse(f.storage.data.get(SAVE_KEY)).state.economyVersion, 3);
   assert.deepEqual(JSON.parse(f.storage.data.get(SAVE_KEY)).importedFileHashes, [sha256(payloadText)]);
   const upgraded = await createPortableSave(parsed.file.payload), again = await parsePortableSave(upgraded.text);
-  assert.equal(JSON.parse(upgraded.text).formatVersion, 2); assert.equal(again.ok, true); assert.deepEqual(again.file.payload, parsed.file.payload);
+  assert.equal(JSON.parse(upgraded.text).formatVersion, 3); assert.equal(again.ok, true); assert.deepEqual(again.file.payload, parsed.file.payload);
   assert.notEqual(upgraded.fingerprint, parsed.file.fingerprint);
   await assert.rejects(createPortableSave(legacy), /无法生成/, 'writers require current normalized data');
 });
 
 test('TC-3D-023 mismatched formats, economies, coffee bounds and forged summaries fail even with valid checksums', async () => {
-  for (const format of [0, -1, 3, 999, '2', null]) assert.equal((await parsePortableSave(fileWithPayloadText(JSON.stringify(payload()), format))).ok, false);
-  assert.equal((await parsePortableSave(fileWithPayloadText(JSON.stringify(payload()), 1))).ok, false, 'v2 state cannot masquerade as v1');
+  for (const format of [0, -1, 4, 999, '2', null]) assert.equal((await parsePortableSave(fileWithPayloadText(JSON.stringify(payload()), format))).ok, false);
+  assert.equal((await parsePortableSave(fileWithPayloadText(JSON.stringify(payload()), 1))).ok, false, 'current state cannot masquerade as v1');
   assert.equal((await parsePortableSave(fileWithPayloadText(JSON.stringify(legacyPayload()), 2))).ok, false, 'v1 state is not a valid v2 payload');
   const mismatched = payload(); mismatched.economyVersion = 1;
   assert.equal((await parsePortableSave(fileWithPayloadText(JSON.stringify(mismatched), 1))).ok, false);
@@ -542,7 +544,7 @@ test('TC-3D-023 mismatched formats, economies, coffee bounds and forged summarie
   }
 });
 
-test('TC-3D-023 retained pre-coffee recovery backup normalizes liveState for v2 re-export without altering original bytes', async () => {
+test('TC-3D-023 retained pre-coffee recovery backup normalizes liveState for v3 re-export without altering original bytes', async () => {
   const f = fixture(), legacy = legacyPayload().state;
   const backupKey = `${SAVE_KEY}-import-backup-legacy-coffee`;
   const originalRaw = '  { "pre-feature": "original protected bytes" }\n';
@@ -552,8 +554,8 @@ test('TC-3D-023 retained pre-coffee recovery backup normalizes liveState for v2 
   const repo = new LocalSaveRepository(f.storage); assert.equal(repo.load(100000).status, 'loaded');
   f.storage.events = [];
   const read = repo.readImportBackup(); assert.equal(read.originalRaw, originalRaw);
-  assert.equal(read.liveState.economyVersion, 2); assert.deepEqual(read.liveState.coffeeLevels, { espresso: 1, latte: 1 });
+  assert.equal(read.liveState.economyVersion, 3); assert.deepEqual(read.liveState.coffeeLevels, { espresso: 1, latte: 1 });
   const exported = await createPortableSave(payload(read.liveState, { savedAt: read.createdAt })), parsed = await parsePortableSave(exported.text);
-  assert.equal(parsed.ok, true); assert.equal(JSON.parse(exported.text).formatVersion, 2); assert.deepEqual(parsed.file.payload.state, read.liveState);
+  assert.equal(parsed.ok, true); assert.equal(JSON.parse(exported.text).formatVersion, 3); assert.deepEqual(parsed.file.payload.state, read.liveState);
   assert.equal(f.storage.data.get(backupKey), backupRaw); assert.equal(f.storage.events.some(([operation]) => operation === 'set'), false);
 });

@@ -19,8 +19,9 @@ import { CreateTorus } from '@babylonjs/core/Meshes/Builders/torusBuilder.js';
 import { CreatePlane } from '@babylonjs/core/Meshes/Builders/planeBuilder.js';
 // Registers the scene ray-picking extension used by physical shop controls.
 import '@babylonjs/core/Culling/ray.js';
-import type { Counter, CounterId, Customer, RecipeId, SliceState } from '../core/types';
+import type { Counter, CounterId, Customer, RecipeId, ShopLayout, SliceState } from '../core/types';
 import { coffeeBrewSeconds, coffeePrice, WORLD } from '../core/engine';
+import { furnitureCells, getLayout, interactionPoint } from '../core/layout';
 import { DEFAULT_RENDER_MODE, RENDER_MODES, renderPixelRatio, type RenderMode } from './RenderBudget';
 
 export type CoffeeSceneAction =
@@ -28,12 +29,14 @@ export type CoffeeSceneAction =
   | { type: 'counter'; id: CounterId }
   | { type: 'recipe'; id: CounterId }
   | { type: 'menu'; recipe: RecipeId }
-  | { type: 'vault' };
+  | { type: 'vault' }
+  | { type: 'renovate' }
+  | { type: 'layout-select'; id: string }
+  | { type: 'layout-cell'; x: number; z: number };
 
 export type CoffeeSceneAnchor =
-  | 'invite' | 'counter-a-upgrade' | 'counter-b-upgrade'
-  | 'counter-a-recipe' | 'counter-b-recipe'
-  | 'menu-espresso' | 'menu-latte' | 'vault';
+  | 'invite' | `${CounterId}-upgrade` | `${CounterId}-recipe`
+  | 'menu-espresso' | 'menu-latte' | 'vault' | 'renovate' | 'expansion';
 export interface AnchorProjection { x: number; y: number; visible: boolean }
 
 /** The optional engine is a QA seam; normal callers only supply canvas and action callback. */
@@ -119,6 +122,20 @@ export class CoffeeScene {
   private readonly customers = new Map<number, Person>();
   private readonly stations = new Map<CounterId, Station>();
   private readonly menus = new Map<RecipeId, Menu>();
+  private readonly tables = new Map<string, TransformNode>();
+  private readonly legacyFurniture: TransformNode[] = [];
+  private readonly gridCells = new Map<string, Mesh>();
+  private expansionRoot!: TransformNode;
+  private expansionFloor!: Mesh;
+  private expansionGate!: TransformNode;
+  private renovationGhost: Mesh | null = null;
+  private previewLayout: ShopLayout | null = null;
+  private liveLayout: ShopLayout | null = null;
+  private displayedLayout: ShopLayout | null = null;
+  private layoutSignature = '';
+  private gridSignature = '';
+  private renovationSelected: string | null = null;
+  private renovationValid = true;
   private readonly labels: Label[] = [];
   private readonly manager: Person;
   private readonly vaultLabel: Label;
@@ -196,6 +213,9 @@ export class CoffeeScene {
     this.manager.previousZ = WORLD.backZ;
     this.manager.root.scaling.setAll(0.97);
     this.makeCart(this.manager.root);
+    // Append new controls after the established keyboard sequence.
+    this.registerAnchor('renovate', this.scene.getMeshByName('brand-sign') as Mesh);
+    this.makeExpansion();
     this.prepareStaticGeometry();
     canvas.addEventListener('pointerdown', this.handleDown);
     canvas.addEventListener('pointermove', this.handleMove);
@@ -211,6 +231,8 @@ export class CoffeeScene {
     const frame = Number.isFinite(dt) ? clamp(dt, 0, 0.1) : 0;
     if (!state.paused) this.animationTime += frame;
     const motion = state.paused ? 0 : frame;
+    this.liveLayout = getLayout(state);
+    this.reconcileLayout(this.previewLayout ?? this.liveLayout);
     for (const counter of state.counters) {
       const station = this.stations.get(counter.id);
       if (station) this.updateStation(station, counter, state.paused);
@@ -255,6 +277,205 @@ export class CoffeeScene {
     this.engine.beginFrame();
     try { this.scene.render(); } finally { this.engine.endFrame(); }
     this.renderedFrames++;
+  }
+
+  /** Detached editor snapshot. Passing null restores the authoritative shop immediately. */
+  setRenovationPreview(layout: ShopLayout | null, selectedId: string | null = null, valid = true): void {
+    if (this.disposed) return;
+    const modeChanged = Boolean(this.previewLayout) !== Boolean(layout);
+    if (modeChanged) this.releasePointer();
+    this.previewLayout = layout ? structuredClone(layout) : null;
+    this.renovationSelected = selectedId;
+    this.renovationValid = valid;
+    if (this.previewLayout || this.liveLayout) this.reconcileLayout(this.previewLayout ?? this.liveLayout!);
+    this.updateRenovationGrid();
+    this.refreshPanBounds();
+    this.setPan(this.panX, this.panY);
+  }
+
+  /** Actual world centre for keyboard/canvas QA; never changes the simulation. */
+  projectLayoutCell(x: number, z: number): AnchorProjection {
+    const p = this.projectWorld(new Vector3(x, .12, z));
+    const rect = this.canvas.getBoundingClientRect();
+    return { x: p.x, y: p.y, visible: !this.disposed && p.z >= 0 && p.z <= 1 && p.x >= 0 && p.x <= rect.width && p.y >= 0 && p.y <= rect.height };
+  }
+
+  private reconcileLayout(layout: ShopLayout): void {
+    // Traffic scheduling and economy ticks do not rebuild or reallocate furniture.
+    const signature = JSON.stringify([layout.active, layout.expanded, layout.furniture.map(item => [item.id, item.kind, item.counterId, item.x, item.z, item.rotation, item.stored])]);
+    this.displayedLayout = layout;
+    if (signature === this.layoutSignature) return;
+    this.layoutSignature = signature;
+    for (const node of this.legacyFurniture) node.setEnabled(!layout.active);
+    const items = layout.furniture.filter(item => !item.stored);
+    const counters = new Set(items.filter(item => item.kind === 'counter').map(item => item.counterId!));
+    for (const [id, station] of this.stations) {
+      if (counters.has(id)) continue;
+      this.disposeFurnitureRoot(station.root);
+      station.barista.shadow.dispose(false, false);
+      this.stations.delete(id);
+    }
+    const tableIds = new Set(items.filter(item => item.kind === 'table').map(item => item.id));
+    for (const [id, root] of this.tables) if (!tableIds.has(id)) { this.disposeFurnitureRoot(root); this.tables.delete(id); }
+    const palette = [[COLORS.teal, COLORS.tealDark], [COLORS.rose, COLORS.roseDark], ['#b49a5c', '#766441'], ['#8899b0', '#526680']];
+    for (const item of items) {
+      let root: TransformNode;
+      if (item.kind === 'counter') {
+        if (!item.counterId) continue;
+        let station = this.stations.get(item.counterId);
+        if (!station) {
+          const index = Math.max(0, item.counterId.charCodeAt(item.counterId.length - 1) - 97);
+          const [accent, deep] = palette[index % palette.length];
+          station = this.makeStation(item.counterId, item.x, accent, deep, item.counterId.slice(-1).toUpperCase());
+          this.stations.set(item.counterId, station);
+        }
+        this.positionCounterControls(station, item.rotation);
+        root = station.root;
+      } else {
+        let table = this.tables.get(item.id);
+        if (!table) { table = this.makeTable(item.id); this.tables.set(item.id, table); }
+        root = table;
+      }
+      root.metadata = { ...root.metadata, coffeeFurnitureId: item.id, coffeeFurnitureKind: item.kind };
+      // The core uses a counter-clockwise x/z grid turn: Babylon's Y rotation has
+      // the opposite sign. Every mounted component shares this one root transform.
+      const angle = -item.rotation * Math.PI / 2;
+      if (root.position.x !== item.x || root.position.z !== item.z || root.rotation.y !== angle) {
+        for (const mesh of root.getChildMeshes()) mesh.unfreezeWorldMatrix();
+        root.position.set(item.x, 0, item.z);
+        root.rotation.y = angle;
+        root.computeWorldMatrix(true);
+        for (const mesh of root.getChildMeshes()) mesh.computeWorldMatrix(true);
+      }
+    }
+    this.expansionGate.setEnabled(!layout.expanded);
+    this.expansionFloor.material = this.material(layout.expanded ? '#e7ddc8' : '#d1ceb8');
+    this.expansionFloor.metadata = { coffeeExpansion: layout.expanded ? 'open' : 'locked', coffeeAction: { type: 'renovate' } };
+    this.prepareStaticGeometry();
+    this.shadowGenerator?.getShadowMap()?.resetRefreshCounter();
+    this.updateRenovationGrid();
+    this.refreshPanBounds();
+  }
+
+  private positionCounterControls(station: Station, rotation: number): void {
+    // The machine and notes fill the top. On away-facing turns the same two
+    // wooden plaques attach to the visible long face, never to a floating HUD.
+    // Projection reverses local X at turns 1/2, so preserve recipe-left/upgrade-right.
+    const reverse = rotation === 1 || rotation === 2;
+    const side = reverse ? -1 : 1;
+    // The worker stands in the centre gap on the visible back side rather than
+    // masking the recipe plaque with their torso at the original left-hand slot.
+    station.barista.root.position.x = reverse ? .2 : -.5;
+    for (const [label, x] of [[station.selector, 1.01 * side], [station.plaque, -1.01 * side]] as const) {
+      label.mesh.unfreezeWorldMatrix();
+      label.mesh.position.set(x, .55, .765 * side);
+      label.mesh.rotation.y = reverse ? 0 : Math.PI;
+      label.mesh.metadata = { ...label.mesh.metadata, coffeeSurface: reverse ? 'counter-visible-back' : 'counter-front' };
+      const mount = this.scene.getMeshByName(label.mesh.metadata.coffeeMount);
+      if (mount) { mount.unfreezeWorldMatrix(); mount.position.set(x, .55, .715 * side); }
+    }
+  }
+
+  private disposeFurnitureRoot(root: TransformNode): void {
+    const meshes = new Set(root.getChildMeshes());
+    for (let i = this.labels.length - 1; i >= 0; i--) {
+      const label = this.labels[i];
+      if (!meshes.has(label.mesh)) continue;
+      // Label ink is owned by this furniture. Shared wood/metal/skin materials are not.
+      label.texture?.dispose();
+      label.mesh.material?.dispose(false, false);
+      this.labels.splice(i, 1);
+    }
+    for (const [key, mesh] of this.anchors) if (meshes.has(mesh)) {
+      this.anchors.delete(key);
+      if (this.focused === key) this.focused = null;
+    }
+    for (const mesh of meshes) {
+      this.staticCasters.delete(mesh as Mesh);
+      this.shadowGenerator?.removeShadowCaster(mesh, false);
+      this.focusMaterials.delete(mesh as Mesh);
+    }
+    root.dispose(false, false);
+  }
+
+  private makeTable(id: string): TransformNode {
+    const root = new TransformNode(`${id}-furniture`, this.scene);
+    this.cylinder(`${id}-table-top`, .9, .12, 0, .91, 0, COLORS.woodLight, root);
+    this.cylinder(`${id}-table-stem`, .12, .78, 0, .46, 0, COLORS.woodDark, root);
+    this.cylinder(`${id}-table-base`, .52, .06, 0, .035, 0, COLORS.woodDark, root);
+    this.cylinder(`${id}-small-vase`, .14, .2, -.15, 1.07, -.12, COLORS.cream, root);
+    this.shape('sphere', `${id}-table-flower`, new Vector3(.24, .21, .24), new Vector3(-.15, 1.25, -.12), COLORS.rose, root, false);
+    // The chair and table are one owned/rotated/stored unit. Its seat sits on the
+    // adjacent interaction tile which the core reserves for a dining customer.
+    this.box(`${id}-chair-seat`, .63, .12, .62, 0, .51, 1, COLORS.teal, root);
+    this.box(`${id}-chair-back`, .63, .58, .09, 0, .8, 1.31, COLORS.tealDark, root);
+    for (const x of [-.24, .24]) for (const z of [.78, 1.23]) this.box(`${id}-chair-leg-${x}-${z}`, .075, .48, .075, x, .24, z, COLORS.woodDark, root);
+    return root;
+  }
+
+  private makeExpansion(): void {
+    this.expansionRoot = new TransformNode('adjacent-expansion', this.scene);
+    this.expansionFloor = this.box('expansion-floor', 6, .022, 13, 13.5, .012, 3, '#d1ceb8', this.expansionRoot, false);
+    this.expansionFloor.metadata = { coffeeExpansion: 'locked', coffeeAction: { type: 'renovate' } };
+    for (const z of [-3.42, 9.42]) this.box(`expansion-edge-${z}`, 6, .025, .08, 13.5, .03, z, '#a5b197', this.expansionRoot, false);
+    this.box('expansion-far-edge', .08, .025, 13, 16.45, .03, 3, '#a5b197', this.expansionRoot, false);
+    this.expansionGate = new TransformNode('expansion-locked-divider', this.scene);
+    this.expansionGate.parent = this.expansionRoot;
+    for (const z of [-2.8, .1, 3, 5.9, 8.8]) {
+      this.box(`expansion-post-${z}`, .14, .8, .14, 10.63, .4, z, COLORS.woodDark, this.expansionGate);
+      this.cylinder(`expansion-post-cap-${z}`, .21, .075, 10.63, .84, z, COLORS.gold, this.expansionGate);
+    }
+    for (const z of [-1.35, 1.55, 4.45, 7.35]) this.box(`expansion-rope-${z}`, .055, .065, 2.8, 10.63, .66, z, '#a88c60', this.expansionGate, false);
+    // A timber building marker, with an embodied plus, is also the expansion entry.
+    const marker = this.box('expansion-marker', 1.15, .9, .1, 12, 1.48, -2.8, COLORS.tealDark, this.expansionRoot);
+    marker.metadata = { coffeeAction: { type: 'renovate' }, coffeeExpansionSign: true };
+    this.box('expansion-marker-post', .13, 1.2, .13, 12, .6, -2.86, COLORS.woodDark, this.expansionRoot);
+    for (const [name, w, h] of [['horizontal', .56, .105], ['vertical', .105, .56]] as const) {
+      const plus = this.box(`expansion-plus-${name}`, w, h, .025, 12, 1.48, -2.735, COLORS.gold, this.expansionRoot, false);
+      plus.metadata = { coffeeAction: { type: 'renovate' } };
+    }
+    this.registerAnchor('expansion', marker);
+  }
+
+  private updateRenovationGrid(): void {
+    const layout = this.previewLayout;
+    const signature = layout ? `${layout.expanded}` : '';
+    if (signature !== this.gridSignature) {
+      for (const mesh of this.gridCells.values()) mesh.dispose(false, false);
+      this.gridCells.clear();
+      this.gridSignature = signature;
+      if (layout) {
+        for (let x = -7; x <= (layout.expanded ? 16 : 10); x++) for (let z = -3; z <= 9; z++) {
+          const cell = this.box(`renovation-cell-${x}-${z}`, .94, .014, .94, x, .092, z, '#f6edcd', undefined, false);
+          cell.material = this.material('#f6edcd', false, .25);
+          cell.receiveShadows = false;
+          cell.metadata = { coffeeAction: { type: 'layout-cell', x, z }, coffeeRenovationGrid: true };
+          cell.freezeWorldMatrix();
+          this.gridCells.set(`${x},${z}`, cell);
+        }
+      }
+    }
+    if (!layout) {
+      this.renovationGhost?.dispose(false, false);
+      this.renovationGhost = null;
+      return;
+    }
+    const selected = layout.furniture.find(item => item.id === this.renovationSelected && !item.stored);
+    if (!selected) { this.renovationGhost?.setEnabled(false); return; }
+    const cells = furnitureCells(selected);
+    const minX = Math.min(...cells.map(cell => cell.x)), maxX = Math.max(...cells.map(cell => cell.x));
+    const minZ = Math.min(...cells.map(cell => cell.z)), maxZ = Math.max(...cells.map(cell => cell.z));
+    if (!this.renovationGhost) {
+      this.renovationGhost = this.box('renovation-footprint-ghost', 1, .055, 1, 0, .115, 0, '#71b684', undefined, false);
+      this.renovationGhost.isPickable = false;
+      this.renovationGhost.receiveShadows = false;
+    }
+    this.renovationGhost.unfreezeWorldMatrix();
+    this.renovationGhost.setEnabled(true);
+    this.renovationGhost.scaling.set(maxX - minX + .98, .055, maxZ - minZ + .98);
+    this.renovationGhost.position.set((minX + maxX) / 2, .115, (minZ + maxZ) / 2);
+    this.renovationGhost.material = this.material(this.renovationValid ? '#71b684' : '#d76262', true, .55);
+    this.renovationGhost.metadata = { coffeeFootprint: selected.id, coffeePlacementValid: this.renovationValid };
   }
 
   /** Read the actual presented mesh after update; viewport bounds do not assert occlusion. */
@@ -322,7 +543,7 @@ export class CoffeeScene {
 
   focusNext(direction = 1): CoffeeSceneAnchor | null {
     if (this.disposed || !this.interactionEnabled) return null;
-    const keys = [...this.anchors.keys()];
+    const keys = [...this.anchors.entries()].filter(([, mesh]) => mesh.isEnabled()).map(([key]) => key);
     const current = this.focused ? keys.indexOf(this.focused) : -1;
     const next = current < 0 ? (direction < 0 ? keys.length - 1 : 0) : (current + (direction < 0 ? -1 : 1) + keys.length) % keys.length;
     this.focusAnchor(keys[next]);
@@ -332,7 +553,7 @@ export class CoffeeScene {
   activateFocused(): boolean {
     if (this.disposed || !this.interactionEnabled || !this.focused || this.down) return false;
     const mesh = this.anchors.get(this.focused);
-    const action = mesh?.metadata?.coffeeAction as CoffeeSceneAction | undefined;
+    const action = this.actionForMesh(mesh ?? null);
     if (!mesh?.isEnabled() || !action || !this.projectAnchor(this.focused).visible || !this.visibleSurface(mesh)) return false;
     this.onAction(action);
     return true;
@@ -391,6 +612,10 @@ export class CoffeeScene {
     this.customers.clear();
     this.stations.clear();
     this.menus.clear();
+    this.tables.clear();
+    this.gridCells.clear();
+    this.legacyFurniture.length = 0;
+    this.previewLayout = this.liveLayout = this.displayedLayout = null;
     this.materials.clear();
     this.shapes.clear();
     this.labels.length = 0;
@@ -403,7 +628,7 @@ export class CoffeeScene {
   private readonly handleDown = (event: PointerEvent): PointerGesture | null => {
     if (this.disposed || !this.interactionEnabled || this.down || !event.isPrimary || event.button !== 0) return null;
     const target = this.pickAt(event.clientX, event.clientY);
-    const action = target?.metadata?.coffeeAction as CoffeeSceneAction | undefined;
+    const action = this.actionForMesh(target);
     const targetPoint = target ? this.projectWorld(this.anchorWorld(target)) : null;
     this.down = { target, targetPoint, invalidated: false, action, id: event.pointerId, x: event.clientX, y: event.clientY, lastX: event.clientX, lastY: event.clientY, time: event.timeStamp, dragged: false };
     this.canvas.setPointerCapture(event.pointerId);
@@ -428,7 +653,7 @@ export class CoffeeScene {
     if (this.disposed || !this.interactionEnabled || down.dragged || down.invalidated || event.timeStamp - down.time > 800) return;
     if (Math.hypot(event.clientX - down.x, event.clientY - down.y) > 9) return;
     const target = this.pickAt(event.clientX, event.clientY);
-    const action = target?.metadata?.coffeeAction as CoffeeSceneAction | undefined;
+    const action = this.actionForMesh(target);
     if (target && down.targetPoint) {
       const point = this.projectWorld(this.anchorWorld(target));
       if (Math.hypot(point.x - down.targetPoint.x, point.y - down.targetPoint.y) > 9) return;
@@ -437,6 +662,15 @@ export class CoffeeScene {
     // a background press or a camera jump cannot retarget a captured press on release.
     if (target && target === down.target && action && down.action && JSON.stringify(action) === JSON.stringify(down.action)) this.onAction(action);
   };
+
+  private actionForMesh(mesh: Mesh | null): CoffeeSceneAction | undefined {
+    if (this.previewLayout && mesh) {
+      for (let node: TransformNode | null = mesh; node; node = node.parent as TransformNode | null) {
+        if (node.metadata?.coffeeFurnitureId) return { type: 'layout-select', id: node.metadata.coffeeFurnitureId };
+      }
+    }
+    return mesh?.metadata?.coffeeAction as CoffeeSceneAction | undefined;
+  }
 
   private pickAt(clientX: number, clientY: number): Mesh | null {
     const rect = this.canvas.getBoundingClientRect();
@@ -502,10 +736,19 @@ export class CoffeeScene {
   private refreshPanBounds(): void {
     let minX = 0, maxX = 0, minY = 0, maxY = 0;
     for (const mesh of this.anchors.values()) {
+      if (!mesh.isEnabled()) continue;
       const p = this.anchorWorld(mesh).subtract(this.baseTarget);
       const x = Vector3.Dot(p, this.screenRight), y = Vector3.Dot(p, this.screenUp);
       minX = Math.min(minX, x); maxX = Math.max(maxX, x);
       minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+    }
+    if (this.previewLayout || this.displayedLayout?.active) {
+      const endX = this.displayedLayout?.expanded ? 16 : 10;
+      for (const x of [-7, endX]) for (const z of [-3, 9]) {
+        const p = new Vector3(x, .5, z).subtract(this.baseTarget);
+        const sx = Vector3.Dot(p, this.screenRight), sy = Vector3.Dot(p, this.screenUp);
+        minX = Math.min(minX, sx); maxX = Math.max(maxX, sx); minY = Math.min(minY, sy); maxY = Math.max(maxY, sy);
+      }
     }
     // Each anchor can be centered. The continuous room extends beyond these bounded views;
     // there is no zoom-out fitting step and keyboard and pointer use identical limits.
@@ -618,11 +861,11 @@ export class CoffeeScene {
     // The back-of-house route visually separates the cash manager from customer queues.
     this.box('manager-route', 10.4, 0.018, 0.86, 4.4, 0.009, WORLD.backZ, '#d4d2b8', undefined, false);
     for (let x = -.5; x < 9.5; x += 1.1) this.box(`route-dash-${x}`, 0.4, 0.008, 0.055, x, 0.022, WORLD.backZ - .05, '#f7f1dc', undefined, false);
-    const brand = this.makeLabel('brand-sign', 3.9, 0.72, new Vector3(-6.45, 2.92, -3.42));
+    const brand = this.makeLabel('brand-sign', 3.9, 0.72, new Vector3(-6.45, 2.92, -3.42), undefined, { type: 'renovate' });
     this.paintLabel(brand, 'brand', (ctx, w, h) => {
       this.roundRect(ctx, 8, 8, w - 16, h - 16, 20, '#315d54');
-      this.text(ctx, 'MELLOW BEAN', w / 2, h / 2 - 13, 46, '#fff5df');
-      this.text(ctx, 'a little coffee, a lot of care', w / 2, h / 2 + 42, 23, '#b9d0b6');
+      this.text(ctx, 'MELLOW BEAN', w / 2, h * .28, 36, '#b9d0b6');
+      this.text(ctx, '装修 / 扩建  +', w / 2, h * .68, 62, '#fff5df');
     });
     this.makePlant('tall-plant-left', -9.08, -2.65, 1.12);
     this.makePlant('plant-right', 11.3, -2.55, 0.85);
@@ -655,11 +898,15 @@ export class CoffeeScene {
     threshold.metadata = { coffeeFlow: 'outgoing', coffeeRouteEndpoint: true };
     // The previous welcome strip at z=5 incorrectly advertised the shared return route.
     this.box('welcome-runner', 11.6, .012, .68, -.5, .006, WORLD.inboundZ, '#d5ccb4', undefined, false);
+    for (const node of [...this.scene.meshes, ...this.scene.transformNodes]) {
+      if (/^(manager-route$|route-dash-|queue-rug-|departure-aisle-|departure-return-lane$|customer-exit-boundary$|welcome-runner$|left-waiting-bench$|plant-right$)/.test(node.name)) this.legacyFurniture.push(node);
+    }
   }
 
   private makeStation(id: CounterId, x: number, accent: string, deep: string, letter: string): Station {
     const root = new TransformNode(`${id}-station`, this.scene);
     root.position.x = x;
+    root.metadata = { coffeeFurnitureId: id };
     // Blank wood remains a pickable occluding solid, without an upgrade action.
     this.box(`${id}-body`, 3.4, 1.04, 1.34, 0, 0.55, 0, COLORS.wood, root);
     this.box(`${id}-toe`, 3.25, 0.15, 1.25, 0, 0.08, 0, COLORS.woodDark, root);
@@ -681,7 +928,8 @@ export class CoffeeScene {
     selector.mesh.metadata = { ...selector.mesh.metadata, coffeeSurface: 'counter-front' };
     this.registerAnchor(`${id}-recipe`, selector.mesh);
     const barista = this.makePerson(`${id}-barista`, id === 'counter-a' ? 2 : 3, accent, false);
-    barista.root.position.set(x - 0.5, 0, -0.89);
+    barista.root.parent = root;
+    barista.root.position.set(-0.5, 0, -0.89);
     barista.root.scaling.setAll(1.09);
     this.box(`${id}-barista-apron`, 0.46, 0.48, 0.035, 0, 0.83, 0.23, deep, barista.root);
     this.box(`${id}-apron-pocket`, 0.24, 0.13, 0.022, 0, 0.77, 0.259, accent, barista.root, false);
@@ -802,7 +1050,7 @@ export class CoffeeScene {
     if (station.level !== counter.level) {
       this.paintLabel(station.plaque, `level-${counter.level}`, (ctx, w, h) => {
         this.roundRect(ctx, 8, 8, w - 16, h - 16, 24, '#f5d98b');
-        this.text(ctx, `${counter.id === 'counter-a' ? 'A' : 'B'} ${counter.level}  ↑`, w / 2, h / 2 + 1, 112, '#5a492b');
+        this.text(ctx, `${counter.id.slice(-1).toUpperCase()} ${counter.level}  ↑`, w / 2, h / 2 + 1, 112, '#5a492b');
       });
       station.machineExtras[0].setEnabled(counter.level >= 2);
       station.machineExtras[1].setEnabled(counter.level >= 6);
@@ -844,7 +1092,10 @@ export class CoffeeScene {
       station.barista.leftArm.rotation.x = brew ? -0.4 - pulse * 0.15 : -0.12;
       station.barista.root.position.y = brew ? Math.max(0, pulse) * 0.019 : 0;
     }
-    station.barista.shadow.position.set(station.barista.root.position.x, CONTACT_SHADOW_Y, station.barista.root.position.z);
+    station.barista.root.computeWorldMatrix(true);
+    const baristaPosition = station.barista.root.getAbsolutePosition();
+    station.barista.shadow.position.set(baristaPosition.x, CONTACT_SHADOW_Y, baristaPosition.z);
+    station.barista.shadow.setEnabled(station.root.isEnabled());
     station.selection.setEnabled(this.selected === counter.id);
   }
 
@@ -919,7 +1170,8 @@ export class CoffeeScene {
       const delta = ((target - current + Math.PI * 3) % TAU) - Math.PI;
       person.root.rotation.y += delta * (1 - Math.exp(-dt * 14));
     } else if (customer.phase === 'queue' || customer.phase === 'serving' || customer.phase === 'receiving') {
-      person.root.rotation.y = Math.PI;
+      const station = this.stations.get(customer.counterId);
+      person.root.rotation.y = Math.PI + (station?.root.rotation.y ?? 0);
     }
     const gait = walking ? Math.sin(this.animationTime * 9 + customer.id * 0.91) * 0.33 : 0;
     if (dt > 0) {
@@ -928,6 +1180,19 @@ export class CoffeeScene {
       person.leftArm.rotation.x = -gait * 0.7;
       person.rightArm.rotation.x = customer.hasCup || customer.phase === 'receiving' ? -0.95 : gait * 0.7;
       person.root.position.y = walking ? Math.abs(gait) * 0.035 : Math.sin(this.animationTime * 2 + customer.id) * 0.008;
+    }
+    if (customer.phase === 'dining') {
+      const table = this.displayedLayout?.furniture.find(item => item.id === customer.seatId && item.kind === 'table' && !item.stored);
+      if (table) {
+        const seat = interactionPoint(table, 'seat');
+        person.root.position.set(seat.x, -.045, seat.z);
+        person.root.rotation.y = Math.PI - table.rotation * Math.PI / 2;
+        person.leftLeg.rotation.x = -1.4; person.rightLeg.rotation.x = -1.4;
+        person.leftArm.rotation.x = -.7; person.rightArm.rotation.x = -1.02;
+      }
+    } else if (dt === 0) {
+      // A paused or newly loaded snapshot still has the correct non-seated pose.
+      person.root.position.y = 0; person.leftLeg.rotation.x = 0; person.rightLeg.rotation.x = 0;
     }
     person.cup.setEnabled(customer.hasCup || customer.phase === 'receiving');
     // During receipt the outstretched hand makes the actual cup transition legible.
@@ -953,25 +1218,49 @@ export class CoffeeScene {
     const x = manager.x;
     const dx = x - person.previousX;
     const dz = manager.z - person.previousZ;
-    const moving = manager.phase === 'moving' && dt > 0;
+    const activeLayout = Boolean(this.displayedLayout?.active);
+    // A moving phase can be waiting for the shared aisle. No path means no
+    // actual step in an active layout; retain the previous legacy animation.
+    const moving = manager.phase === 'moving' && dt > 0 && (!activeLayout || Boolean(manager.nav?.length));
+    person.root.scaling.setAll(activeLayout ? .8 : .97);
     // Shared interpolated snapshots keep the cart, manager and handoff state together;
     // raw core positions otherwise jump at 20Hz even when the GPU draws at 60Hz.
     person.root.position.x = x;
     person.root.position.z = manager.z;
     if (moving && Math.hypot(dx, dz) > 0.003) person.root.rotation.y = Math.atan2(dx, dz);
-    else if (manager.phase === 'collecting') person.root.rotation.y = 0;
+    else if (manager.phase === 'collecting') {
+      const station = this.displayedLayout?.active ? this.stations.get(state.counters[manager.target]?.id) : undefined;
+      person.root.rotation.y = station ? Math.atan2(station.root.position.x - x, station.root.position.z - manager.z) : 0;
+    }
     else if (manager.phase === 'depositing') person.root.rotation.y = -Math.PI / 2;
     if (dt > 0) {
       const gait = moving ? Math.sin(this.animationTime * 10.5) * 0.3 : 0;
       person.leftLeg.rotation.x = gait;
       person.rightLeg.rotation.x = -gait;
-      person.leftArm.rotation.x = moving ? -0.75 : -0.25;
-      person.rightArm.rotation.x = manager.phase === 'collecting' || manager.phase === 'depositing' ? -1 + Math.sin(this.animationTime * 5) * 0.12 : -0.65;
+      person.leftArm.rotation.x = activeLayout ? (moving ? -.3 : -.12) : moving ? -.75 : -.25;
+      person.rightArm.rotation.x = activeLayout
+        ? manager.phase === 'collecting' || manager.phase === 'depositing' ? -.4 + Math.sin(this.animationTime * 5) * .04 : moving ? -.3 : -.12
+        : manager.phase === 'collecting' || manager.phase === 'depositing' ? -1 + Math.sin(this.animationTime * 5) * .12 : -.65;
       person.root.position.y = moving ? Math.abs(gait) * 0.026 : 0;
+    }
+    if (activeLayout) {
+      // Also bound a frozen pose carried across the first legacy-to-layout frame.
+      person.leftArm.rotation.x = clamp(person.leftArm.rotation.x, -.3, .3);
+      person.rightArm.rotation.x = clamp(person.rightArm.rotation.x, -.44, .3);
     }
     // The trolley follows the bounded service lane in world orientation. The manager
     // turns to reach stations; that turn must not orbit a wide trolley through the wall.
-    this.managerCart.position.set(person.root.position.x + .70, 0, person.root.position.z - .55);
+    if (activeLayout) {
+      // The core reserves actor centres one metre apart. Keep the whole live
+      // manager + small close-in trolley inside a <.5 m radial footprint, rather
+      // than trailing a full trolley into another actor's tile at a corner.
+      this.managerCart.scaling.setAll(.43);
+      this.managerCart.rotation.y = person.root.rotation.y;
+      this.managerCart.position.set(person.root.position.x + Math.cos(person.root.rotation.y) * .22, 0, person.root.position.z - Math.sin(person.root.rotation.y) * .22);
+    } else {
+      this.managerCart.scaling.setAll(1); this.managerCart.rotation.y = 0;
+      this.managerCart.position.set(person.root.position.x + .70, 0, person.root.position.z - .55);
+    }
     const stacks = manager.carrying > 0 ? Math.min(6, Math.max(1, Math.ceil(manager.carrying / 600))) : 0;
     if (stacks !== this.lastCartStacks) {
       this.cartCash.forEach((cash, i) => cash.setEnabled(i < stacks));
@@ -1169,6 +1458,8 @@ export class CoffeeScene {
     // Freeze only truly immobile world geometry. Cash clusters intentionally retain
     // parent-transform semantics; people, cups, progress, trolley and contact shadows move.
     const moving = new Set<TransformNode>([this.manager.root, this.manager.shadow, this.managerCart]);
+    for (const person of this.customers.values()) { moving.add(person.root); moving.add(person.shadow); }
+    if (this.renovationGhost) moving.add(this.renovationGhost);
     for (const station of this.stations.values()) {
       for (const root of [station.barista.root, station.barista.shadow, station.readyCup, station.progressFill, station.cashRoot]) moving.add(root);
     }
@@ -1178,13 +1469,16 @@ export class CoffeeScene {
     };
     for (const mesh of this.scene.meshes) {
       if (!(mesh instanceof Mesh)) continue;
-      if (isMoving(mesh)) { this.staticCasters.delete(mesh); continue; }
+      if (isMoving(mesh)) { mesh.unfreezeWorldMatrix(); this.staticCasters.delete(mesh); continue; }
       // Keep reusable source geometries and interactive anchor hierarchies unfrozen.
       // They must retain correct picking if a diagnostic/layout move occurs.
       if (mesh.name.startsWith('shared-') || mesh.name.startsWith('vault-')) continue;
       mesh.freezeWorldMatrix();
     }
-    for (const mesh of this.staticCasters) this.shadowGenerator?.addShadowCaster(mesh, false);
+    for (const mesh of this.staticCasters) {
+      if (mesh.isDisposed()) this.staticCasters.delete(mesh);
+      else this.shadowGenerator?.addShadowCaster(mesh, false);
+    }
     // Static furniture shadows are rendered once, and invalidated only by an upgrade.
     const shadowMap = this.shadowGenerator?.getShadowMap();
     if (shadowMap) shadowMap.refreshRate = 0;

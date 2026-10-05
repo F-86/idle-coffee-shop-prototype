@@ -2,11 +2,11 @@ import type { CounterId, SliceState } from '../core/types';
 import { RouteDiagnostics, type TraceRecord, type SceneCustomerPose } from './RouteDiagnostics';
 
 const point = (pose: { x: number; z: number }) => `(${pose.x.toFixed(3)}, ${pose.z.toFixed(3)})`;
-const stop = (target?: number) => target === 0 ? 'A' : target === 1 ? 'B' : target === 2 ? 'vault' : '?';
+const stop = (target: number | undefined, counterCount = 2) => target === counterCount ? 'vault' : target !== undefined && target >= 0 && target < counterCount ? String.fromCharCode(65 + target) : '?';
 const route = (pose: { phase: string; routeLeg?: number; hasCup?: boolean; legacy?: boolean }) => `${pose.phase}/${pose.routeLeg ?? '-'} cup=${pose.hasCup ? 'yes' : 'no'}${pose.legacy ? ' LEGACY route' : ''}`;
-const eventText = (event: TraceRecord): string => {
-  const who = event.actor === 'customer' ? `#${event.customerId} ${event.counterId === 'counter-a' ? 'A' : 'B'}` : 'manager';
-  const data = event.actor === 'customer' ? route(event) : `${event.phase} →${stop(event.target)}`;
+const eventText = (event: TraceRecord, counterCount = 2): string => {
+  const who = event.actor === 'customer' ? `#${event.customerId} ${event.counterId?.slice(-1).toUpperCase() ?? '?'}` : 'manager';
+  const data = event.actor === 'customer' ? route(event) : `${event.phase} →${stop(event.target, counterCount)}`;
   const cash = event.amount === undefined ? '' : ` ¥${(event.amount / 100).toFixed(2)} carry ${event.carryingBefore}→${event.carryingAfter} wallet ${event.walletBefore}→${event.walletAfter} (分)`;
   return `${event.time.toFixed(2)}s [${event.sequence}] ${who} ${event.kind} ${data} ${point(event)}${event.crossingX === undefined ? '' : ` junction x=${event.crossingX}`}${cash}`;
 };
@@ -70,10 +70,10 @@ export class RouteQAPanel {
       `core ${sample.authority ? `${route(sample.authority)} ${point(sample.authority)}` : 'absent'}`,
       `presentation ${sample.presented ? `${route(sample.presented)} ${point(sample.presented)}` : 'absent'} (最多延迟一个 0.05s 步)`,
       `scene ${sceneStatus} (投影标签不判断遮挡)`,
-      read.terminal ? `terminal ${eventText(read.terminal)}` : 'terminal: not observed in this session',
-      `manager ${sample.manager.phase} →${stop(sample.manager.target)} ${point(sample.manager)} carry=${sample.manager.carrying}分`,
-      'TRACKED events (最近 16):', ...read.trackedRecords.map(eventText),
-      'MANAGER events (最近 16; passage 仅经过, collected/deposited 为实际转账):', ...read.managerRecords.map(eventText),
+      read.terminal ? `terminal ${eventText(read.terminal, authority.counters.length)}` : 'terminal: not observed in this session',
+      `manager ${sample.manager.phase} →${stop(sample.manager.target, authority.counters.length)} ${point(sample.manager)} carry=${sample.manager.carrying}分`,
+      'TRACKED events (最近 16):', ...read.trackedRecords.map(event => eventText(event, authority.counters.length)),
+      'MANAGER events (最近 16; passage 仅经过, collected/deposited 为实际转账):', ...read.managerRecords.map(event => eventText(event, authority.counters.length)),
     ].join('\n');
   }
   dispose(): void {

@@ -17,6 +17,8 @@ import { RouteDiagnostics, isRouteQA } from "./qa/RouteDiagnostics";
 import { RouteQAPanel } from "./qa/RouteQAPanel";
 import { PerformanceQAPanel } from "./qa/PerformanceQAPanel";
 import { createPortableSave, parsePortableSave, overviewOf, portableFilename, MAX_PORTABLE_BYTES, type PortableFile } from "./core/portableSave";
+import { addFurniture, getLayout, GRID, LAYOUT_PRICES, layoutCost, MAX_COUNTERS, MAX_TABLES, moveFurniture, rotateFurniture, storeFurniture, validateLayout } from "./core/layout";
+import type { FurniturePlacement, ShopLayout } from "./core/types";
 import "./style.css";
 
 const root = document.querySelector<HTMLDivElement>("#slice-root")!;
@@ -94,6 +96,17 @@ root.innerHTML = `
       <div id="offline-result" hidden><div class="earnings-art" aria-hidden="true"><span></span><i></i></div><p id="offline-duration"></p><div class="earnings-reward"><span>本次到账</span><strong id="offline-deposited"></strong><small>已存入金库</small></div><button id="offline-done" class="primary-button">继续营业</button></div>
     </div>
   </dialog>
+  <aside id="renovation-panel" class="renovation-panel" aria-labelledby="renovation-title" hidden>
+    <div class="renovation-heading"><div><span class="section-kicker">MAKE ROOM FOR COFFEE</span><h2 id="renovation-title">布置你的小店</h2></div><button id="renovation-cancel" class="text-button">取消</button></div>
+    <p id="renovation-status" class="renovation-status" role="status" aria-live="polite"></p>
+    <div id="renovation-tools" hidden>
+      <div id="furniture-list" class="furniture-list" role="group" aria-label="选择家具"></div>
+      <div class="furniture-catalog" role="group" aria-label="添置家具"><button id="buy-counter">＋ 咖啡柜台</button><button id="buy-table">＋ 桌椅</button><button id="expand-shop">解锁旁边区域</button></div>
+      <div class="furniture-controls"><span id="furniture-selected"></span><div role="group" aria-label="移动与旋转家具"><button data-layout-move="left" aria-label="向左移动一格">←</button><button data-layout-move="up" aria-label="向后移动一格">↑</button><button data-layout-move="down" aria-label="向前移动一格">↓</button><button data-layout-move="right" aria-label="向右移动一格">→</button><button id="rotate-furniture">旋转 ↻</button><button id="store-furniture">收起</button></div></div>
+      <p id="renovation-hint" class="detail-note">选家具，再点地板放置。拖动画面逛店；绿色可以摆放，红色需要调整。重新摆放免费。</p>
+      <div class="renovation-footer"><span id="renovation-cost"></span><button id="renovation-apply" class="primary-button">完成布置</button></div>
+    </div>
+  </aside>
   <aside id="welcome-guide" class="welcome-guide" aria-labelledby="guide-title" hidden>
     <div class="guide-topline"><span id="guide-progress" class="guide-progress"></span><button id="guide-skip" class="text-button">跳过引导</button></div>
     <div aria-live="polite" aria-atomic="true"><h2 id="guide-title"></h2><p id="guide-copy"></p></div>
@@ -107,13 +120,13 @@ const money = (cents: number) => `¥${(cents / 100).toFixed(2)}`;
 const dialog = $<HTMLDialogElement>("#operation-dialog");
 const sceneAnchors: CoffeeSceneAnchor[] = [
   "counter-a-recipe", "counter-a-upgrade", "counter-b-recipe", "counter-b-upgrade",
-  "menu-espresso", "menu-latte", "vault", "invite",
+  "menu-espresso", "menu-latte", "vault", "invite", "renovate",
 ];
-const anchorNames: Record<CoffeeSceneAnchor, string> = {
+const anchorNames: Partial<Record<CoffeeSceneAnchor, string>> = {
   "counter-a-recipe": "柜台 A 配方牌", "counter-a-upgrade": "柜台 A 升级牌",
   "counter-b-recipe": "柜台 B 配方牌", "counter-b-upgrade": "柜台 B 升级牌",
   "menu-espresso": "墙上浓缩咖啡菜单", "menu-latte": "墙上拿铁菜单",
-  vault: "金库与收钱经理", invite: "入口招客牌",
+  vault: "金库与收钱经理", invite: "入口招客牌", renovate: "墙上的装修与扩建牌",
 };
 let browserStorage: Pick<Storage, "getItem" | "setItem" | "removeItem">;
 try {
@@ -173,6 +186,10 @@ let panel: "recipe" | "counter" | "coffee" | "vault" | "settings" | "files" | "o
     null,
   viewedRecipe: RecipeId = "espresso";
 let scene: CoffeeScene | null = null;
+let renovating = false;
+let layoutDraft: ShopLayout | null = null;
+let selectedFurniture: string | null = null;
+let furnitureListKey = "";
 // This device-only preference never enters the portable or economic save.
 // Mark the first exposure before showing it: refresh is not a request to repeat.
 const ONBOARDING_KEY = "mellow-bean:welcome-guide:v1";
@@ -186,7 +203,7 @@ let guideStep = -1;
 let renderedGuideStep = -1;
 function updateGuide() {
   const guide = $("#welcome-guide");
-  guide.hidden = guideStep < 0 || dialog.open || document.hidden || saveBlocked || stopped;
+  guide.hidden = guideStep < 0 || dialog.open || renovating || document.hidden || saveBlocked || stopped;
   if (guideStep < 0 || guideStep === renderedGuideStep) return;
   renderedGuideStep = guideStep;
   const step = guideSteps[guideStep];
@@ -294,6 +311,7 @@ function showPanel(
   id?: CounterId,
   recipe?: RecipeId,
 ) {
+  if (renovating) cancelRenovation();
   if (id) {
     selected = id;
     scene?.selectedCounter(id);
@@ -318,16 +336,120 @@ function showPanel(
   }
   updateGuide();
 }
+function furnitureName(item: FurniturePlacement): string {
+  return item.kind === "counter" ? `柜台 ${item.counterId!.slice(-1).toUpperCase()}` : `桌椅 ${item.id.split("-").at(-1)}`;
+}
+function renovationKey(event: Event) {
+  if (renovating && !dialog.open && (event as KeyboardEvent).key === "Escape") { event.preventDefault(); cancelRenovation(); }
+}
+function startRenovation() {
+  if (renovating || saveBlocked || document.hidden || !settleVisibleTail()) return;
+  if (!engine.beginLayoutEdit()) { toast("请先恢复营业，再开始布置"); return; }
+  renovating = true;
+  window.addEventListener("keydown", renovationKey, { signal: listeners.signal });
+  layoutDraft = null;
+  selectedFurniture = null;
+  furnitureListKey = "";
+  $("#renovation-panel").hidden = false;
+  $("#renovation-cancel").focus({ preventScroll: true });
+  scene?.selectedCounter(null);
+  updateRenovation();
+  updateGuide();
+}
+function cancelRenovation(restoreFocus = true) {
+  if (!renovating) return;
+  // Flush while the editor is still frozen. Its visible wall time is never replayed.
+  const unrendered = renderBudget.flush(performance.now());
+  if (engine.layoutEditStatus() === "draining") engine.advance(unrendered);
+  engine.cancelLayoutEdit();
+  renovating = false;
+  window.removeEventListener("keydown", renovationKey);
+  layoutDraft = null;
+  selectedFurniture = null;
+  $("#renovation-panel").hidden = true;
+  scene?.setRenovationPreview(null);
+  presentation.reset(engine.state);
+  if (restoreFocus && !document.hidden && !dialog.open) $("#coffee-canvas").focus({ preventScroll: true });
+  updateGuide();
+}
+function renderLayoutDraft() {
+  if (!layoutDraft) return;
+  const checked = validateLayout(layoutDraft), offer = layoutCost(engine.state, layoutDraft);
+  const message = !checked.ok ? checked.message : !offer.ok ? offer.message : "布置可用。完成后客人会使用新的柜台和座位。";
+  if ($("#renovation-status").textContent !== message) $("#renovation-status").textContent = message;
+  $("#renovation-status").classList.toggle("invalid", !checked.ok || !offer.ok);
+  $<HTMLButtonElement>("#renovation-apply").disabled = !checked.ok || !offer.ok || saveBlocked;
+  $("#renovation-cost").textContent = offer.cost ? `本次添置 ${money(offer.cost)} · 金库 ${money(engine.state.wallet)}` : "免费重新摆放";
+  const item = layoutDraft.furniture.find(item => item.id === selectedFurniture);
+  $("#furniture-selected").textContent = item ? `${furnitureName(item)} · ${item.stored ? "已收起" : `${item.x}, ${item.z} · ${item.rotation * 90}°`}` : "选择一件家具";
+  const owned = item && getLayout(engine.state).furniture.some(owned => owned.id === item.id);
+  $("#store-furniture").textContent = !owned ? "取消添置" : item?.stored ? "放回店内" : "收起";
+  $<HTMLButtonElement>("#store-furniture").disabled = !item;
+  $<HTMLButtonElement>("#rotate-furniture").disabled = !item || !!item.stored;
+  root.querySelectorAll<HTMLButtonElement>("[data-layout-move]").forEach(button => { button.disabled = !item; });
+  $("#buy-counter").textContent = `＋ 柜台 · ${money(LAYOUT_PRICES.counter)}`;
+  $("#buy-table").textContent = `＋ 桌椅 · ${money(LAYOUT_PRICES.table)}`;
+  $<HTMLButtonElement>("#buy-counter").disabled = layoutDraft.furniture.filter(item => item.kind === "counter").length >= MAX_COUNTERS;
+  $<HTMLButtonElement>("#buy-table").disabled = layoutDraft.furniture.filter(item => item.kind === "table").length >= MAX_TABLES;
+  $("#expand-shop").textContent = layoutDraft.expanded ? "旁边区域已解锁" : engine.state.totalServed < LAYOUT_PRICES.expansionServed ? `扩建 · 服务 ${engine.state.totalServed}/${LAYOUT_PRICES.expansionServed} 位` : `扩建 · ${money(LAYOUT_PRICES.expansion)}`;
+  $<HTMLButtonElement>("#expand-shop").disabled = layoutDraft.expanded || engine.state.totalServed < LAYOUT_PRICES.expansionServed;
+  const listKey = JSON.stringify(layoutDraft.furniture.map(item => [item.id, item.stored])) + selectedFurniture;
+  if (listKey !== furnitureListKey) {
+    furnitureListKey = listKey;
+    const list = $("#furniture-list");
+    for (const child of Array.from(list.children)) child.remove();
+    for (const entry of layoutDraft.furniture) {
+      const button = document.createElement("button");
+      button.setAttribute("data-furniture-id", entry.id);
+      button.setAttribute("aria-pressed", String(entry.id === selectedFurniture));
+      button.textContent = `${furnitureName(entry)}${entry.stored ? " · 已收起" : ""}`;
+      list.append(button);
+    }
+  }
+  scene?.setRenovationPreview(layoutDraft, selectedFurniture, checked.ok && offer.ok);
+}
+function updateRenovation() {
+  if (!renovating) return;
+  if (!layoutDraft && engine.layoutEditStatus() === "ready") {
+    layoutDraft = engine.createLayoutDraft();
+    selectedFurniture = layoutDraft?.furniture.find(item => !item.stored)?.id ?? null;
+    $("#renovation-tools").hidden = !layoutDraft;
+    presentation.reset(engine.state);
+    renderLayoutDraft();
+  } else if (!layoutDraft) {
+    const message = `准备布置：先送走店内 ${engine.state.customers.length} 位客人，经理收好现金。新客暂不入店。`;
+    if ($("#renovation-status").textContent !== message) $("#renovation-status").textContent = message;
+    $("#renovation-status").classList.remove("invalid");
+    $("#renovation-tools").hidden = true;
+  }
+}
+function positionNewFurniture(kind: "counter" | "table") {
+  if (!layoutDraft) return;
+  const item = addFurniture(layoutDraft, kind, -4, 3);
+  if (!item) return;
+  // Suggest a legal nearby placement, but never silently commit or charge it.
+  const candidates = [{ x: -4, z: 3 }, { x: 0, z: 5 }, { x: 5, z: 5 }];
+  for (let z = GRID.minZ; z <= GRID.maxZ; z++) for (let x = GRID.minX; x <= (layoutDraft.expanded ? GRID.expandedMaxX : GRID.maxX); x++) candidates.push({ x, z });
+  for (const point of candidates) { item.x = point.x; item.z = point.z; if (validateLayout(layoutDraft).ok) break; }
+  selectedFurniture = item.id;
+  renderLayoutDraft();
+}
 function sceneAction(action: CoffeeSceneAction) {
   if (stopped || dialog.open || offlineJob || fileReview) return;
-  if (action.type === "invite") invite();
+  if (renovating) {
+    if (!layoutDraft) return;
+    if (action.type === "layout-select") { selectedFurniture = action.id; renderLayoutDraft(); }
+    else if (action.type === "layout-cell" && selectedFurniture) { moveFurniture(layoutDraft, selectedFurniture, action.x, action.z); renderLayoutDraft(); }
+    return;
+  }
+  if (action.type === "renovate") startRenovation();
+  else if (action.type === "invite") invite();
   else if (action.type === "counter") showPanel("counter", action.id);
   else if (action.type === "recipe") showPanel("recipe", action.id);
-  else if (action.type === "menu")
-    showPanel("coffee", undefined, action.recipe);
+  else if (action.type === "menu") showPanel("coffee", undefined, action.recipe);
   else if (action.type === "vault") showPanel("vault");
-
 }
+
 try {
   scene = new CoffeeScene($("#coffee-canvas"), sceneAction, { renderMode });
 } catch (err) {
@@ -339,8 +461,8 @@ try {
 const performancePanel = routeDiagnostics ? new PerformanceQAPanel(root, () => {
   const stats = scene?.readRenderStats();
   const rect = canvas.getBoundingClientRect();
-  const counts = { entering: 0, queue: 0, serving: 0, receiving: 0, leaving: 0 };
-  for (const customer of engine.state.customers) counts[customer.phase]++;
+  const counts: Record<string, number> = { entering: 0, queue: 0, serving: 0, receiving: 0, leaving: 0 };
+  for (const customer of engine.state.customers) counts[customer.phase] = (counts[customer.phase] ?? 0) + 1;
   return [
     `mode ${renderMode} · target ${stats ? stats.targetFps ?? "display RAF" : "unavailable"} · visible=${!document.hidden} · focus=${document.hasFocus()}`,
     `viewport ${rect.width}×${rect.height} CSS · device DPR ${window.devicePixelRatio || 1} · buffer ${stats?.renderWidth ?? 0}×${stats?.renderHeight ?? 0} · effective DPR ${stats && rect.width ? (stats.renderWidth / rect.width).toFixed(2) : "—"}`,
@@ -406,17 +528,49 @@ on(root, "click", (event) => {
     catch { toast("本次画面设置已生效，但浏览器未允许保存偏好"); }
     updateRenderModeUI();
     updateUI();
+  } else if (button.dataset.furnitureId && renovating && layoutDraft) {
+    selectedFurniture = button.dataset.furnitureId; renderLayoutDraft();
+  } else if (button.dataset.layoutMove && renovating && layoutDraft && selectedFurniture) {
+    const item = layoutDraft.furniture.find(item => item.id === selectedFurniture)!;
+    const delta = ({ left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] } as Record<string, number[]>)[button.dataset.layoutMove];
+    if (delta) { moveFurniture(layoutDraft, item.id, item.x + delta[0], item.z + delta[1]); renderLayoutDraft(); }
   } else if (button.dataset.selectRecipe && panel === "recipe" && dialog.open)
     changeRecipe(selected, button.dataset.selectRecipe as RecipeId);
 
 });
+on($("#renovation-cancel"), "click", () => cancelRenovation());
+on($("#renovation-panel"), "keydown", (event) => { if ((event as KeyboardEvent).key === "Escape") { event.preventDefault(); cancelRenovation(); } });
+on($("#buy-counter"), "click", () => positionNewFurniture("counter"));
+on($("#buy-table"), "click", () => positionNewFurniture("table"));
+on($("#expand-shop"), "click", () => { if (!layoutDraft || layoutDraft.expanded || engine.state.totalServed < LAYOUT_PRICES.expansionServed) return; layoutDraft.expanded = true; renderLayoutDraft(); });
+on($("#rotate-furniture"), "click", () => { if (layoutDraft && selectedFurniture) { rotateFurniture(layoutDraft, selectedFurniture); renderLayoutDraft(); } });
+on($("#store-furniture"), "click", () => {
+  if (!layoutDraft || !selectedFurniture) return;
+  const item = layoutDraft.furniture.find(item => item.id === selectedFurniture)!;
+  if (!getLayout(engine.state).furniture.some(owned => owned.id === item.id)) { layoutDraft.furniture = layoutDraft.furniture.filter(other => other.id !== item.id); selectedFurniture = layoutDraft.furniture[0]?.id ?? null; }
+  else if (item.stored) moveFurniture(layoutDraft, item.id, item.x, item.z);
+  else if (!storeFurniture(layoutDraft, item.id)) { toast("至少保留一个营业柜台"); return; }
+  renderLayoutDraft();
+});
+on($("#renovation-apply"), "click", () => {
+  if (!renovating || !layoutDraft || saveBlocked || engine.layoutEditStatus() !== "ready") return;
+  renderBudget.flush(performance.now());
+  const result = engine.commitLayout(layoutDraft);
+  if (!result.ok) { toast(result.message); renderLayoutDraft(); return; }
+  cancelRenovation();
+  routeDiagnostics?.reset("layout committed");
+  performancePanel?.reset("layout committed");
+  save();
+  updateUI();
+  toast(saveFailed || saveBlocked ? "布置已应用，但保存未成功，请先导出备份" : "布置好了，重新开门迎客！");
+});
 on($("#settings"), "click", () => {
-  if (stopped || dialog.open) return;
+  if (stopped || dialog.open || renovating) return;
   showPanel("settings");
 });
 on($("#guide-skip"), "click", () => finishGuide("skipped"));
 on($("#guide-next"), "click", () => {
-  if (guideStep < 0 || dialog.open || document.hidden || saveBlocked || stopped) return;
+  if (guideStep < 0 || dialog.open || renovating || document.hidden || saveBlocked || stopped) return;
   if (guideStep === guideSteps.length - 1) { finishGuide("completed"); return; }
   guideStep++;
   scene?.focusAnchor(guideSteps[guideStep].anchor);
@@ -428,18 +582,19 @@ on(canvas, "pointerdown", () => {
 });
 on(canvas, "keydown", (event) => {
   const e = event as KeyboardEvent;
-  if (stopped || dialog.open || !scene || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (renovating && e.key === "Escape") { e.preventDefault(); cancelRenovation(); return; }
+  if (stopped || dialog.open || renovating || !scene || e.altKey || e.ctrlKey || e.metaKey) return;
   if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
     e.preventDefault();
     const key = scene.focusNext(e.key === "ArrowLeft" ? -1 : 1);
-    if (key) toast(anchorNames[key]);
+    if (key) toast(anchorNames[key] ?? "柜台操作牌");
   } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
     e.preventDefault();
     scene.panBy(0, e.key === "ArrowUp" ? 80 : -80);
   } else if (e.key === "Home") {
     e.preventDefault();
     scene.focusAnchor("counter-a-recipe");
-    toast(anchorNames["counter-a-recipe"]);
+    toast(anchorNames["counter-a-recipe"]!);
   } else if (e.key === "Enter" || e.key === " ") {
     e.preventDefault();
     if (e.repeat) return;
@@ -518,11 +673,11 @@ function coffeeLevelsSummary(state: SliceState): string {
 }
 function summaryDetails(state: SliceState, savedAt?: number): string {
   const o = overviewOf(state);
-  return `${savedAt === undefined ? "当前未存盘进度" : `时间 ${new Date(savedAt).toLocaleString()}`}\n金库 ${money(o.wallet)} · 营业额 ${money(o.totalEarned)} · 已售 ${o.totalServed} 杯\n柜台 A/B ${o.counterLevels.join(" / ")} 级 · 经理 ${o.managerLevel} 级\n${coffeeLevelsSummary(state)}\n待收 ${money(o.pendingCash)} · 运送 ${money(o.carrying)} · 经营 ${duration(o.elapsed)}`;
+  return `${savedAt === undefined ? "当前未存盘进度" : `时间 ${new Date(savedAt).toLocaleString()}`}\n金库 ${money(o.wallet)} · 营业额 ${money(o.totalEarned)} · 已售 ${o.totalServed} 杯\n柜台 ${o.counterLevels.join(" / ")} 级 · 经理 ${o.managerLevel} 级\n${coffeeLevelsSummary(state)}\n营业柜台 ${o.placedCounters} · 座位 ${o.placedSeats} · ${o.expanded ? "已扩建" : "初始店面"}\n待收 ${money(o.pendingCash)} · 运送 ${money(o.carrying)} · 经营 ${duration(o.elapsed)}`;
 }
 function summary(state: SliceState, savedAt?: number): string {
   const o = overviewOf(state);
-  return `金库 ${money(o.wallet)}\n已售 ${o.totalServed} 杯\n柜台 ${o.counterLevels.join(" / ")} 级 · 经理 ${o.managerLevel} 级\n${coffeeLevelsSummary(state)}${savedAt === undefined ? "" : `\n${new Date(savedAt).toLocaleString()}`}`;
+  return `金库 ${money(o.wallet)}\n已售 ${o.totalServed} 杯\n柜台 ${o.counterLevels.join(" / ")} 级 · 经理 ${o.managerLevel} 级\n${coffeeLevelsSummary(state)}\n${o.placedCounters} 个营业柜台 · ${o.placedSeats} 个座位 · ${o.expanded ? "已扩建" : "初始店面"}${savedAt === undefined ? "" : `\n${new Date(savedAt).toLocaleString()}`}`;
 }
 function updateFileControls() {
   const review = fileReview !== null;
@@ -710,6 +865,7 @@ function exportBackup(original: boolean) {
 on($("#export"), "click", () => exportBackup(repository.inspect().protectedRaw));
 on($("#export-current"), "click", () => exportBackup(false));
 function blockConflict(message: string) {
+  cancelRenovation(false);
   cancelFileReview();
   cancelOfflineWork();
   saveBlocked = true;
@@ -950,6 +1106,7 @@ function updateRenderModeUI() {
       : "减少绘制，画面与动作会更简约。";
 }
 function updateUI() {
+  updateRenovation();
   updateBackupControls();
   if (panel === "files") updateFileControls();
   updateGuide();
@@ -958,10 +1115,10 @@ function updateUI() {
   if ($("#wallet").textContent !== walletText) $("#wallet").textContent = walletText;
   if (panel === "recipe") {
     const c = s.counters.find((c) => c.id === selected)!;
-    $("#dialog-eyebrow").textContent = `柜台 ${selected === "counter-a" ? "A" : "B"} · Lv. ${c.level}`;
+    $("#dialog-eyebrow").textContent = `柜台 ${selected.slice(-1).toUpperCase()} · Lv. ${c.level}`;
     $("#dialog-title").textContent = "选择咖啡";
     $("#dialog-description").textContent = "";
-    $("#counter-affinity").textContent = selected === "counter-a" ? "浓缩时长 −25%" : "拿铁杯价 +12%";
+    $("#counter-affinity").textContent = selected === "counter-a" ? "浓缩时长 −25%" : selected === "counter-b" ? "拿铁杯价 +12%" : "两种咖啡都能制作";
     root.querySelectorAll<HTMLButtonElement>("[data-select-recipe]").forEach((b) => {
       const recipe = b.dataset.selectRecipe as RecipeId;
       b.classList.toggle("active", recipe === c.recipe);
@@ -971,7 +1128,7 @@ function updateUI() {
     });
   } else if (panel === "counter") {
     const c = s.counters.find((c) => c.id === selected)!, q = engine.quote(selected);
-    $("#dialog-eyebrow").textContent = `柜台 ${selected === "counter-a" ? "A" : "B"}`;
+    $("#dialog-eyebrow").textContent = `柜台 ${selected.slice(-1).toUpperCase()}`;
     $("#dialog-title").textContent = "升级柜台";
     $("#dialog-description").textContent = "";
     $("#counter-coffee").textContent = recipeById[c.recipe].name;
@@ -1049,7 +1206,7 @@ function tick(now: number) {
   const dt = elapsed;
   if (!allowVisibleTime(dt)) return;
   const view = presentation.advance(engine, fileReview ? 0 : Math.max(0, dt));
-  scene?.update(view, dt);
+  scene?.update(layoutDraft ? { ...view, paused: true } : view, dt);
   if (performancePanel?.active) performancePanel.update(now, !!scene && !qaContextLost, document.hasFocus());
   if (routeDiagnostics && routePanel?.active) {
     // Choose a loaded customer before asking the scene for its same-ID mesh.
@@ -1088,7 +1245,7 @@ function resumeVisible() {
   frame = requestAnimationFrame(tick);
 }
 function allowVisibleTime(seconds: number): boolean {
-  if (saveBlocked || offlineJob || fileReview) return true;
+  if (saveBlocked || offlineJob || fileReview || renovating) return true;
   if (Math.max(0, seconds - verifiedForegroundSeconds) > LONG_FOREGROUND_GAP_SECONDS + 1e-6) {
     blockConflict(UNCLASSIFIED_TIME_MESSAGE);
     return false;
@@ -1104,6 +1261,7 @@ function settleVisibleTail(): boolean {
   return true;
 }
 function suspendVisible() {
+  if (renovating) { settleVisibleTail(); cancelRenovation(false); }
   cancelFileReview();
   cancelAnimationFrame(frame);
   if (offlineJob) {
@@ -1147,6 +1305,7 @@ if (visualViewport)
   });
 function cleanup(persist = true) {
   if (stopped) return;
+  if (renovating) { settleVisibleTail(); cancelRenovation(false); }
   cancelFileReview();
   cancelOfflineWork();
   if (persist) { settleVisibleTail(); save(false, hiddenAt ?? Date.now()); }
@@ -1181,6 +1340,8 @@ if (routeDiagnostics)
       focusedObject: () => scene?.getFocus(),
       readRenderStats: () => scene?.readRenderStats(),
       readPerformance: () => performancePanel?.read(),
+      readLayoutCell: (x: number, z: number) => scene?.projectLayoutCell(x, z),
+      readRenovation: () => ({ status: engine.layoutEditStatus(), selectedId: selectedFurniture, draft: layoutDraft ? structuredClone(layoutDraft) : null }),
       readFootprints: () => Object.fromEntries(sceneAnchors.map((key) => [key, scene?.getAnchorFootprint(key)])),
       readAnchors: () =>
         Object.fromEntries(

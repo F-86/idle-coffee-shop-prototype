@@ -1,4 +1,5 @@
 import { STEP_SECONDS, WORLD } from '../core/engine';
+import { GRID } from '../core/layout';
 import type { SliceEngine, SliceState } from '../core/types';
 
 /**
@@ -38,7 +39,7 @@ export class FrameInterpolator {
           // Core removes on reaching the boundary. Complete that final 50ms leg
           // in the delayed view too; freezing a removed body makes its follower
           // catch a stationary ghost before the next snapshot removes it.
-          const endpoint = previous.finishLegacyRoute
+          const endpoint = current.layout?.active ? GRID.exit : previous.finishLegacyRoute
             ? { x: WORLD.entryX, z: WORLD.entryZ }
             : { x: WORLD.exitX, z: WORLD.exitZ };
           next = { ...previous, ...endpoint };

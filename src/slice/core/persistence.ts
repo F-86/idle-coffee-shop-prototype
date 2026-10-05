@@ -1,4 +1,5 @@
 import { createEngine, createInitialState, CUSTOMER_ROUTE_VERSION, ECONOMY_VERSION, INITIAL_WALLET, INVITE_COOLDOWN_SECONDS, MANAGER_ROUTE_VERSION, MAX_ELAPSED_SECONDS, MAX_LEVEL, migrateCoffeeEconomy, migrateCustomerRoutes, migrateManagerRoute, QUEUE_CAPACITY, STEP_SECONDS, WORLD } from './engine';
+import { initialLayout, validateLayoutState } from './layout';
 import type { OfflineJob, OfflinePolicyVersion, OfflineResult, SliceEngine, SliceState } from './types';
 export type { OfflineResult } from './types';
 
@@ -18,16 +19,22 @@ const object = (value: unknown): value is Record<string, unknown> => typeof valu
 const number = (value: unknown, min = 0, max = 1e12): value is number => typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
 const integer = (value: unknown, min = 0, max = 1e12): value is number => number(value, min, max) && Number.isSafeInteger(value);
 const recipe = (value: unknown) => value === 'espresso' || value === 'latte';
-const counterId = (value: unknown) => value === 'counter-a' || value === 'counter-b';
+const counterIds = ['counter-a', 'counter-b', 'counter-c', 'counter-d'];
+const counterId = (value: unknown) => typeof value === 'string' && counterIds.includes(value);
 let sequence = 0;
 function tag(): string { return globalThis.crypto?.randomUUID?.() ?? `local-${Date.now().toString(36)}-${(++sequence).toString(36)}`; }
 
 /** Fail closed: do not silently repair corrupted assets, enums or relationships. */
 export function validateState(value: unknown): { ok: true; state: SliceState } | { ok: false; message: string } {
   const fail = (message: string): { ok: false; message: string } => ({ ok: false, message });
-  if (!object(value) || value.schemaVersion !== 1 || value.economyVersion !== 1 && value.economyVersion !== ECONOMY_VERSION) return fail('存档版本不受支持。');
+  if (!object(value) || value.schemaVersion !== 1 || value.economyVersion !== 1 && value.economyVersion !== 2 && value.economyVersion !== ECONOMY_VERSION) return fail('存档版本不受支持。');
   if (value.managerRouteVersion !== undefined && value.managerRouteVersion !== 1 && value.managerRouteVersion !== MANAGER_ROUTE_VERSION) return fail('经理路线版本不受支持。');
   if (value.customerRouteVersion !== undefined && value.customerRouteVersion !== 1 && value.customerRouteVersion !== 2 && value.customerRouteVersion !== CUSTOMER_ROUTE_VERSION) return fail('顾客路线版本不受支持。');
+  if (value.layout !== undefined && !object(value.layout)) return fail('家具布局格式无效。');
+  if (value.economyVersion === ECONOMY_VERSION && !object(value.layout)) return fail('当前存档缺少家具布局。');
+  if (value.economyVersion !== ECONOMY_VERSION && object(value.layout) && value.layout.active === true) return fail('旧经济版本不能包含已装修布局。');
+  const activeLayout = object(value.layout) && value.layout.active === true;
+  if (activeLayout && (value.managerRouteVersion !== MANAGER_ROUTE_VERSION || value.customerRouteVersion !== CUSTOMER_ROUTE_VERSION)) return fail('家具布局路线版本不匹配。');
   const legacyCustomerRoute = value.customerRouteVersion === undefined || value.customerRouteVersion === 1;
   const localExitRoute = value.customerRouteVersion === 2;
   const legacyRoute = value.managerRouteVersion === undefined || value.managerRouteVersion === 1;
@@ -38,65 +45,69 @@ export function validateState(value: unknown): { ok: true; state: SliceState } |
   if (value.eventSequence !== undefined && !integer(value.eventSequence)) return fail('事件序列无效。');
   if (!(value.lastOfflineClaimId === null || typeof value.lastOfflineClaimId === 'string' && value.lastOfflineClaimId.length > 0 && value.lastOfflineClaimId.length <= 256)) return fail('离线结算标识无效。');
   if (value.offlineClaimIds !== undefined && (!Array.isArray(value.offlineClaimIds) || value.offlineClaimIds.length > 256 || value.offlineClaimIds.some(id => typeof id !== 'string' || !id || id.length > 256) || new Set(value.offlineClaimIds).size !== value.offlineClaimIds.length)) return fail('离线重试记录无效。');
-  if (!Array.isArray(value.counters) || value.counters.length !== 2) return fail('柜台数量无效。');
+  if (!Array.isArray(value.counters) || (activeLayout ? value.counters.length < 2 || value.counters.length > 4 : value.counters.length !== 2)) return fail('柜台数量无效。');
   if (!Array.isArray(value.customers) || value.customers.length > 32) return fail('顾客数量无效。');
   if (!object(value.manager)) return fail('经理状态缺失。');
   const manager = value.manager;
-  if (!number(manager.x, legacyRoute ? -8 : 0, legacyRoute ? 5 : WORLD.vaultX) || manager.z !== WORLD.backZ || !integer(manager.carrying) || !integer(manager.level, 1, MAX_LEVEL) || !integer(manager.target, 0, 2) || !number(manager.timer, 0, .6) || !['moving', 'collecting', 'depositing'].includes(String(manager.phase))) return fail('经理坐标、等级或动作无效。');
-  if (manager.finishLegacySweep !== undefined && (legacyRoute || manager.finishLegacySweep !== true)) return fail('经理迁移路线标识无效。');
-  if (manager.phase === 'collecting' && manager.target === 2 || manager.phase === 'depositing' && manager.target !== 2) return fail('经理路线关系无效。');
-  if (!legacyRoute) {
-    const targetX = manager.target === 2 ? WORLD.vaultX : manager.target === 0 ? 0 : 5;
-    if (manager.phase !== 'moving' && manager.x !== targetX) return fail('经理未抵达收款或存款位置。');
-    if (manager.phase === 'moving') {
-      const legacySweep = manager.finishLegacySweep === true;
-      const minX = (manager.target === 1 && !legacySweep) || (manager.target === 2 && legacySweep) ? 5 : 0;
-      const maxX = (manager.target === 0 && !legacySweep) || (manager.target === 1 && legacySweep) ? 5 : WORLD.vaultX;
-      if (!number(manager.x, minX, maxX) || !legacySweep && manager.timer !== 0) return fail('经理移动路线或计时无效。');
+  if (!number(manager.x, activeLayout ? -100 : legacyRoute ? -8 : 0, activeLayout ? 100 : legacyRoute ? 5 : WORLD.vaultX) || (activeLayout ? !number(manager.z, -100, 100) : manager.z !== WORLD.backZ) || !integer(manager.carrying) || !integer(manager.level, 1, MAX_LEVEL) || !integer(manager.target, 0, activeLayout ? value.counters.length : 2) || !number(manager.timer, 0, .6) || !['moving', 'collecting', 'depositing'].includes(String(manager.phase))) return fail('经理坐标、等级或动作无效。');
+  if (!activeLayout) {
+    if (manager.finishLegacySweep !== undefined && (legacyRoute || manager.finishLegacySweep !== true)) return fail('经理迁移路线标识无效。');
+    if (manager.phase === 'collecting' && manager.target === 2 || manager.phase === 'depositing' && manager.target !== 2) return fail('经理路线关系无效。');
+    if (!legacyRoute) {
+      const targetX = manager.target === 2 ? WORLD.vaultX : manager.target === 0 ? 0 : 5;
+      if (manager.phase !== 'moving' && manager.x !== targetX) return fail('经理未抵达收款或存款位置。');
+      if (manager.phase === 'moving') {
+        const legacySweep = manager.finishLegacySweep === true;
+        const minX = (manager.target === 1 && !legacySweep) || (manager.target === 2 && legacySweep) ? 5 : 0;
+        const maxX = (manager.target === 0 && !legacySweep) || (manager.target === 1 && legacySweep) ? 5 : WORLD.vaultX;
+        if (!number(manager.x, minX, maxX) || !legacySweep && manager.timer !== 0) return fail('经理移动路线或计时无效。');
+      }
     }
   }
   const ids = new Set<number>();
   for (const entry of value.customers) {
-    if (!object(entry) || !integer(entry.id, 1) || ids.has(entry.id) || !counterId(entry.counterId) || !number(entry.x, legacyCustomerRoute ? -9 : WORLD.entryX - QUEUE_CAPACITY * WORLD.queueGap, 7) || !number(entry.z, 1.3, legacyCustomerRoute ? 7 : WORLD.inboundZ) || !['entering', 'queue', 'serving', 'receiving', 'leaving'].includes(String(entry.phase)) || !number(entry.timer, 0, 2) || typeof entry.hasCup !== 'boolean' || !integer(entry.skin, 0, 5)) return fail('顾客状态无效。');
+    if (!object(entry) || !integer(entry.id, 1) || ids.has(entry.id) || !counterId(entry.counterId) || !value.counters.some(counter => object(counter) && counter.id === entry.counterId) || !number(entry.x, activeLayout ? -100 : legacyCustomerRoute ? -9 : WORLD.entryX - QUEUE_CAPACITY * WORLD.queueGap, activeLayout ? 100 : 7) || !number(entry.z, activeLayout ? -100 : 1.3, activeLayout ? 100 : legacyCustomerRoute ? 7 : WORLD.inboundZ) || !(activeLayout ? ['entering', 'queue', 'serving', 'receiving', 'seeking-seat', 'dining', 'leaving'] : ['entering', 'queue', 'serving', 'receiving', 'leaving']).includes(String(entry.phase)) || !number(entry.timer, 0, activeLayout && entry.phase === 'dining' ? 6 : 2) || typeof entry.hasCup !== 'boolean' || !integer(entry.skin, 0, 5)) return fail('顾客状态无效。');
     if (entry.id >= (value.nextCustomerId as number)) return fail('顾客标识顺序无效。');
-    if (entry.hasCup !== (entry.phase === 'receiving' || entry.phase === 'leaving')) return fail('顾客杯子状态无效。');
-    if (entry.phase === 'leaving' && !integer(entry.timer, 0, 2) || entry.phase === 'receiving' && !number(entry.timer, 0, .7)) return fail('顾客动作计时无效。');
-    if (entry.phase !== 'receiving' && entry.phase !== 'leaving' && entry.timer !== 0) return fail('顾客非交杯计时无效。');
-    if (entry.finishLegacyRoute !== undefined && (legacyCustomerRoute || entry.finishLegacyRoute !== true || entry.phase !== 'entering' && entry.phase !== 'leaving')) return fail('顾客迁移路线标识无效。');
-    if (entry.routeLeg !== undefined && (legacyCustomerRoute || entry.finishLegacyRoute || !integer(entry.routeLeg, 0, 3) || entry.phase !== 'entering' && entry.phase !== 'leaving')) return fail('顾客路段标识无效。');
-    if (entry.finishLegacyRoute && (!number(entry.x, -9, 7) || !number(entry.z, 1.3, 7))) return fail('顾客旧路线坐标无效。');
-    if (!legacyCustomerRoute && !entry.finishLegacyRoute) {
-      const x = entry.counterId === 'counter-a' ? 0 : 5;
-      if (entry.phase !== 'receiving' && entry.timer !== 0) return fail('顾客路线计时无效。');
-      if (entry.phase === 'entering') {
-        if (entry.routeLeg === 0) {
-          if (entry.z !== WORLD.entryZ || !number(entry.x, WORLD.entryX - QUEUE_CAPACITY * WORLD.queueGap, WORLD.inboundX)) return fail('顾客入口路段无效。');
-        } else if (entry.routeLeg === 1) {
-          if (entry.x !== WORLD.inboundX || !number(entry.z, WORLD.entryZ, WORLD.inboundZ)) return fail('顾客入口转弯无效。');
-        } else if (entry.routeLeg === 2) {
-          if (entry.z !== WORLD.inboundZ || !number(entry.x, WORLD.inboundX, x)) return fail('顾客入店横道无效。');
-        } else if (entry.routeLeg === 3) {
-          if (entry.x !== x || !number(entry.z, WORLD.serviceZ, WORLD.inboundZ)) return fail('顾客入队路段无效。');
-        } else return fail('顾客入店路段缺失。');
-      } else if (entry.phase === 'leaving') {
-        if (entry.routeLeg === 0) {
-          if (entry.z !== WORLD.serviceZ || !number(entry.x, x, x + WORLD.departureOffsetX)) return fail('顾客离柜路段无效。');
-        } else if (entry.routeLeg === 1) {
-          if (entry.x !== x + WORLD.departureOffsetX || !number(entry.z, WORLD.serviceZ, localExitRoute ? 7.1 : WORLD.exitZ)) return fail('顾客离店路段无效。');
-        } else if (!localExitRoute && entry.routeLeg === 2) {
-          if (entry.z !== WORLD.exitZ || !number(entry.x, WORLD.exitX, x + WORLD.departureOffsetX)) return fail('顾客返程路段无效。');
-        } else return fail('顾客离店路段缺失。');
-      } else if (entry.x !== x || !number(entry.z, WORLD.serviceZ, entry.phase === 'queue' ? WORLD.inboundZ : WORLD.serviceZ)) return fail('顾客排队或服务位置无效。');
-    }
+    if (entry.hasCup !== (entry.phase === 'receiving' || entry.phase === 'leaving' || activeLayout && (entry.phase === 'seeking-seat' || entry.phase === 'dining'))) return fail('顾客杯子状态无效。');
+    if (!activeLayout) {
+      if (entry.phase === 'leaving' && !integer(entry.timer, 0, 2) || entry.phase === 'receiving' && !number(entry.timer, 0, .7)) return fail('顾客动作计时无效。');
+      if (entry.phase !== 'receiving' && entry.phase !== 'leaving' && entry.timer !== 0) return fail('顾客非交杯计时无效。');
+      if (entry.finishLegacyRoute !== undefined && (legacyCustomerRoute || entry.finishLegacyRoute !== true || entry.phase !== 'entering' && entry.phase !== 'leaving')) return fail('顾客迁移路线标识无效。');
+      if (entry.routeLeg !== undefined && (legacyCustomerRoute || entry.finishLegacyRoute || !integer(entry.routeLeg, 0, 3) || entry.phase !== 'entering' && entry.phase !== 'leaving')) return fail('顾客路段标识无效。');
+      if (entry.finishLegacyRoute && (!number(entry.x, -9, 7) || !number(entry.z, 1.3, 7))) return fail('顾客旧路线坐标无效。');
+      if (!legacyCustomerRoute && !entry.finishLegacyRoute) {
+        const x = entry.counterId === 'counter-a' ? 0 : 5;
+        if (entry.phase !== 'receiving' && entry.timer !== 0) return fail('顾客路线计时无效。');
+        if (entry.phase === 'entering') {
+          if (entry.routeLeg === 0) {
+            if (entry.z !== WORLD.entryZ || !number(entry.x, WORLD.entryX - QUEUE_CAPACITY * WORLD.queueGap, WORLD.inboundX)) return fail('顾客入口路段无效。');
+          } else if (entry.routeLeg === 1) {
+            if (entry.x !== WORLD.inboundX || !number(entry.z, WORLD.entryZ, WORLD.inboundZ)) return fail('顾客入口转弯无效。');
+          } else if (entry.routeLeg === 2) {
+            if (entry.z !== WORLD.inboundZ || !number(entry.x, WORLD.inboundX, x)) return fail('顾客入店横道无效。');
+          } else if (entry.routeLeg === 3) {
+            if (entry.x !== x || !number(entry.z, WORLD.serviceZ, WORLD.inboundZ)) return fail('顾客入队路段无效。');
+          } else return fail('顾客入店路段缺失。');
+        } else if (entry.phase === 'leaving') {
+          if (entry.routeLeg === 0) {
+            if (entry.z !== WORLD.serviceZ || !number(entry.x, x, x + WORLD.departureOffsetX)) return fail('顾客离柜路段无效。');
+          } else if (entry.routeLeg === 1) {
+            if (entry.x !== x + WORLD.departureOffsetX || !number(entry.z, WORLD.serviceZ, localExitRoute ? 7.1 : WORLD.exitZ)) return fail('顾客离店路段无效。');
+          } else if (!localExitRoute && entry.routeLeg === 2) {
+            if (entry.z !== WORLD.exitZ || !number(entry.x, WORLD.exitX, x + WORLD.departureOffsetX)) return fail('顾客返程路段无效。');
+          } else return fail('顾客离店路段缺失。');
+        } else if (entry.x !== x || !number(entry.z, WORLD.serviceZ, entry.phase === 'queue' ? WORLD.inboundZ : WORLD.serviceZ)) return fail('顾客排队或服务位置无效。');
+      }
+    } else if (entry.phase === 'receiving' ? !number(entry.timer, 0, .7) : entry.phase !== 'dining' && entry.timer !== 0) return fail('顾客布局路线计时无效。');
     ids.add(entry.id);
   }
   const counters = value.counters;
   let pending = 0, brewed = 0, receiving = 0;
   for (let i = 0; i < counters.length; i++) {
     const entry = counters[i];
-    if (!object(entry) || entry.id !== (i === 0 ? 'counter-a' : 'counter-b') || entry.x !== (i === 0 ? 0 : 5) || !integer(entry.level, 1, MAX_LEVEL) || !recipe(entry.recipe) || !integer(entry.pendingCash) || !integer(entry.brewed)) return fail('柜台坐标、配方或资产无效。');
+    if (!object(entry) || entry.id !== counterIds[i] || (activeLayout ? !number(entry.x, -100, 100) : entry.x !== (i === 0 ? 0 : 5)) || !integer(entry.level, 1, MAX_LEVEL) || !recipe(entry.recipe) || !integer(entry.pendingCash) || !integer(entry.brewed)) return fail('柜台坐标、配方或资产无效。');
     pending += entry.pendingCash; brewed += entry.brewed;
-    const active = value.customers.filter(customer => object(customer) && customer.counterId === entry.id && customer.phase !== 'leaving');
+    const active = value.customers.filter(customer => object(customer) && customer.counterId === entry.id && !['leaving', 'seeking-seat', 'dining'].includes(String(customer.phase)));
     if (active.length > QUEUE_CAPACITY) return fail('队列超出容量。');
     const service = active.filter(customer => object(customer) && (customer.phase === 'serving' || customer.phase === 'receiving'));
     if (service.length > 1) return fail('同一柜台存在重复服务。');
@@ -110,10 +121,15 @@ export function validateState(value: unknown): { ok: true; state: SliceState } |
   if (brewed !== (value.totalServed as number) + receiving) return fail('出杯计数不守恒。');
   if ((value.wallet as number) + (value.spend as number) + manager.carrying + pending !== INITIAL_WALLET + (value.totalEarned as number)) return fail('资金账本不守恒。');
   const state = clone(value) as unknown as SliceState;
+  if (state.layout === undefined && value.economyVersion !== ECONOMY_VERSION) state.layout = initialLayout();
   try { migrateCoffeeEconomy(state); } catch { return fail('咖啡等级或经济版本无效。'); }
   state.stepCarry ??= 0; state.eventSequence ??= 0; state.offlineClaimIds ??= state.lastOfflineClaimId ? [state.lastOfflineClaimId] : [];
-  migrateManagerRoute(state);
-  migrateCustomerRoutes(state);
+  try {
+    const layoutError = validateLayoutState(state);
+    if (layoutError) return fail(layoutError);
+    migrateManagerRoute(state);
+    migrateCustomerRoutes(state);
+  } catch { return fail('家具布局或路线状态无效。'); }
   // An accepted old archive must also be valid after its one-time migration.
   // Impossible old stationary positions fail closed instead of becoming an
   // un-saveable live game; do not teleport guests to silently repair it.
@@ -124,7 +140,7 @@ export function validateState(value: unknown): { ok: true; state: SliceState } |
 function decode(raw: string): { ok: true; envelope: Envelope } | { ok: false; status: 'corrupt' | 'future'; message: string } {
   let value: unknown;
   try { value = JSON.parse(raw); } catch { return { ok: false, status: 'corrupt', message: '存档无法读取，原始内容已保留。请先备份或明确重置。' }; }
-  if (object(value) && (number(value.offlinePolicyVersion, OFFLINE_POLICY_VERSION + 1) || number(value.schemaVersion, 2) || object(value.state) && (number(value.state.schemaVersion, 2) || number(value.state.economyVersion, ECONOMY_VERSION + 1) || number(value.state.managerRouteVersion, MANAGER_ROUTE_VERSION + 1) || number(value.state.customerRouteVersion, CUSTOMER_ROUTE_VERSION + 1)))) return { ok: false, status: 'future', message: '这是较新版本的存档，当前版本不会覆盖它。请使用兼容的新版本。' };
+  if (object(value) && (number(value.offlinePolicyVersion, OFFLINE_POLICY_VERSION + 1) || number(value.schemaVersion, 2) || object(value.state) && (number(value.state.schemaVersion, 2) || number(value.state.economyVersion, ECONOMY_VERSION + 1) || number(value.state.managerRouteVersion, MANAGER_ROUTE_VERSION + 1) || number(value.state.customerRouteVersion, CUSTOMER_ROUTE_VERSION + 1) || object(value.state.layout) && number(value.state.layout.version, 2)))) return { ok: false, status: 'future', message: '这是较新版本的存档，当前版本不会覆盖它。请使用兼容的新版本。' };
   if (!object(value) || value.schemaVersion !== 1 || value.offlinePolicyVersion !== undefined && value.offlinePolicyVersion !== 1 && value.offlinePolicyVersion !== 2 && value.offlinePolicyVersion !== OFFLINE_POLICY_VERSION || !number(value.savedAt, 0, 8.64e15) || typeof value.recordChangeTag !== 'string' || !value.recordChangeTag || value.recordChangeTag.length > 256) return { ok: false, status: 'corrupt', message: '存档格式或结算时间无效，原始内容已保留。' };
   if ((value.saveId !== undefined || value.revision !== undefined) && (typeof value.saveId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(value.saveId) || !integer(value.revision, 1, Number.MAX_SAFE_INTEGER - 1))) return { ok: false, status: 'corrupt', message: '存档身份或修订号无效，原始内容已保留。' };
   if (value.importedFileHashes !== undefined && (!Array.isArray(value.importedFileHashes) || value.importedFileHashes.length > 32 || value.importedFileHashes.some(h => typeof h !== 'string' || !/^[a-f0-9]{64}$/.test(h)))) return { ok: false, status: 'corrupt', message: '导入记录无效，原始内容已保留。' };

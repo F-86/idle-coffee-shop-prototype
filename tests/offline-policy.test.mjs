@@ -503,9 +503,9 @@ test('TC-3D-023 legacy economy migrates independently of one-time legacy offline
     const { memory, repo } = fixture(legacy, policy);
     const loaded = repo.load(160000), expected = advanced(modern, policy === 3 ? 48 : 30);
     assert.equal(loaded.status, 'loaded'); assert.equal(loaded.offline.accepted, true);
-    assert.deepEqual(business(loaded.state), business(expected)); assert.equal(loaded.state.economyVersion, 2);
+    assert.deepEqual(business(loaded.state), business(expected)); assert.equal(loaded.state.economyVersion, 3);
     assert.deepEqual(loaded.state.coffeeLevels, { espresso: 1, latte: 1 });
-    const durable = JSON.parse(memory.getItem(SAVE_KEY)); assert.equal(durable.state.economyVersion, 2); assert.equal(durable.offlinePolicyVersion, 3);
+    const durable = JSON.parse(memory.getItem(SAVE_KEY)); assert.equal(durable.state.economyVersion, 3); assert.equal(durable.offlinePolicyVersion, 3);
     assert.deepEqual(new LocalSaveRepository(memory).load(160000).state, loaded.state);
   }
 });

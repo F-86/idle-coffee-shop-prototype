@@ -426,3 +426,52 @@ input:focus-visible, #file-review:focus-visible { outline: 3px solid #936832; ou
   .file-picker input::file-selector-button { padding-inline: 10px; }
   .dialog-heading h1 { font-size: 24px; }
 }
+
+/* An occasional workbench over the shop; never a permanent management dashboard. */
+.renovation-panel {
+  position: absolute;
+  z-index: 5;
+  left: calc(18px + env(safe-area-inset-left, 0px));
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  width: min(660px, calc(100vw - 36px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+  max-height: min(48dvh, 440px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 2px solid #c7b38f;
+  border-radius: 22px;
+  padding: 16px 18px;
+  background: #fffaf0f7;
+  box-shadow: 0 5px 0 #84664224, 0 12px 36px #24443c29;
+  scrollbar-width: thin;
+}
+.renovation-heading, .renovation-footer, .furniture-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.renovation-heading h2 { margin: 2px 0 0; font-size: 21px; }
+.renovation-heading .text-button { min-width: 56px; }
+.renovation-status { margin: 8px 0 12px; line-height: 1.5; font-size: 13px; color: #58745d; }
+.renovation-status.invalid { color: #a24838; }
+.furniture-list { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 9px; }
+.furniture-list button { white-space: nowrap; flex: 0 0 auto; min-height: 46px; border: 2px solid #e2d5bc; background: #f8f0df; border-radius: 11px; padding: 8px 12px; }
+.furniture-list button[aria-pressed="true"] { border-color: #50816b; background: #e7f0df; }
+.furniture-catalog { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 10px; }
+.furniture-catalog button { min-height: 44px; padding: 9px 12px; border-radius: 10px; background: #ece5cf; font-size: 12px; }
+.furniture-controls { align-items: flex-start; border-top: 1px solid #e3d9c2; padding-top: 10px; flex-wrap: wrap; }
+.furniture-controls > span { padding-top: 12px; font-size: 13px; font-weight: 700; }
+.furniture-controls > div { display: flex; flex-wrap: wrap; gap: 5px; }
+.furniture-controls button { min-height: 44px; min-width: 44px; border-radius: 10px; background: #ede9dc; padding: 8px 10px; }
+.renovation-panel .detail-note { margin: 9px 0; font-size: 11px; line-height: 1.5; }
+.renovation-footer { border-top: 1px solid #e3d9c2; padding-top: 10px; font-size: 13px; }
+.renovation-footer .primary-button { width: auto; min-height: 46px; margin: 0; padding: 12px 18px; }
+@media (max-width: 640px) {
+  .renovation-panel { left: calc(8px + env(safe-area-inset-left, 0px)); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); width: calc(100vw - 16px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); max-height: 49dvh; padding: 12px; border-radius: 18px; }
+  .renovation-heading h2 { font-size: 18px; }
+  .furniture-controls { gap: 6px; }
+  .furniture-controls > span { padding-top: 0; }
+  .furniture-controls > div { width: 100%; }
+  .furniture-catalog { gap: 5px; }
+  .furniture-catalog button { padding: 8px; }
+}

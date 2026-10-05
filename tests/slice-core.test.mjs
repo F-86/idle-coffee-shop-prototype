@@ -531,7 +531,7 @@ function coffeeFixture(wallet = 200_000) {
 }
 
 test('TC-3D-023 coffee Lv1 preserves every previous counter and manager parameter', () => {
-  assert.equal(ECONOMY_VERSION, 2); assert.equal(COFFEE_MAX_LEVEL, 10);
+  assert.equal(ECONOMY_VERSION, 3); assert.equal(COFFEE_MAX_LEVEL, 10);
   assert.equal(Object.isFrozen(COFFEE_UPGRADE_CONFIG), true); assert.equal(Object.isFrozen(COFFEE_UPGRADE_CONFIG.baseCosts), true);
   assert.deepEqual(createInitialState().coffeeLevels, { espresso: 1, latte: 1 });
   for (const recipe of recipes) for (let level = 1; level <= MAX_LEVEL; level++) for (const id of ['counter-a', 'counter-b']) {
@@ -642,17 +642,17 @@ test('TC-3D-023 economy1 migration adds only Lv1 coffee progress and rejects mal
   const memory = createMemoryStorage(); memory.setItem(SAVE_KEY, JSON.stringify({ schemaVersion: 1, offlinePolicyVersion: 3, savedAt: 100000, recordChangeTag: 'pre-coffee', state: legacy }));
   const repo = new LocalSaveRepository(memory), loaded = repo.load(100000);
   assert.equal(loaded.status, 'loaded'); assert.deepEqual(loaded.state, current); assert.equal(repo.save(loaded.state, 100000).ok, true);
-  assert.equal(JSON.parse(memory.getItem(SAVE_KEY)).state.economyVersion, 2);
+  assert.equal(JSON.parse(memory.getItem(SAVE_KEY)).state.economyVersion, 3);
   for (const levels of [undefined, null, [], {}, { espresso: 1 }, { espresso: 1, latte: 1, mocha: 1 }, { espresso: 0, latte: 1 }, { espresso: 11, latte: 1 }, { espresso: 1.1, latte: 1 }, { espresso: '2', latte: 1 }, { espresso: Infinity, latte: 1 }, { espresso: 1, latte: NaN }]) {
     const bad = createInitialState(); bad.coffeeLevels = levels;
     assert.equal(validateState(bad).ok, false, JSON.stringify(levels)); assert.throws(() => createEngine(bad));
   }
-  for (const version of [0, 1, '2', 2.5, 3, 999]) {
+  for (const version of [0, 1, '2', 2.5, 4, 999]) {
     const bad = createInitialState(); bad.economyVersion = version;
     assert.equal(validateState(bad).ok, false); assert.throws(() => createEngine(bad));
     const storage = createMemoryStorage(), raw = rawEnvelope(bad); storage.setItem(SAVE_KEY, raw);
     const repo = new LocalSaveRepository(storage), loaded = repo.load(1000);
-    assert.equal(loaded.status, typeof version === 'number' && version >= 3 ? 'future' : 'corrupt');
+    assert.equal(loaded.status, typeof version === 'number' && version >= 4 ? 'future' : 'corrupt');
     assert.equal(repo.save(loaded.state, 1000).ok, false); assert.equal(storage.getItem(SAVE_KEY), raw);
   }
 });
@@ -668,7 +668,7 @@ test('TC-3D-023 sync adapter preserves recipe progress under CAS, replay and cha
   assert.equal(conflict.status, 'conflict'); assert.deepEqual(conflict.state, state);
   const next = await repository.save('coffee-user', engine.snapshot(), saved.recordChangeTag, 'coffee-next');
   assert.equal(next.status, 'saved'); assert.deepEqual((await repository.load('coffee-user')).state, engine.snapshot());
-  const future = engine.snapshot(); future.economyVersion = 3;
+  const future = engine.snapshot(); future.economyVersion = 4;
   assert.equal((await repository.save('coffee-user', future, next.recordChangeTag, 'coffee-future')).status, 'invalid-state');
   assert.deepEqual((await repository.load('coffee-user')).state, engine.snapshot());
 });

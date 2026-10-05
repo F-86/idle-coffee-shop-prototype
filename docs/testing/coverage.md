@@ -80,3 +80,7 @@ REQ-3D-033 → [TC-3D-023](cases/slice/TC-3D-023.md)、[计划](plans/coffee-upg
 ## 简洁设置与首次引导
 
 REQ-3D-034 → [TC-3D-024](cases/slice/TC-3D-024.md)、[计划](plans/settings-onboarding.md)。两入口/折叠/偏好，祖先可见性的恢复流程，首次/跳过/完成/刷新/旧档/偏好故障，引导与导入、跨窗、离线/BFCache、焦点和播报隔离；模拟handler不冒充像素/原生UI证据。
+
+## 家具与一次扩建
+
+REQ-3D-035 → [TC-3D-025](cases/slice/TC-3D-025.md)、[计划](plans/furniture-expansion.md)。独立草稿/生命周期、所有方向占地与可达性、动态柜台与座位/支付、存储与经营守恒、经济3/布局1/文件3迁移、同核心80%离线、资源释放及真实几何拾取；像素/设备验证独立。复测入口见 [QA说明](../../qa/layout/README.md)。
