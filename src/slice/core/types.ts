@@ -19,5 +19,8 @@ export interface SliceEngine { readonly state: SliceState; beginLayoutEdit(): bo
 
 export interface GridPoint { x: number; z: number }
 export interface FurniturePlacement extends GridPoint { id: string; kind: 'counter' | 'table'; rotation: 0 | 1 | 2 | 3; stored: boolean; counterId?: CounterId }
-export interface ShopLayout { version: 1; active: boolean; expanded: boolean; furniture: FurniturePlacement[]; trafficTurn?: 'customer' | 'manager' }
+export type CoffeeSignId = 'menu-espresso' | 'menu-latte';
+/** A wall menu represents a globally owned recipe; storing it never disables that recipe. */
+export interface CoffeeSignPlacement { id: CoffeeSignId; recipe: RecipeId; x: number; stored: boolean }
+export interface ShopLayout { version: 2; active: boolean; expanded: boolean; furniture: FurniturePlacement[]; coffeeSigns: CoffeeSignPlacement[]; trafficTurn?: 'customer' | 'manager' }
 export interface LayoutResult { ok: boolean; message: string; cost?: number }

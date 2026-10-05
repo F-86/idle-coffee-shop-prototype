@@ -17,7 +17,7 @@ import { RouteDiagnostics, isRouteQA } from "./qa/RouteDiagnostics";
 import { RouteQAPanel } from "./qa/RouteQAPanel";
 import { PerformanceQAPanel } from "./qa/PerformanceQAPanel";
 import { createPortableSave, parsePortableSave, overviewOf, portableFilename, MAX_PORTABLE_BYTES, type PortableFile } from "./core/portableSave";
-import { addFurniture, getLayout, GRID, LAYOUT_PRICES, layoutCost, MAX_COUNTERS, MAX_TABLES, moveFurniture, rotateFurniture, storeFurniture, validateLayout } from "./core/layout";
+import { addFurniture, coffeeWallSlots, getCoffeeSigns, getLayout, GRID, LAYOUT_PRICES, layoutCost, MAX_COUNTERS, MAX_TABLES, moveCoffeeSign, moveFurniture, rotateFurniture, storeCoffeeSign, storeFurniture, validateLayout } from "./core/layout";
 import type { FurniturePlacement, ShopLayout } from "./core/types";
 import "./style.css";
 
@@ -97,16 +97,15 @@ root.innerHTML = `
     </div>
   </dialog>
   <aside id="renovation-panel" class="renovation-panel" aria-labelledby="renovation-title" hidden>
-    <div class="renovation-heading"><div><span class="section-kicker">MAKE ROOM FOR COFFEE</span><h2 id="renovation-title">布置你的小店</h2></div><button id="renovation-cancel" class="text-button">取消</button></div>
+    <div class="renovation-heading"><div class="renovation-title"><span aria-hidden="true">▦</span><h2 id="renovation-title">布置小店</h2><span id="renovation-cost"></span></div><div class="renovation-finish"><button id="renovation-cancel" class="text-button">取消</button><button id="renovation-apply" class="primary-button" disabled>完成布置</button></div></div>
     <p id="renovation-status" class="renovation-status" role="status" aria-live="polite"></p>
     <div id="renovation-tools" hidden>
-      <div id="furniture-list" class="furniture-list" role="group" aria-label="选择家具"></div>
-      <div class="furniture-catalog" role="group" aria-label="添置家具"><button id="buy-counter">＋ 咖啡柜台</button><button id="buy-table">＋ 桌椅</button><button id="expand-shop">解锁旁边区域</button></div>
-      <div class="furniture-controls"><span id="furniture-selected"></span><div role="group" aria-label="移动与旋转家具"><button data-layout-move="left" aria-label="向左移动一格">←</button><button data-layout-move="up" aria-label="向后移动一格">↑</button><button data-layout-move="down" aria-label="向前移动一格">↓</button><button data-layout-move="right" aria-label="向右移动一格">→</button><button id="rotate-furniture">旋转 ↻</button><button id="store-furniture">收起</button></div></div>
-      <p id="renovation-hint" class="detail-note">选家具，再点地板放置。拖动画面逛店；绿色可以摆放，红色需要调整。重新摆放免费。</p>
-      <div class="renovation-footer"><span id="renovation-cost"></span><button id="renovation-apply" class="primary-button">完成布置</button></div>
+      <div class="catalog-toolbar"><div class="catalog-tabs" role="group" aria-label="家具分类"><button data-catalog-tab="all" aria-pressed="true">全部</button><button data-catalog-tab="counter" aria-pressed="false">柜台</button><button data-catalog-tab="table" aria-pressed="false">桌椅</button><button data-catalog-tab="coffee" aria-pressed="false">咖啡</button><button data-catalog-tab="stored" aria-pressed="false">收纳</button></div><button id="expand-shop" class="expand-shop">解锁旁边区域</button></div>
+      <div id="furniture-list" class="furniture-list" role="group" aria-label="拖出家具，或点击选择"><p id="catalog-empty" hidden>这里暂时没有收起的物件</p></div>
+      <div class="furniture-controls"><span id="furniture-selected"></span><div role="group" aria-label="移动与旋转家具"><button data-layout-move="left" aria-label="向左移动一格">←</button><button data-layout-move="up" aria-label="向后移动一格">↑</button><button data-layout-move="down" aria-label="向前移动一格">↓</button><button data-layout-move="right" aria-label="向右移动一格">→</button><button id="rotate-furniture">旋转 ↻</button><button id="store-furniture">收起</button></div><p id="renovation-hint">拖出物件放进店里，也能直接拖动店内物件。绿色可放，红色需调整。</p></div>
     </div>
   </aside>
+  <div id="catalog-drag-label" class="catalog-drag-label" aria-hidden="true" hidden></div>
   <aside id="welcome-guide" class="welcome-guide" aria-labelledby="guide-title" hidden>
     <div class="guide-topline"><span id="guide-progress" class="guide-progress"></span><button id="guide-skip" class="text-button">跳过引导</button></div>
     <div aria-live="polite" aria-atomic="true"><h2 id="guide-title"></h2><p id="guide-copy"></p></div>
@@ -190,6 +189,10 @@ let renovating = false;
 let layoutDraft: ShopLayout | null = null;
 let selectedFurniture: string | null = null;
 let furnitureListKey = "";
+let catalogTab = "all";
+let layoutDrag: { draft: ShopLayout; id: string; valid: boolean; reason: string; offsetX: number; offsetZ: number } | null = null;
+let catalogPointer: { id: number; x: number; y: number; key: string; dragging: boolean; browsing: boolean; pointerType: string } | null = null;
+let suppressCatalogClick = false;
 // This device-only preference never enters the portable or economic save.
 // Mark the first exposure before showing it: refresh is not a request to repeat.
 const ONBOARDING_KEY = "mellow-bean:welcome-guide:v1";
@@ -340,7 +343,10 @@ function furnitureName(item: FurniturePlacement): string {
   return item.kind === "counter" ? `柜台 ${item.counterId!.slice(-1).toUpperCase()}` : `桌椅 ${item.id.split("-").at(-1)}`;
 }
 function renovationKey(event: Event) {
-  if (renovating && !dialog.open && (event as KeyboardEvent).key === "Escape") { event.preventDefault(); cancelRenovation(); }
+  if (renovating && !dialog.open && (event as KeyboardEvent).key === "Escape") {
+    event.preventDefault();
+    if (layoutDrag || catalogPointer) cancelLayoutDrag(); else cancelRenovation();
+  }
 }
 function startRenovation() {
   if (renovating || saveBlocked || document.hidden || !settleVisibleTail()) return;
@@ -350,7 +356,9 @@ function startRenovation() {
   layoutDraft = null;
   selectedFurniture = null;
   furnitureListKey = "";
+  catalogTab = "all";
   $("#renovation-panel").hidden = false;
+  $<HTMLButtonElement>("#renovation-apply").disabled = true;
   $("#renovation-cancel").focus({ preventScroll: true });
   scene?.selectedCounter(null);
   updateRenovation();
@@ -358,6 +366,7 @@ function startRenovation() {
 }
 function cancelRenovation(restoreFocus = true) {
   if (!renovating) return;
+  cancelLayoutDrag(false);
   // Flush while the editor is still frozen. Its visible wall time is never replayed.
   const unrendered = renderBudget.flush(performance.now());
   if (engine.layoutEditStatus() === "draining") engine.advance(unrendered);
@@ -372,41 +381,127 @@ function cancelRenovation(restoreFocus = true) {
   if (restoreFocus && !document.hidden && !dialog.open) $("#coffee-canvas").focus({ preventScroll: true });
   updateGuide();
 }
-function renderLayoutDraft() {
+function catalogCard(key: string, name: string, art: string, detail: string, tag: string, disabled = false) {
+  const button = document.createElement("button");
+  button.className = "catalog-card";
+  button.setAttribute("data-catalog-key", key);
+  button.setAttribute("aria-label", `${name}，${detail}，拖到店里或点击选择`);
+  button.setAttribute("aria-pressed", String(key === selectedFurniture));
+  button.disabled = disabled;
+  if (key.startsWith("new-")) button.setAttribute("id", key === "new-counter" ? "buy-counter" : "buy-table");
+  else button.setAttribute("data-furniture-id", key);
+  for (const [className, text] of [[`catalog-art ${art}`, ""], ["catalog-name", name], ["catalog-detail", detail], ["catalog-tag", tag]]) {
+    const span = document.createElement("span"); span.className = className; span.textContent = text;
+    if (className.startsWith("catalog-art")) span.setAttribute("aria-hidden", "true");
+    button.append(span);
+  }
+  return button;
+}
+function renderCatalog() {
   if (!layoutDraft) return;
-  const checked = validateLayout(layoutDraft), offer = layoutCost(engine.state, layoutDraft);
-  const message = !checked.ok ? checked.message : !offer.ok ? offer.message : "布置可用。完成后客人会使用新的柜台和座位。";
-  if ($("#renovation-status").textContent !== message) $("#renovation-status").textContent = message;
-  $("#renovation-status").classList.toggle("invalid", !checked.ok || !offer.ok);
-  $<HTMLButtonElement>("#renovation-apply").disabled = !checked.ok || !offer.ok || saveBlocked;
-  $("#renovation-cost").textContent = offer.cost ? `本次添置 ${money(offer.cost)} · 金库 ${money(engine.state.wallet)}` : "免费重新摆放";
-  const item = layoutDraft.furniture.find(item => item.id === selectedFurniture);
-  $("#furniture-selected").textContent = item ? `${furnitureName(item)} · ${item.stored ? "已收起" : `${item.x}, ${item.z} · ${item.rotation * 90}°`}` : "选择一件家具";
-  const owned = item && getLayout(engine.state).furniture.some(owned => owned.id === item.id);
-  $("#store-furniture").textContent = !owned ? "取消添置" : item?.stored ? "放回店内" : "收起";
-  $<HTMLButtonElement>("#store-furniture").disabled = !item;
-  $<HTMLButtonElement>("#rotate-furniture").disabled = !item || !!item.stored;
-  root.querySelectorAll<HTMLButtonElement>("[data-layout-move]").forEach(button => { button.disabled = !item; });
-  $("#buy-counter").textContent = `＋ 柜台 · ${money(LAYOUT_PRICES.counter)}`;
-  $("#buy-table").textContent = `＋ 桌椅 · ${money(LAYOUT_PRICES.table)}`;
-  $<HTMLButtonElement>("#buy-counter").disabled = layoutDraft.furniture.filter(item => item.kind === "counter").length >= MAX_COUNTERS;
-  $<HTMLButtonElement>("#buy-table").disabled = layoutDraft.furniture.filter(item => item.kind === "table").length >= MAX_TABLES;
-  $("#expand-shop").textContent = layoutDraft.expanded ? "旁边区域已解锁" : engine.state.totalServed < LAYOUT_PRICES.expansionServed ? `扩建 · 服务 ${engine.state.totalServed}/${LAYOUT_PRICES.expansionServed} 位` : `扩建 · ${money(LAYOUT_PRICES.expansion)}`;
-  $<HTMLButtonElement>("#expand-shop").disabled = layoutDraft.expanded || engine.state.totalServed < LAYOUT_PRICES.expansionServed;
-  const listKey = JSON.stringify(layoutDraft.furniture.map(item => [item.id, item.stored])) + selectedFurniture;
+  const owned = getLayout(engine.state).furniture;
+  const listKey = JSON.stringify([catalogTab, layoutDraft.furniture.map(item => [item.id, item.stored]), getCoffeeSigns(layoutDraft), engine.state.coffeeLevels]);
   if (listKey !== furnitureListKey) {
     furnitureListKey = listKey;
     const list = $("#furniture-list");
     for (const child of Array.from(list.children)) child.remove();
-    for (const entry of layoutDraft.furniture) {
-      const button = document.createElement("button");
-      button.setAttribute("data-furniture-id", entry.id);
-      button.setAttribute("aria-pressed", String(entry.id === selectedFurniture));
-      button.textContent = `${furnitureName(entry)}${entry.stored ? " · 已收起" : ""}`;
-      list.append(button);
+    for (const item of layoutDraft.furniture) {
+      if (catalogTab !== "all" && catalogTab !== item.kind && !(catalogTab === "stored" && item.stored)) continue;
+      const purchased = owned.some(other => other.id === item.id);
+      const detail = purchased ? (item.stored ? "收纳 ×1 · 免费放回" : "已放置 ×1") : `待添置 · ${money(LAYOUT_PRICES[item.kind])}`;
+      list.append(catalogCard(item.id, furnitureName(item), `${item.kind}-art`, detail, item.stored ? "收纳" : purchased ? "拥有" : "待购"));
     }
+    for (const sign of getCoffeeSigns(layoutDraft)) {
+      if (catalogTab !== "all" && catalogTab !== "coffee" && !(catalogTab === "stored" && sign.stored)) continue;
+      list.append(catalogCard(sign.id, recipeById[sign.recipe].name, `coffee-art ${sign.recipe}-art`, `Lv.${engine.state.coffeeLevels[sign.recipe]} · ${sign.stored ? "收纳 ×1" : "墙面 ×1"}`, "已拥有"));
+    }
+    for (const kind of ["counter", "table"] as const) {
+      if (catalogTab !== "all" && catalogTab !== kind) continue;
+      const count = layoutDraft.furniture.filter(item => item.kind === kind).length, max = kind === "counter" ? MAX_COUNTERS : MAX_TABLES;
+      list.append(catalogCard(`new-${kind}`, kind === "counter" ? "新柜台" : "新桌椅", `${kind}-art`, `${money(LAYOUT_PRICES[kind])} · ${count}/${max}`, "＋ 添置", count >= max));
+    }
+    if (!list.children.length) { const empty = document.createElement("p"); empty.className = "catalog-empty"; empty.textContent = "这里暂时没有收起的物件"; list.append(empty); }
   }
-  scene?.setRenovationPreview(layoutDraft, selectedFurniture, checked.ok && offer.ok);
+  root.querySelectorAll<HTMLButtonElement>("[data-catalog-key]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.catalogKey === selectedFurniture)));
+  root.querySelectorAll<HTMLButtonElement>("[data-catalog-tab]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.catalogTab === catalogTab)));
+}
+function renderLayoutDraft() {
+  const draft = layoutDrag?.draft ?? layoutDraft;
+  if (!draft) return;
+  const checked = validateLayout(draft), offer = layoutCost(engine.state, draft);
+  const valid = layoutDrag ? layoutDrag.valid : checked.ok && offer.ok;
+  const message = layoutDrag ? layoutDrag.reason : !checked.ok ? checked.message : !offer.ok ? offer.message : "拖出物件开始布置 · 完成时统一结算，取消不花金币";
+  if ($("#renovation-status").textContent !== message) $("#renovation-status").textContent = message;
+  $("#renovation-status").classList.toggle("invalid", !valid);
+  $<HTMLButtonElement>("#renovation-apply").disabled = !!layoutDrag || !checked.ok || !offer.ok || saveBlocked;
+  $("#renovation-cost").textContent = offer.cost ? `添置 ${money(offer.cost)} · 金库 ${money(engine.state.wallet)}` : "免费重新摆放";
+  const item = draft.furniture.find(item => item.id === selectedFurniture), sign = getCoffeeSigns(draft).find(item => item.id === selectedFurniture);
+  $("#furniture-selected").textContent = item ? `${furnitureName(item)} · ${item.stored ? "已收起" : `${item.rotation * 90}°`}` : sign ? `${recipeById[sign.recipe].name} · ${sign.stored ? "已收起" : "墙面菜单"}` : "选择一件物品";
+  const owned = sign || item && getLayout(engine.state).furniture.some(owned => owned.id === item.id);
+  $("#store-furniture").textContent = !owned ? "取消添置" : (item ?? sign)?.stored ? "放回店内" : "收起";
+  $<HTMLButtonElement>("#store-furniture").disabled = !!layoutDrag || !item && !sign;
+  $<HTMLButtonElement>("#rotate-furniture").disabled = !!layoutDrag || !item || !!item.stored;
+  root.querySelectorAll<HTMLButtonElement>("[data-layout-move]").forEach(button => { button.disabled = !!layoutDrag || !item && !sign || !!sign && !["left", "right"].includes(button.dataset.layoutMove!); });
+  $("#renovation-hint").textContent = sign ? "咖啡牌拖到墙上摆放；收起只隐藏菜单牌，配方与等级仍保留。" : "拖出物件放进店里，也能直接拖动店内物件。绿色可放，红色需调整。";
+  $("#expand-shop").textContent = draft.expanded ? "旁边区域已解锁" : engine.state.totalServed < LAYOUT_PRICES.expansionServed ? `扩建 · ${engine.state.totalServed}/${LAYOUT_PRICES.expansionServed} 位顾客` : `扩建 · ${money(LAYOUT_PRICES.expansion)}`;
+  $<HTMLButtonElement>("#expand-shop").disabled = !!layoutDrag || draft.expanded || engine.state.totalServed < LAYOUT_PRICES.expansionServed;
+  if (!layoutDrag) renderCatalog();
+  scene?.setRenovationPreview(draft, selectedFurniture, valid);
+}
+function releaseCatalogPointer() {
+  const pointer = catalogPointer; catalogPointer = null;
+  if (pointer && root.hasPointerCapture?.(pointer.id)) root.releasePointerCapture(pointer.id);
+}
+function cancelLayoutDrag(render = true) {
+  layoutDrag = null;
+  if (catalogPointer?.dragging) suppressCatalogClick = true;
+  releaseCatalogPointer();
+  scene?.cancelLayoutDrag();
+  $("#catalog-drag-label").hidden = true;
+  root.classList.remove("placing-furniture");
+  if (render && layoutDraft) renderLayoutDraft();
+}
+function beginLayoutDrag(key: string, clientX?: number, clientY?: number): boolean {
+  if (!layoutDraft || layoutDrag || saveBlocked) return false;
+  const draft: ShopLayout = JSON.parse(JSON.stringify(layoutDraft));
+  const newKind = key === "new-counter" ? "counter" : key === "new-table" ? "table" : null;
+  const item = newKind ? addFurniture(draft, newKind, -4, 3) : draft.furniture.find(item => item.id === key);
+  const sign = getCoffeeSigns(draft).find(item => item.id === key);
+  if (!item && !sign) return false;
+  selectedFurniture = item?.id ?? sign!.id;
+  const origin = clientX !== undefined && clientY !== undefined ? scene?.pickLayoutPlacement(clientX, clientY, selectedFurniture) : null;
+  layoutDrag = { draft, id: selectedFurniture, valid: false, reason: sign ? "拖到墙面空位，松开放置" : "拖到空地，松开放置", offsetX: origin ? (item?.x ?? sign!.x) - origin.x : 0, offsetZ: origin && item ? item.z - origin.z : 0 };
+  root.classList.add("placing-furniture");
+  renderLayoutDraft();
+  return true;
+}
+function moveLayoutDrag(clientX: number, clientY: number) {
+  if (!layoutDrag) return;
+  const label = $("#catalog-drag-label"), bounds = $("#renovation-panel").getBoundingClientRect();
+  label.hidden = false; label.style.left = `${clientX + 14}px`; label.style.top = `${clientY - 36}px`;
+  const overCatalog = clientX >= bounds.left && clientX <= bounds.right && clientY >= bounds.top && clientY <= bounds.bottom;
+  const point = overCatalog ? null : scene?.pickLayoutPlacement(clientX, clientY, layoutDrag.id);
+  const sign = getCoffeeSigns(layoutDrag.draft).find(item => item.id === layoutDrag!.id);
+  if (!point) {
+    layoutDrag.valid = false;
+    layoutDrag.reason = sign ? "请拖到墙面空位；松开将取消这次移动" : "请拖到店内地板；松开将取消这次移动";
+  } else {
+    if (sign) moveCoffeeSign(layoutDrag.draft, sign.id, point.x + layoutDrag.offsetX);
+    else moveFurniture(layoutDrag.draft, layoutDrag.id, point.x + layoutDrag.offsetX, point.z + layoutDrag.offsetZ);
+    const checked = validateLayout(layoutDrag.draft), offer = layoutCost(engine.state, layoutDrag.draft);
+    layoutDrag.valid = checked.ok && offer.ok;
+    layoutDrag.reason = !checked.ok ? checked.message : !offer.ok ? offer.message : "可以摆放 · 松开确认位置";
+  }
+  label.textContent = layoutDrag.valid ? "✓ 松开放置" : "× 暂不能放";
+  label.classList.toggle("invalid", !layoutDrag.valid);
+  renderLayoutDraft();
+}
+function finishLayoutDrag() {
+  if (!layoutDrag) return;
+  const drag = layoutDrag;
+  if (drag.valid) layoutDraft = drag.draft;
+  else toast(drag.reason);
+  cancelLayoutDrag();
 }
 function updateRenovation() {
   if (!renovating) return;
@@ -423,6 +518,11 @@ function updateRenovation() {
     $("#renovation-tools").hidden = true;
   }
 }
+function chooseCatalogItem(key: string) {
+  if (key === "new-counter") positionNewFurniture("counter");
+  else if (key === "new-table") positionNewFurniture("table");
+  else { selectedFurniture = key; renderLayoutDraft(); }
+}
 function positionNewFurniture(kind: "counter" | "table") {
   if (!layoutDraft) return;
   const item = addFurniture(layoutDraft, kind, -4, 3);
@@ -438,8 +538,14 @@ function sceneAction(action: CoffeeSceneAction) {
   if (stopped || dialog.open || offlineJob || fileReview) return;
   if (renovating) {
     if (!layoutDraft) return;
-    if (action.type === "layout-select") { selectedFurniture = action.id; renderLayoutDraft(); }
-    else if (action.type === "layout-cell" && selectedFurniture) { moveFurniture(layoutDraft, selectedFurniture, action.x, action.z); renderLayoutDraft(); }
+    if (action.type === "layout-drag") {
+      if (action.phase === "start") beginLayoutDrag(action.id, action.clientX, action.clientY);
+      else if (action.phase === "cancel") cancelLayoutDrag();
+      else { moveLayoutDrag(action.clientX, action.clientY); if (action.phase === "end") finishLayoutDrag(); }
+    }
+    else if (action.type === "layout-select" && !layoutDrag) { selectedFurniture = action.id; renderLayoutDraft(); }
+    else if (action.type === "layout-wall" && selectedFurniture && !layoutDrag) { moveCoffeeSign(layoutDraft, selectedFurniture, action.x); renderLayoutDraft(); }
+    else if (action.type === "layout-cell" && selectedFurniture && !layoutDrag) { moveFurniture(layoutDraft, selectedFurniture, action.x, action.z); renderLayoutDraft(); }
     return;
   }
   if (action.type === "renovate") startRenovation();
@@ -517,6 +623,7 @@ on(root, "click", (event) => {
     "button",
   );
   if (!button) return;
+  if (button.dataset.catalogKey && suppressCatalogClick && (event as MouseEvent).detail !== 0) { event.preventDefault(); suppressCatalogClick = false; return; }
   if (isRenderMode(button.dataset.renderMode)) {
     const mode = button.dataset.renderMode;
     if (mode === renderMode) return;
@@ -528,32 +635,68 @@ on(root, "click", (event) => {
     catch { toast("本次画面设置已生效，但浏览器未允许保存偏好"); }
     updateRenderModeUI();
     updateUI();
-  } else if (button.dataset.furnitureId && renovating && layoutDraft) {
-    selectedFurniture = button.dataset.furnitureId; renderLayoutDraft();
-  } else if (button.dataset.layoutMove && renovating && layoutDraft && selectedFurniture) {
-    const item = layoutDraft.furniture.find(item => item.id === selectedFurniture)!;
+  } else if (button.dataset.catalogTab && renovating && layoutDraft && !layoutDrag) {
+    catalogTab = button.dataset.catalogTab; renderLayoutDraft();
+  } else if (button.dataset.catalogKey && renovating && layoutDraft && !layoutDrag) {
+    chooseCatalogItem(button.dataset.catalogKey);
+  } else if (button.dataset.layoutMove && renovating && layoutDraft && selectedFurniture && !layoutDrag) {
+    const item = layoutDraft.furniture.find(item => item.id === selectedFurniture);
+    const sign = getCoffeeSigns(layoutDraft).find(item => item.id === selectedFurniture);
     const delta = ({ left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] } as Record<string, number[]>)[button.dataset.layoutMove];
-    if (delta) { moveFurniture(layoutDraft, item.id, item.x + delta[0], item.z + delta[1]); renderLayoutDraft(); }
+    if (delta && item) { moveFurniture(layoutDraft, item.id, item.x + delta[0], item.z + delta[1]); renderLayoutDraft(); }
+    else if (delta && sign && delta[0]) {
+      const slots = coffeeWallSlots(layoutDraft), next = delta[0] < 0 ? [...slots].reverse().find(x => x < sign.x) : slots.find(x => x > sign.x);
+      if (next !== undefined) { moveCoffeeSign(layoutDraft, sign.id, next); renderLayoutDraft(); }
+    }
   } else if (button.dataset.selectRecipe && panel === "recipe" && dialog.open)
     changeRecipe(selected, button.dataset.selectRecipe as RecipeId);
 
 });
 on($("#renovation-cancel"), "click", () => cancelRenovation());
-on($("#renovation-panel"), "keydown", (event) => { if ((event as KeyboardEvent).key === "Escape") { event.preventDefault(); cancelRenovation(); } });
-on($("#buy-counter"), "click", () => positionNewFurniture("counter"));
-on($("#buy-table"), "click", () => positionNewFurniture("table"));
-on($("#expand-shop"), "click", () => { if (!layoutDraft || layoutDraft.expanded || engine.state.totalServed < LAYOUT_PRICES.expansionServed) return; layoutDraft.expanded = true; renderLayoutDraft(); });
-on($("#rotate-furniture"), "click", () => { if (layoutDraft && selectedFurniture) { rotateFurniture(layoutDraft, selectedFurniture); renderLayoutDraft(); } });
+on(root, "pointerdown", event => {
+  const e = event as PointerEvent, button = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-catalog-key]");
+  if (!renovating || !layoutDraft || !button || button.disabled || e.button !== 0 || !e.isPrimary || catalogPointer || layoutDrag) return;
+  suppressCatalogClick = false;
+  catalogPointer = { id: e.pointerId, x: e.clientX, y: e.clientY, key: button.dataset.catalogKey!, dragging: false, browsing: false, pointerType: e.pointerType || "mouse" };
+  try { root.setPointerCapture(e.pointerId); } catch { catalogPointer = null; }
+});
+on(window, "pointermove", event => {
+  const e = event as PointerEvent, pointer = catalogPointer;
+  if (!pointer || pointer.id !== e.pointerId) return;
+  // Touch keeps horizontal browsing native; a vertical pull picks up the card.
+  if (!pointer.dragging && pointer.pointerType === "touch" && Math.abs(e.clientX - pointer.x) > Math.abs(e.clientY - pointer.y) && Math.hypot(e.clientX - pointer.x, e.clientY - pointer.y) >= 6) pointer.browsing = true;
+  if (pointer.browsing) return;
+  if (!pointer.dragging && Math.hypot(e.clientX - pointer.x, e.clientY - pointer.y) >= 6) pointer.dragging = beginLayoutDrag(pointer.key);
+  if (pointer.dragging) { e.preventDefault(); moveLayoutDrag(e.clientX, e.clientY); }
+});
+on(window, "pointerup", event => {
+  const e = event as PointerEvent, pointer = catalogPointer;
+  if (!pointer || pointer.id !== e.pointerId) return;
+  if (pointer.dragging) { e.preventDefault(); suppressCatalogClick = true; moveLayoutDrag(e.clientX, e.clientY); finishLayoutDrag(); }
+  else { suppressCatalogClick = true; releaseCatalogPointer(); if (!pointer.browsing && Math.hypot(e.clientX - pointer.x, e.clientY - pointer.y) < 6) chooseCatalogItem(pointer.key); }
+});
+const cancelCatalogPointer = (event: Event) => { if (catalogPointer?.id === (event as PointerEvent).pointerId) cancelLayoutDrag(); };
+on(window, "pointercancel", cancelCatalogPointer);
+on(root, "lostpointercapture", cancelCatalogPointer);
+on(window, "blur", () => { if (layoutDrag || catalogPointer) cancelLayoutDrag(); });
+on($("#expand-shop"), "click", () => { if (!layoutDraft || layoutDrag || layoutDraft.expanded || engine.state.totalServed < LAYOUT_PRICES.expansionServed) return; layoutDraft.expanded = true; renderLayoutDraft(); });
+on($("#rotate-furniture"), "click", () => { if (layoutDraft && selectedFurniture && !layoutDrag) { rotateFurniture(layoutDraft, selectedFurniture); renderLayoutDraft(); } });
 on($("#store-furniture"), "click", () => {
-  if (!layoutDraft || !selectedFurniture) return;
-  const item = layoutDraft.furniture.find(item => item.id === selectedFurniture)!;
+  if (!layoutDraft || !selectedFurniture || layoutDrag) return;
+  const sign = getCoffeeSigns(layoutDraft).find(item => item.id === selectedFurniture);
+  if (sign) {
+    if (sign.stored) moveCoffeeSign(layoutDraft, sign.id, sign.x); else storeCoffeeSign(layoutDraft, sign.id);
+    renderLayoutDraft(); return;
+  }
+  const item = layoutDraft.furniture.find(item => item.id === selectedFurniture);
+  if (!item) return;
   if (!getLayout(engine.state).furniture.some(owned => owned.id === item.id)) { layoutDraft.furniture = layoutDraft.furniture.filter(other => other.id !== item.id); selectedFurniture = layoutDraft.furniture[0]?.id ?? null; }
   else if (item.stored) moveFurniture(layoutDraft, item.id, item.x, item.z);
   else if (!storeFurniture(layoutDraft, item.id)) { toast("至少保留一个营业柜台"); return; }
   renderLayoutDraft();
 });
 on($("#renovation-apply"), "click", () => {
-  if (!renovating || !layoutDraft || saveBlocked || engine.layoutEditStatus() !== "ready") return;
+  if (!renovating || !layoutDraft || layoutDrag || saveBlocked || engine.layoutEditStatus() !== "ready") return;
   renderBudget.flush(performance.now());
   const result = engine.commitLayout(layoutDraft);
   if (!result.ok) { toast(result.message); renderLayoutDraft(); return; }
@@ -582,7 +725,7 @@ on(canvas, "pointerdown", () => {
 });
 on(canvas, "keydown", (event) => {
   const e = event as KeyboardEvent;
-  if (renovating && e.key === "Escape") { e.preventDefault(); cancelRenovation(); return; }
+  if (renovating && e.key === "Escape") return; // Window handler owns gesture/editor cancellation.
   if (stopped || dialog.open || renovating || !scene || e.altKey || e.ctrlKey || e.metaKey) return;
   if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
     e.preventDefault();
@@ -1341,7 +1484,8 @@ if (routeDiagnostics)
       readRenderStats: () => scene?.readRenderStats(),
       readPerformance: () => performancePanel?.read(),
       readLayoutCell: (x: number, z: number) => scene?.projectLayoutCell(x, z),
-      readRenovation: () => ({ status: engine.layoutEditStatus(), selectedId: selectedFurniture, draft: layoutDraft ? structuredClone(layoutDraft) : null }),
+      readLayoutItem: (id: string) => scene?.projectLayoutItem(id),
+      readRenovation: () => ({ status: engine.layoutEditStatus(), selectedId: selectedFurniture, draft: layoutDraft ? structuredClone(layoutDraft) : null, drag: layoutDrag ? structuredClone({ id: layoutDrag.id, valid: layoutDrag.valid, reason: layoutDrag.reason, draft: layoutDrag.draft }) : null }),
       readFootprints: () => Object.fromEntries(sceneAnchors.map((key) => [key, scene?.getAnchorFootprint(key)])),
       readAnchors: () =>
         Object.fromEntries(

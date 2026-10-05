@@ -21,7 +21,7 @@ import { CreatePlane } from '@babylonjs/core/Meshes/Builders/planeBuilder.js';
 import '@babylonjs/core/Culling/ray.js';
 import type { Counter, CounterId, Customer, RecipeId, ShopLayout, SliceState } from '../core/types';
 import { coffeeBrewSeconds, coffeePrice, WORLD } from '../core/engine';
-import { furnitureCells, getLayout, interactionPoint } from '../core/layout';
+import { COFFEE_WALL, coffeeWallSlots, furnitureCells, getCoffeeSigns, getLayout, interactionPoint } from '../core/layout';
 import { DEFAULT_RENDER_MODE, RENDER_MODES, renderPixelRatio, type RenderMode } from './RenderBudget';
 
 export type CoffeeSceneAction =
@@ -32,7 +32,9 @@ export type CoffeeSceneAction =
   | { type: 'vault' }
   | { type: 'renovate' }
   | { type: 'layout-select'; id: string }
-  | { type: 'layout-cell'; x: number; z: number };
+  | { type: 'layout-cell'; x: number; z: number }
+  | { type: 'layout-wall'; x: number }
+  | { type: 'layout-drag'; phase: 'start' | 'move' | 'end' | 'cancel'; id: string; clientX: number; clientY: number };
 
 export type CoffeeSceneAnchor =
   | 'invite' | `${CounterId}-upgrade` | `${CounterId}-recipe`
@@ -45,7 +47,7 @@ export interface CoffeeSceneOptions { engine?: AbstractEngine; shadows?: boolean
 type Shape = 'box' | 'cylinder' | 'sphere' | 'ring';
 type PointerGesture = { id: number; x: number; y: number; lastX: number; lastY: number; time: number; dragged: boolean; target: Mesh | null; targetPoint: Vector3 | null; invalidated: boolean; action?: CoffeeSceneAction };
 type Label = { mesh: Mesh; texture: DynamicTexture | null; key: string };
-type Menu = { label: Label; level: number };
+type Menu = { root: TransformNode; label: Label; level: number };
 type Person = {
   root: TransformNode;
   leftArm: TransformNode;
@@ -86,8 +88,7 @@ const SKINS = ['#e6b88d', '#bb855e', '#f1ccb0', '#916247', '#d9a780'];
 const SHIRTS = ['#c86e5d', '#5c9ca6', '#d3ac50', '#8b84ae', '#779f74', '#c28798'];
 const HAIR = ['#3d3531', '#6c4531', '#d5b677', '#493b49', '#aba99d'];
 const TAU = Math.PI * 2;
-// Above the rug ink surfaces, so cached furniture shadows
-// can coexist with visible, cheap moving contact disks.
+// Raised slightly above the continuous floor to prevent contact-shadow z-fighting.
 const CONTACT_SHADOW_Y = .074;
 const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
 // Fixed-camera room coordinates, shared by its solids and their world-scaled patterns.
@@ -125,6 +126,7 @@ export class CoffeeScene {
   private readonly tables = new Map<string, TransformNode>();
   private readonly legacyFurniture: TransformNode[] = [];
   private readonly gridCells = new Map<string, Mesh>();
+  private readonly wallCells = new Map<number, Mesh>();
   private expansionRoot!: TransformNode;
   private expansionFloor!: Mesh;
   private expansionGate!: TransformNode;
@@ -222,6 +224,8 @@ export class CoffeeScene {
     canvas.addEventListener('pointerup', this.handleUp);
     canvas.addEventListener('pointercancel', this.handleCancel);
     canvas.addEventListener('lostpointercapture', this.handleCancel);
+    canvas.addEventListener('blur', this.handleBlur);
+    if (typeof window !== 'undefined') window.addEventListener('blur', this.handleBlur);
     this.resize();
   }
 
@@ -300,9 +304,45 @@ export class CoffeeScene {
     return { x: p.x, y: p.y, visible: !this.disposed && p.z >= 0 && p.z <= 1 && p.x >= 0 && p.x <= rect.width && p.y >= 0 && p.y <= rect.height };
   }
 
+  /** CSS position of the presented object, including stored catalogue items. */
+  projectLayoutItem(id: string): AnchorProjection {
+    const layout = this.previewLayout ?? this.displayedLayout;
+    const item = layout?.furniture.find(item => item.id === id);
+    const sign = layout && getCoffeeSigns(layout).find(item => item.id === id);
+    if (!item && !sign || this.disposed) return { x: 0, y: 0, visible: false };
+    const p = this.projectWorld(sign ? new Vector3(sign.x, COFFEE_WALL.y, COFFEE_WALL.z + .12) : new Vector3(item!.x, .55, item!.z));
+    const rect = this.canvas.getBoundingClientRect();
+    return { x: p.x, y: p.y, visible: p.z >= 0 && p.z <= 1 && p.x >= 0 && p.x <= rect.width && p.y >= 0 && p.y <= rect.height };
+  }
+
+  /**
+   * Pointer projection is independent of foreground furniture, people and editor ink.
+   * Keep out-of-bounds rounded coordinates for a red draft; never clamp an illegal drop.
+   * Wall items only project within the physical board-height band, not onto the floor.
+   */
+  pickLayoutPlacement(clientX: number, clientY: number, id: string): { x: number; z: number } | null {
+    const layout = this.previewLayout ?? this.displayedLayout;
+    const coordinates = this.pickCoordinates(clientX, clientY);
+    if (!layout || !coordinates) return null;
+    const wall = getCoffeeSigns(layout).some(sign => sign.id === id);
+    this.scene.updateTransformMatrix(true);
+    const ray = this.scene.createPickingRay(coordinates.x, coordinates.y, Matrix.Identity(), this.camera);
+    const denominator = wall ? ray.direction.z : ray.direction.y;
+    if (Math.abs(denominator) < 1e-8) return null;
+    const distance = ((wall ? COFFEE_WALL.z : ROOM.floorY) - (wall ? ray.origin.z : ray.origin.y)) / denominator;
+    if (!Number.isFinite(distance) || distance < 0) return null;
+    const position = ray.origin.add(ray.direction.scale(distance));
+    if (wall && Math.abs(position.y - COFFEE_WALL.y) > 1.15) return null;
+    return { x: Math.round(position.x) || 0, z: wall ? COFFEE_WALL.z : Math.round(position.z) || 0 };
+  }
+
+  /** Cancel only the current gesture, without re-entering the host's draft controller. */
+  cancelLayoutDrag(): void { this.releasePointer(false); }
+
   private reconcileLayout(layout: ShopLayout): void {
     // Traffic scheduling and economy ticks do not rebuild or reallocate furniture.
-    const signature = JSON.stringify([layout.active, layout.expanded, layout.furniture.map(item => [item.id, item.kind, item.counterId, item.x, item.z, item.rotation, item.stored])]);
+    const signs = getCoffeeSigns(layout);
+    const signature = JSON.stringify([layout.active, layout.expanded, layout.furniture.map(item => [item.id, item.kind, item.counterId, item.x, item.z, item.rotation, item.stored]), signs.map(sign => [sign.id, sign.x, sign.stored])]);
     this.displayedLayout = layout;
     if (signature === this.layoutSignature) return;
     this.layoutSignature = signature;
@@ -346,6 +386,17 @@ export class CoffeeScene {
         root.rotation.y = angle;
         root.computeWorldMatrix(true);
         for (const mesh of root.getChildMeshes()) mesh.computeWorldMatrix(true);
+      }
+    }
+    for (const sign of signs) {
+      const menu = this.menus.get(sign.recipe);
+      if (!menu) continue;
+      menu.root.setEnabled(!sign.stored);
+      if (menu.root.position.x !== sign.x) {
+        for (const mesh of menu.root.getChildMeshes()) mesh.unfreezeWorldMatrix();
+        menu.root.position.x = sign.x;
+        menu.root.computeWorldMatrix(true);
+        for (const mesh of menu.root.getChildMeshes()) mesh.computeWorldMatrix(true);
       }
     }
     this.expansionGate.setEnabled(!layout.expanded);
@@ -443,6 +494,8 @@ export class CoffeeScene {
     if (signature !== this.gridSignature) {
       for (const mesh of this.gridCells.values()) mesh.dispose(false, false);
       this.gridCells.clear();
+      for (const mesh of this.wallCells.values()) mesh.dispose(false, false);
+      this.wallCells.clear();
       this.gridSignature = signature;
       if (layout) {
         for (let x = -7; x <= (layout.expanded ? 16 : 10); x++) for (let z = -3; z <= 9; z++) {
@@ -453,6 +506,14 @@ export class CoffeeScene {
           cell.freezeWorldMatrix();
           this.gridCells.set(`${x},${z}`, cell);
         }
+        for (const x of coffeeWallSlots(layout)) {
+          const cell = this.box(`renovation-wall-${x}`, .94, 2.16, .015, x, COFFEE_WALL.y, COFFEE_WALL.z - .105, '#f6edcd', undefined, false);
+          cell.material = this.material('#f6edcd', false, .25);
+          cell.receiveShadows = false;
+          cell.metadata = { coffeeAction: { type: 'layout-wall', x }, coffeeRenovationWall: true };
+          cell.freezeWorldMatrix();
+          this.wallCells.set(x, cell);
+        }
       }
     }
     if (!layout) {
@@ -460,11 +521,10 @@ export class CoffeeScene {
       this.renovationGhost = null;
       return;
     }
+    const sign = getCoffeeSigns(layout).find(item => item.id === this.renovationSelected && !item.stored);
+    for (const cell of this.wallCells.values()) cell.setEnabled(Boolean(this.renovationSelected?.startsWith('menu-')));
     const selected = layout.furniture.find(item => item.id === this.renovationSelected && !item.stored);
-    if (!selected) { this.renovationGhost?.setEnabled(false); return; }
-    const cells = furnitureCells(selected);
-    const minX = Math.min(...cells.map(cell => cell.x)), maxX = Math.max(...cells.map(cell => cell.x));
-    const minZ = Math.min(...cells.map(cell => cell.z)), maxZ = Math.max(...cells.map(cell => cell.z));
+    if (!selected && !sign) { this.renovationGhost?.setEnabled(false); return; }
     if (!this.renovationGhost) {
       this.renovationGhost = this.box('renovation-footprint-ghost', 1, .055, 1, 0, .115, 0, '#71b684', undefined, false);
       this.renovationGhost.isPickable = false;
@@ -472,10 +532,18 @@ export class CoffeeScene {
     }
     this.renovationGhost.unfreezeWorldMatrix();
     this.renovationGhost.setEnabled(true);
-    this.renovationGhost.scaling.set(maxX - minX + .98, .055, maxZ - minZ + .98);
-    this.renovationGhost.position.set((minX + maxX) / 2, .115, (minZ + maxZ) / 2);
+    if (sign) {
+      this.renovationGhost.scaling.set(COFFEE_WALL.width + .18, 2.3, .025);
+      this.renovationGhost.position.set(sign.x, COFFEE_WALL.y, COFFEE_WALL.z - .095);
+    } else {
+      const cells = furnitureCells(selected!);
+      const minX = Math.min(...cells.map(cell => cell.x)), maxX = Math.max(...cells.map(cell => cell.x));
+      const minZ = Math.min(...cells.map(cell => cell.z)), maxZ = Math.max(...cells.map(cell => cell.z));
+      this.renovationGhost.scaling.set(maxX - minX + .98, .055, maxZ - minZ + .98);
+      this.renovationGhost.position.set((minX + maxX) / 2, .115, (minZ + maxZ) / 2);
+    }
     this.renovationGhost.material = this.material(this.renovationValid ? '#71b684' : '#d76262', true, .55);
-    this.renovationGhost.metadata = { coffeeFootprint: selected.id, coffeePlacementValid: this.renovationValid };
+    this.renovationGhost.metadata = { coffeeFootprint: (sign ?? selected)!.id, coffeePlacementValid: this.renovationValid, coffeePlacementSurface: sign ? 'wall' : 'floor' };
   }
 
   /** Read the actual presented mesh after update; viewport bounds do not assert occlusion. */
@@ -605,6 +673,8 @@ export class CoffeeScene {
     this.canvas.removeEventListener('pointerup', this.handleUp);
     this.canvas.removeEventListener('pointercancel', this.handleCancel);
     this.canvas.removeEventListener('lostpointercapture', this.handleCancel);
+    this.canvas.removeEventListener('blur', this.handleBlur);
+    if (typeof window !== 'undefined') window.removeEventListener('blur', this.handleBlur);
     this.shadowGenerator?.dispose();
     // Shared materials and geometries are disposed once with the scene, not per character.
     this.scene.dispose();
@@ -614,6 +684,7 @@ export class CoffeeScene {
     this.menus.clear();
     this.tables.clear();
     this.gridCells.clear();
+    this.wallCells.clear();
     this.legacyFurniture.length = 0;
     this.previewLayout = this.liveLayout = this.displayedLayout = null;
     this.materials.clear();
@@ -637,20 +708,33 @@ export class CoffeeScene {
   private readonly handleMove = (event: PointerEvent): void => {
     const down = this.down;
     if (!this.interactionEnabled || !down || event.pointerId !== down.id) return;
-    if (Math.hypot(event.clientX - down.x, event.clientY - down.y) > 9) down.dragged = true;
+    const startsDrag = !down.dragged && Math.hypot(event.clientX - down.x, event.clientY - down.y) > 9;
+    if (startsDrag) down.dragged = true;
     if (down.dragged) {
-      this.panBy(down.lastX - event.clientX, down.lastY - event.clientY);
+      if (down.action?.type === 'layout-select') {
+        event.preventDefault?.();
+        if (startsDrag) this.onAction({ type: 'layout-drag', phase: 'start', id: down.action.id, clientX: down.x, clientY: down.y });
+        // Host callbacks can synchronously cancel editing or disable interaction.
+        if (this.down !== down || !this.interactionEnabled) return;
+        this.onAction({ type: 'layout-drag', phase: 'move', id: down.action.id, clientX: event.clientX, clientY: event.clientY });
+      } else this.panBy(down.lastX - event.clientX, down.lastY - event.clientY);
     }
     down.lastX = event.clientX; down.lastY = event.clientY;
   };
+  private readonly handleBlur = (): void => { this.releasePointer(); };
   private readonly handleCancel = (event: PointerEvent): void => {
     if (this.down && event.pointerId === this.down.id) this.releasePointer();
   };
   private readonly handleUp = (event: PointerEvent): void => {
     const down = this.down;
     if (!this.interactionEnabled || !down || event.pointerId !== down.id) return;
-    this.releasePointer();
-    if (this.disposed || !this.interactionEnabled || down.dragged || down.invalidated || event.timeStamp - down.time > 800) return;
+    this.releasePointer(false);
+    if (this.disposed || !this.interactionEnabled) return;
+    if (down.dragged) {
+      if (down.action?.type === 'layout-select') this.onAction({ type: 'layout-drag', phase: 'end', id: down.action.id, clientX: event.clientX, clientY: event.clientY });
+      return;
+    }
+    if (down.invalidated || event.timeStamp - down.time > 800) return;
     if (Math.hypot(event.clientX - down.x, event.clientY - down.y) > 9) return;
     const target = this.pickAt(event.clientX, event.clientY);
     const action = this.actionForMesh(target);
@@ -673,19 +757,23 @@ export class CoffeeScene {
   }
 
   private pickAt(clientX: number, clientY: number): Mesh | null {
+    const coordinates = this.pickCoordinates(clientX, clientY);
+    if (!coordinates) return null;
+    this.scene.updateTransformMatrix(true);
+    // Pick the front visible solid, including people, furniture and all control mounts.
+    // Restricting the predicate to actions would incorrectly click through occluding objects.
+    const pick = this.scene.pick(coordinates.x, coordinates.y, undefined, false, this.camera);
+    return pick?.hit && pick.pickedMesh instanceof Mesh ? pick.pickedMesh : null;
+  }
+
+  private pickCoordinates(clientX: number, clientY: number): { x: number; y: number } | null {
     const rect = this.canvas.getBoundingClientRect();
-    if (this.disposed || !rect.width || !rect.height) return null;
+    if (this.disposed || !Number.isFinite(clientX) || !Number.isFinite(clientY) || !rect.width || !rect.height) return null;
     const cssX = clientX - rect.left, cssY = clientY - rect.top;
     if (cssX < 0 || cssY < 0 || cssX > rect.width || cssY > rect.height) return null;
     // Babylon applies hardware scaling in its ray helper; convert to logical coordinates once.
     const scale = this.engine.getHardwareScalingLevel();
-    const x = cssX * this.engine.getRenderWidth() * scale / rect.width;
-    const y = cssY * this.engine.getRenderHeight() * scale / rect.height;
-    this.scene.updateTransformMatrix(true);
-    // Pick the front visible solid, including people, furniture and all control mounts.
-    // Restricting the predicate to actions would incorrectly click through occluding objects.
-    const pick = this.scene.pick(x, y, undefined, false, this.camera);
-    return pick?.hit && pick.pickedMesh instanceof Mesh ? pick.pickedMesh : null;
+    return { x: cssX * this.engine.getRenderWidth() * scale / rect.width, y: cssY * this.engine.getRenderHeight() * scale / rect.height };
   }
 
   private visibleSurface(mesh: Mesh): boolean {
@@ -717,10 +805,12 @@ export class CoffeeScene {
     return mesh.getBoundingInfo().boundingBox.vectorsWorld.map(point => this.projectWorld(point));
   }
 
-  private releasePointer(): void {
-    const id = this.down?.id;
+  private releasePointer(cancel = true): void {
+    const down = this.down;
+    const id = down?.id;
     this.down = null;
     if (id !== undefined && this.canvas.hasPointerCapture(id)) this.canvas.releasePointerCapture(id);
+    if (cancel && down?.dragged && down.action?.type === 'layout-select') this.onAction({ type: 'layout-drag', phase: 'cancel', id: down.action.id, clientX: down.lastX, clientY: down.lastY });
   }
 
   private anchorWorld(mesh: Mesh): Vector3 {
@@ -858,9 +948,6 @@ export class CoffeeScene {
     this.box('wall-chair-rail', ROOM.width, .12, .17, 0, 1.28, ROOM.rearZ + .085, COLORS.woodLight, undefined, false);
     // The high rail is above the vault's separate wall-mounted upgrade plaque.
     this.box('wall-picture-rail', ROOM.width, .12, .15, 0, 4.82, ROOM.rearZ + .075, COLORS.woodLight, undefined, false);
-    // The back-of-house route visually separates the cash manager from customer queues.
-    this.box('manager-route', 10.4, 0.018, 0.86, 4.4, 0.009, WORLD.backZ, '#d4d2b8', undefined, false);
-    for (let x = -.5; x < 9.5; x += 1.1) this.box(`route-dash-${x}`, 0.4, 0.008, 0.055, x, 0.022, WORLD.backZ - .05, '#f7f1dc', undefined, false);
     const brand = this.makeLabel('brand-sign', 3.9, 0.72, new Vector3(-6.45, 2.92, -3.42), undefined, { type: 'renovate' });
     this.paintLabel(brand, 'brand', (ctx, w, h) => {
       this.roundRect(ctx, 8, 8, w - 16, h - 16, 20, '#315d54');
@@ -871,35 +958,9 @@ export class CoffeeScene {
     this.makePlant('plant-right', 11.3, -2.55, 0.85);
     this.makePlant('entrance-plant', -9.0, 2.55, 0.7);
     this.makeBench();
-    for (const [x, shade] of [[0, COLORS.teal], [5, COLORS.rose]] as const) {
-      const rug = this.box(`queue-rug-${x}`, 2.33, 0.035, 5.55, x, 0.0175, 3.76, '#fcf7e9', undefined, false);
-      rug.receiveShadows = true;
-      const center = this.box(`queue-rug-color-${x}`, 2.08, 0.01, 5.3, x, 0.04, 3.76, shade, undefined, false);
-      center.receiveShadows = true;
-    }
-    // The counter-side aisles join a separate return lane to the entrance-side boundary.
-    // Crossings yield in the core; no threshold suggests disappearing at the rug end.
-    const departureWidth = .65, returnDepth = .54;
-    const returnNearZ = WORLD.exitZ - returnDepth / 2;
-    for (const x of [0, 5]) {
-      const exitX = x + WORLD.departureOffsetX;
-      // Meet the cross-strip at its near edge, avoiding overlapping coplanar tops.
-      const aisle = this.box(`departure-aisle-${x}`, departureWidth, .012, returnNearZ - WORLD.serviceZ,
-        exitX, .006, (returnNearZ + WORLD.serviceZ) / 2, '#ded6c0', undefined, false);
-      aisle.metadata = { coffeeFlow: 'outgoing' };
-    }
-    // Cover the entire outer aisle width; stopping on its centerline left the
-    // screen-left bend missing its outside quarter under the oblique camera.
-    const returnStartX = 5 + WORLD.departureOffsetX + departureWidth / 2;
-    const returnLane = this.box('departure-return-lane', returnStartX - WORLD.exitX, .012, returnDepth,
-      (returnStartX + WORLD.exitX) / 2, .006, WORLD.exitZ, '#ded6c0', undefined, false);
-    returnLane.metadata = { coffeeFlow: 'outgoing' };
-    const threshold = this.box('customer-exit-boundary', .18, .02, .72, WORLD.exitX, .01, WORLD.exitZ, '#8fafa1', undefined, false);
-    threshold.metadata = { coffeeFlow: 'outgoing', coffeeRouteEndpoint: true };
-    // The previous welcome strip at z=5 incorrectly advertised the shared return route.
-    this.box('welcome-runner', 11.6, .012, .68, -.5, .006, WORLD.inboundZ, '#d5ccb4', undefined, false);
+    // Customer and manager routes belong to the simulation; the floor stays bare tile.
     for (const node of [...this.scene.meshes, ...this.scene.transformNodes]) {
-      if (/^(manager-route$|route-dash-|queue-rug-|departure-aisle-|departure-return-lane$|customer-exit-boundary$|welcome-runner$|left-waiting-bench$|plant-right$)/.test(node.name)) this.legacyFurniture.push(node);
+      if (/^(left-waiting-bench$|plant-right$)/.test(node.name)) this.legacyFurniture.push(node);
     }
   }
 
@@ -1015,12 +1076,15 @@ export class CoffeeScene {
 
   private makeMenu(recipe: RecipeId, x: number): void {
     const action: CoffeeSceneAction = { type: 'menu', recipe };
-    const frame = this.box(`menu-${recipe}-frame`, 3.52, 2.1, .17, x, 2.70, -3.45, COLORS.woodDark);
+    const root = new TransformNode(`menu-${recipe}-furniture`, this.scene);
+    root.position.set(x, COFFEE_WALL.y, COFFEE_WALL.z);
+    root.metadata = { coffeeFurnitureId: `menu-${recipe}`, coffeeFurnitureKind: 'coffee-sign' };
+    const frame = this.box(`menu-${recipe}-frame`, COFFEE_WALL.width, 2.1, .17, 0, 0, 0, COLORS.woodDark, root);
     frame.isPickable = true; frame.metadata = { coffeeAction: action };
-    for (const dx of [-1.15, 1.15]) this.box(`menu-${recipe}-hanger-${dx}`, .045, .36, .06, x + dx, 3.84, -3.39, COLORS.gold, undefined, false);
-    const board = this.makeLabel(`menu-${recipe}`, 3.3, 1.90, new Vector3(x, 2.70, -3.33), undefined, action, 768, 448);
+    for (const dx of [-1.15, 1.15]) this.box(`menu-${recipe}-hanger-${dx}`, .045, .36, .06, dx, 1.14, .06, COLORS.gold, root, false);
+    const board = this.makeLabel(`menu-${recipe}`, 3.3, 1.90, new Vector3(0, 0, .12), root, action, 768, 448);
     this.registerAnchor(`menu-${recipe}`, board.mesh);
-    const menu: Menu = { label: board, level: -1 };
+    const menu: Menu = { root, label: board, level: -1 };
     this.menus.set(recipe, menu);
     this.updateMenu(recipe, menu, 1);
   }
@@ -1325,9 +1389,6 @@ export class CoffeeScene {
       this.roundRect(ctx, 8, 8, w - 16, h - 16, 30, '#dca84b');
       this.text(ctx, '迎接顾客  +', w / 2, h / 2 + 2, 94, '#ffffff');
     });
-    this.box('entry-arrow-stem', 0.62, 0.019, 0.14, -7.4, 0.066, 5.01, '#fff4da', undefined, false);
-    const arrow = this.box('entry-arrow-top', 0.32, 0.019, 0.11, -7.15, 0.067, 4.89, '#fff4da', undefined, false); arrow.rotation.y = Math.PI / 4;
-    const arrow2 = this.box('entry-arrow-bottom', 0.32, 0.019, 0.11, -7.15, 0.067, 5.13, '#fff4da', undefined, false); arrow2.rotation.y = -Math.PI / 4;
     pad.isPickable = true; pad.metadata = { coffeeAction: { type: 'invite' } };
     return label;
   }

@@ -43,3 +43,5 @@
 设置与首次开店引导：[规格](product/specs/settings-onboarding.md)、[计划](testing/plans/settings-onboarding.md)、[TC-3D-024](testing/cases/slice/TC-3D-024.md)。设置只有收起的画面与小店存档，故障恢复并入存档情境；新店四步可跳过引导只在当前浏览器首次出现，不改变经营/文件版本。
 
 家具到扩建闭环：[规格](product/specs/furniture-expansion.md)、[计划](testing/plans/furniture-expansion.md)、[TC-3D-025](testing/cases/slice/TC-3D-025.md)。独立装修草稿、功能柜台/桌椅、可达网格路径、堂食与外带及一次相邻扩建；经济3/布局1/文件3，旧双柜台原位迁移，数值仍暂定。
+
+底部装修目录与真实拖拽：[规格](product/specs/renovation-drag-catalog.md)、[计划](testing/plans/renovation-drag-catalog.md)、[TC-3D-026](testing/cases/slice/TC-3D-026.md)。柜台/桌椅/咖啡墙牌统一分类底栏，候选拖放与提交分离，移除全部地毯和路线箭头；布局2兼容布局1，经济/文件仍3。

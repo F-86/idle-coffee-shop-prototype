@@ -336,7 +336,7 @@ test('TC-3D-006 pause freezes animation, disposal removes listeners and late inp
   const before = [pose(customer), pose(leg)];
   for (let frame = 0; frame < 10; frame++) f.renderer.update(state, .1);
   assert.deepEqual([pose(customer), pose(leg)], before);
-  assert.equal(f.canvas.listenerCount(), 5);
+  assert.equal(f.canvas.listenerCount(), 6);
   f.renderer.dispose();
   assert.equal(f.canvas.listenerCount(), 0);
   assert.equal(f.renderer.scene.isDisposed, true);
@@ -1015,14 +1015,7 @@ test('TC-3D-010 continuous floor and wall carry aligned matte patterns with join
       assert.deepEqual(mesh.material.specularColor.asArray(), [0, 0, 0]);
       assert.deepEqual(mesh.material.emissiveColor.asArray(), [0, 0, 0]);
     }
-    for (const x of [0, 5]) {
-      const rug = bounds(scene.getMeshByName(`queue-rug-${x}`));
-      const color = bounds(scene.getMeshByName(`queue-rug-color-${x}`));
-      assert.ok(Math.abs(rug.minimumWorld.y - floorBounds.maximumWorld.y) < 1e-6, 'rug rests on the same continuous floor');
-      assert.ok(Math.abs(color.minimumWorld.y - rug.maximumWorld.y) < 1e-6, 'rug color is seated on its backing');
-      assert.equal(scene.getMeshByName(`queue-arrow-l-${x}`), null, 'obsolete rug arrow is removed');
-      assert.equal(scene.getMeshByName(`queue-arrow-r-${x}`), null);
-    }
+    assert.ok(!scene.meshes.some(mesh => /^(queue-rug-|entry-arrow-)/.test(mesh.name)), 'bare floor has no queue rugs or arrows');
     assert.ok(scene.getMeshByName('entrance-pad-border'), 'the functional entrance remains unchanged by removing queue markers');
     assert.equal(scene.activeCamera.mode, 1, 'the fixed orthographic room camera remains intentional');
   } finally { f.dispose(); }
@@ -1167,31 +1160,18 @@ test('TC-3D-011 static work is frozen while live actors, cups, cash parents and 
   } finally { f.dispose(); }
 });
 
-test('TC-3D-013 side aisles join a separate return lane ending beyond the entrance, with no obsolete arrows', () => {
+test('TC-3D-026 floor has no route carpets or arrows while simulation endpoints remain unchanged', () => {
   const f = fixture();
   try {
-    const scene = f.renderer.scene;
-    const exit = scene.getMeshByName('customer-exit-boundary');
-    assert.equal(exit.position.x, WORLD.exitX);
-    assert.equal(exit.position.z, WORLD.exitZ);
-    assert.equal(exit.metadata.coffeeRouteEndpoint, true);
-    assert.ok(WORLD.exitX < WORLD.entryX - 2);
-    const returnLane = bounds(scene.getMeshByName('departure-return-lane'));
-    assert.ok(Math.abs(returnLane.minimumWorld.x - WORLD.exitX) < 1e-6);
-    assert.ok(Math.abs(returnLane.maximumWorld.x - bounds(scene.getMeshByName('departure-aisle-5')).maximumWorld.x) < 1e-6, 'return strip reaches the outer edge of the final aisle');
-    const incoming = bounds(scene.getMeshByName('welcome-runner'));
-    assert.ok(returnLane.maximumWorld.z < incoming.minimumWorld.z, 'opposing horizontal roads are visibly separate');
-    for (const x of [0, 5]) {
-      assert.equal(scene.getMeshByName(`customer-exit-${x}`), null);
-      const aisle = scene.getMeshByName(`departure-aisle-${x}`);
-      assert.ok(bounds(aisle).minimumWorld.x > x + .9, 'departure geometry is alongside the queue');
-      assert.ok(Math.abs(bounds(aisle).maximumWorld.z - returnLane.minimumWorld.z) < 1e-6, 'aisle meets the near edge of the return strip');
-    }
-    assert.ok(!scene.meshes.some(mesh => /^(queue|departure)-arrow-/.test(mesh.name)));
+    const removed = /^(queue-rug-|manager-route$|route-dash-|departure-aisle-|departure-return-lane$|customer-exit-boundary$|welcome-runner$|(?:queue|departure|entry)-arrow-)/;
+    assert.ok(!f.renderer.scene.meshes.some(mesh => removed.test(mesh.name)));
+    assert.ok(WORLD.exitX < WORLD.entryX - 2, 'removing route decoration does not rewrite simulation endpoints');
+    assert.equal(f.renderer.scene.getMeshByName('continuous-shop-floor').metadata.coffeeSurface, 'floor');
+    assert.ok(f.renderer.scene.getMeshByName('entrance-invite-pad'));
   } finally { f.dispose(); }
 });
 
-test('TC-3D-011 moving contact disks remain above the physical rug/arrow surfaces', () => {
+test('TC-3D-026 moving contact disks remain above the uninterrupted physical tile floor', () => {
   const f = fixture();
   try {
     const state = createInitialState();
@@ -1199,12 +1179,9 @@ test('TC-3D-011 moving contact disks remain above the physical rug/arrow surface
     f.renderer.update(state, 0);
     const scene = f.renderer.scene;
     const shadow = bounds(scene.getMeshByName('customer-99-contact-shadow'));
-    for (const name of ['queue-rug-0', 'queue-rug-color-0']) {
-      assert.ok(shadow.minimumWorld.y > bounds(scene.getMeshByName(name)).maximumWorld.y, `${name} cannot hide the only moving contact shadow`);
-    }
+    assert.ok(shadow.minimumWorld.y > bounds(scene.getMeshByName('continuous-shop-floor')).maximumWorld.y);
   } finally { f.dispose(); }
 });
-
 
 test('TC-3D-011 cached shadow bounds cover static furniture and upgrades invalidate once (NullEngine math)', () => {
   const f = fixture();
@@ -1320,32 +1297,17 @@ for (const [width, height] of [[1280, 900], [390, 844], [844, 390]]) {
   }
 }
 
-test('TC-3D-018 full-width departure corners are filled and meet without overlapping top surfaces (geometry/rays only)', () => {
+test('TC-3D-026 former departure corners expose one continuous tile surface (geometry/rays only)', () => {
   const f = fixture();
   try {
-    const scene = f.renderer.scene;
-    const laneMesh = scene.getMeshByName('departure-return-lane');
-    const lane = bounds(laneMesh);
-    const outer = bounds(scene.getMeshByName('departure-aisle-5'));
-    assert.ok(Math.abs(lane.maximumWorld.x - outer.maximumWorld.x) < 1e-6, 'screen-left outside bend reaches the full width of the B side aisle');
-    for (const counterX of [0, 5]) {
-      const aisleMesh = scene.getMeshByName(`departure-aisle-${counterX}`);
-      const aisle = bounds(aisleMesh);
-      assert.ok(Math.abs(aisle.maximumWorld.z - lane.minimumWorld.z) < 1e-6, 'side aisle meets the near edge, with neither a gap nor overlapping coplanar area');
-      assert.ok(Math.abs(aisle.maximumWorld.y - lane.maximumWorld.y) < 1e-6, 'one continuous carpet top height');
-      assert.equal(aisleMesh.material, laneMesh.material, 'same carpet material on each side of the join');
-      // Independently sample the complete bend footprint, including the missing outer
-      // quarter of the B junction. A centerline-only check misses the screenshot defect.
-      for (let u = 0; u <= 12; u++) {
-        for (let v = 0; v <= 12; v++) {
-          const x = aisle.minimumWorld.x + .001 + (aisle.maximumWorld.x - aisle.minimumWorld.x - .002) * u / 12;
-          const z = lane.minimumWorld.z - .05 + (lane.maximumWorld.z - lane.minimumWorld.z + .049) * v / 12;
-          const ray = new Ray(new Vector3(x, .5, z), new Vector3(0, -1, 0), 1);
-          const hit = scene.pickWithRay(ray, mesh => mesh === aisleMesh || mesh === laneMesh);
-          assert.equal(hit?.hit, true, `no exposed floor inside corner at (${x}, ${z})`);
-          assert.ok(Math.abs(hit.pickedPoint.y - lane.maximumWorld.y) < 1e-6, 'no raised filler block');
-        }
-      }
+    const floor = f.renderer.scene.getMeshByName('continuous-shop-floor');
+    for (const counterX of [0, 5]) for (let u = 0; u <= 12; u++) for (let v = 0; v <= 12; v++) {
+      const x = counterX + WORLD.departureOffsetX - .32 + .64 * u / 12;
+      const z = WORLD.exitZ - .32 + .64 * v / 12;
+      const ray = new Ray(new Vector3(x, .5, z), new Vector3(0, -1, 0), 1);
+      const hit = f.renderer.scene.pickWithRay(ray);
+      assert.equal(hit?.pickedMesh, floor, `bare tile at former carpet join (${x}, ${z})`);
+      assert.ok(Math.abs(hit.pickedPoint.y) < 1e-6);
     }
   } finally { f.dispose(); }
 });

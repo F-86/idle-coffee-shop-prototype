@@ -4,6 +4,8 @@ import { getLayout } from './layout';
 import type { RecipeId, SliceState } from './types';
 
 export const PORTABLE_FORMAT = 'mellow-bean-portable-save';
+// Layout revisions are validated/migrated inside the state. The v3 envelope and
+// overview do not change for wall placements; original v3/layout1 files still load.
 export const PORTABLE_VERSION = 3;
 export const MAX_PORTABLE_BYTES = 256 * 1024;
 export interface SaveLineage { saveId: string; revision: number }

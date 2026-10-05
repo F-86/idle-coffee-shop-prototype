@@ -45,3 +45,5 @@ iCloud/CloudKit 只预留 AuthProvider / SaveRepository 边界，真实容器/�
 新增独立清晰60帧选项见REQ-3D-026：[计划](docs/testing/plans/clear-60.md)。保留默认与已有选择；同等清晰度只限渲染提交率，不改变经营/存档。新选项真机对比结果独立记录，不推断温度收益。
 
 离线80%/无上限见REQ-3D-030：[实施与验证计划](docs/testing/plans/offline-unlimited.md)。不使用平均收入直发金库；完成前不写投机结果，取消或保存失败可重试。长离开可能需要等待计算，进度会显示；真实设备速度另行验收。
+
+底部装修目录与真实拖拽按REQ-3D-036执行：[规格](docs/product/specs/renovation-drag-catalog.md)、[验证计划](docs/testing/plans/renovation-drag-catalog.md)。装修时从底栏拖出柜台、桌椅和咖啡墙牌，直接拖动已有物件；绿色可放，红色说明原因，完成时才结算。取消不扣款，咖啡牌收纳不丢配方/等级；初始及装修后的地毯/路线箭头已移除。布局1安全迁移至布局2。

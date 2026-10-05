@@ -84,3 +84,7 @@ REQ-3D-034 → [TC-3D-024](cases/slice/TC-3D-024.md)、[计划](plans/settings-o
 ## 家具与一次扩建
 
 REQ-3D-035 → [TC-3D-025](cases/slice/TC-3D-025.md)、[计划](plans/furniture-expansion.md)。独立草稿/生命周期、所有方向占地与可达性、动态柜台与座位/支付、存储与经营守恒、经济3/布局1/文件3迁移、同核心80%离线、资源释放及真实几何拾取；像素/设备验证独立。复测入口见 [QA说明](../../qa/layout/README.md)。
+
+## 底部装修目录与真实拖拽
+
+REQ-3D-036 → [TC-3D-026](cases/slice/TC-3D-026.md)、[计划](plans/renovation-drag-catalog.md)。真实应用handler的捕获/取消/拖后click、NullEngine几何射线、墙牌布局2迁移与离线/存档保护；真实浏览器像素和设备输入独立验收。

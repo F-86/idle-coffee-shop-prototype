@@ -19,7 +19,7 @@ const { RouteQAPanel } = await import('../src/slice/qa/RouteQAPanel.ts');
 const { PerformanceQAPanel } = await import('../src/slice/qa/PerformanceQAPanel.ts');
 const { createEngine, createInitialState, recipeById, counterPrice, counterBrewSeconds, coffeePrice, coffeeBrewSeconds, COFFEE_MAX_LEVEL, managerSpeed } = await import('../src/slice/core/engine.ts');
 const { LocalSaveRepository, SAVE_KEY, createMemoryStorage } = await import('../src/slice/core/persistence.ts');
-const { addFurniture, getLayout, GRID, LAYOUT_PRICES, layoutCost, MAX_COUNTERS, MAX_TABLES, moveFurniture, rotateFurniture, storeFurniture, validateLayout } = await import('../src/slice/core/layout.ts');
+const { addFurniture, coffeeWallSlots, getCoffeeSigns, getLayout, GRID, LAYOUT_PRICES, layoutCost, MAX_COUNTERS, MAX_TABLES, moveCoffeeSign, moveFurniture, rotateFurniture, storeCoffeeSign, storeFurniture, validateLayout } = await import('../src/slice/core/layout.ts');
 const { createPortableSave, parsePortableSave, overviewOf, portableFilename, MAX_PORTABLE_BYTES } = await import('../src/slice/core/portableSave.ts');
 
 // These checks inspect actual markup/CSS and execute actual app handlers with a fake
@@ -62,6 +62,10 @@ class FakeElement {
   value = '';
   checked = false;
   files = null;
+  captured = new Set();
+  setPointerCapture(id) { this.captured.add(id); }
+  hasPointerCapture(id) { return this.captured.has(id); }
+  releasePointerCapture(id) { this.captured.delete(id); }
   focused = 0;
   children = [];
   get className() { return this.getAttribute('class') ?? ''; }
@@ -189,6 +193,8 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
     readRenderStats() { this.statsReads++; return { targetFps: this.renderMode === 'smooth' ? null : this.renderMode === 'low-power' ? 30 : 60, renderWidth: 800, renderHeight: 1100, meshCount: 200, renderedFrames: this.updates.length }; }
     readCustomerPose(id) { this.poseReads++; const customer = this.updates.at(-1)?.state.customers.find(customer => customer.id === id); return customer ? { x: customer.x, z: customer.z, screenX: 200, screenY: 250, inViewport: true } : null; }
     setRenovationPreview(layout, selectedId, valid) { this.renovation = layout ? structuredClone({ layout, selectedId, valid }) : null; }
+    pickLayoutPlacement(clientX, clientY, id) { return this.placementPicker?.(clientX, clientY, id) ?? null; }
+    cancelLayoutDrag() { this.cancelDragCalls = (this.cancelDragCalls ?? 0) + 1; }
     selectedCounter(id) { this.selection.push(id); }
     resize() { this.resizeCalls++; }
     focusAnchor(key) { if (!this.interactionEnabled || !['counter-a-recipe', 'counter-a-upgrade', 'counter-b-recipe', 'counter-b-upgrade', 'menu-espresso', 'menu-latte', 'vault', 'invite'].includes(key)) return; this.focusCalls.push(key); this.focused = key; }
@@ -202,6 +208,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
     panBy(...args) { this.panCalls.push(args); }
     activateFocused() { this.activationCalls++; if (!this.focused || !this.interactionEnabled) return false; this.activateAnchor(this.focused); return true; }
     projectAnchor() { return { x: 200, y: 250, visible: true }; }
+    projectLayoutItem() { return { x: 200, y: 250, visible: true }; }
     setInteractionEnabled(value) { this.interactionEnabled = value; this.interactionCalls.push(value); }
     getAnchorFootprint() { return { width: 60, height: 60 }; }
     dispose() { this.disposed = true; }
@@ -218,7 +225,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   }
   class FakeDate extends Date { constructor(...args) { super(...(args.length ? args : [clock.now])); } static now() { return clock.now; } }
   const source = main.replace(/^import\s[\s\S]*?;\n/gm, '').replace(/if \(import\.meta\.hot\) import\.meta\.hot\.dispose\(\(\) => cleanup\(\)\);/, 'captureCleanup(() => cleanup());');
-  const context = { document, window, location: { search: query }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, HTMLInputElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, RouteDiagnostics, isRouteQA, RouteQAPanel, PerformanceQAPanel, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, createEngine, recipeById, counterPrice, counterBrewSeconds, coffeePrice, coffeeBrewSeconds, COFFEE_MAX_LEVEL, managerSpeed, addFurniture, getLayout, GRID, LAYOUT_PRICES, layoutCost, MAX_COUNTERS, MAX_TABLES, moveFurniture, rotateFurniture, storeFurniture, validateLayout, LocalSaveRepository, SAVE_KEY, createPortableSave: trackFileTask(portableOverrides.createPortableSave ?? createPortableSave), parsePortableSave: trackFileTask(portableOverrides.parsePortableSave ?? parsePortableSave), overviewOf, portableFilename, MAX_PORTABLE_BYTES, crypto: globalThis.crypto, TextEncoder, File, navigator, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL: url => revokedUrls.push(url) }, Blob, console, setTimeout: (callback, delay = 0) => { const id = ++nextId; timers.set(id, callback); timerDelays.set(id, delay); return id; }, clearTimeout: id => { timers.delete(id); timerDelays.delete(id); }, requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
+  const context = { document, window, location: { search: query }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, HTMLInputElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, RouteDiagnostics, isRouteQA, RouteQAPanel, PerformanceQAPanel, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, createEngine, recipeById, counterPrice, counterBrewSeconds, coffeePrice, coffeeBrewSeconds, COFFEE_MAX_LEVEL, managerSpeed, addFurniture, coffeeWallSlots, getCoffeeSigns, getLayout, GRID, LAYOUT_PRICES, layoutCost, MAX_COUNTERS, MAX_TABLES, moveCoffeeSign, moveFurniture, rotateFurniture, storeCoffeeSign, storeFurniture, validateLayout, LocalSaveRepository, SAVE_KEY, createPortableSave: trackFileTask(portableOverrides.createPortableSave ?? createPortableSave), parsePortableSave: trackFileTask(portableOverrides.parsePortableSave ?? parsePortableSave), overviewOf, portableFilename, MAX_PORTABLE_BYTES, crypto: globalThis.crypto, TextEncoder, File, navigator, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL: url => revokedUrls.push(url) }, Blob, console, setTimeout: (callback, delay = 0) => { const id = ++nextId; timers.set(id, callback); timerDelays.set(id, delay); return id; }, clearTimeout: id => { timers.delete(id); timerDelays.delete(id); }, requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
   runInNewContext(stripTypeScriptTypes(source), context, { timeout: 1500 });
   const debug = window.__coffeeSliceDebug;
   const state = () => structuredClone(debug.readState());
@@ -3405,7 +3412,7 @@ test('TC-3D-025 rotate, store, restore and Escape remain draft-only and last cou
     f.action({ type: 'layout-select', id: 'counter-a' });
     f.click('#store-furniture');
     assert.equal(f.renderer.renovation.layout.furniture[0].stored, false);
-    f.element('#renovation-panel').emit('keydown', { key: 'Escape' });
+    f.window.emit('keydown', { key: 'Escape' });
     assert.equal(f.element('#renovation-panel').hidden, true);
     assert.deepEqual(f.state(), before);
   } finally { f.dispose(); }
@@ -3420,5 +3427,198 @@ test('TC-3D-025 Escape discards renovation even after focus leaves its workbench
     assert.equal(f.element('#renovation-panel').hidden, true);
     assert.deepEqual(f.state(), before);
     assert.equal(f.document.activeElement, f.element('#coffee-canvas'));
+  } finally { f.dispose(); }
+});
+
+function catalogButton(f, key) { return f.nodes.find(node => node.dataset.catalogKey === key); }
+function dragPointer(f, type, x, y, extra = {}) {
+  return f.window.emit(type, { pointerId: 71, isPrimary: true, button: 0, clientX: x, clientY: y, ...extra });
+}
+function armCatalog(f, key) {
+  const button = catalogButton(f, key); assert.ok(button, key);
+  f.root.emit('pointerdown', { target: button, pointerId: 71, isPrimary: true, button: 0, clientX: 200, clientY: 600 });
+  return button;
+}
+function catalogTabClick(f, tab) {
+  const button = f.nodes.find(node => node.dataset.catalogTab === tab); assert.ok(button);
+  f.root.emit('click', { target: button });
+}
+
+test('TC-3D-026 REQ-3D-036 bottom catalogue contains owned, purchasable and coffee items with filtered storage', () => {
+  const f = fixture();
+  try {
+    openRenovation(f);
+    assert.deepEqual(f.nodes.filter(n => n.dataset.catalogKey).map(n => n.dataset.catalogKey), ['counter-a', 'counter-b', 'menu-espresso', 'menu-latte', 'new-counter', 'new-table']);
+    assert.equal(declarations('.renovation-panel', 'width')[0], '100%');
+    assert.equal(declarations('.renovation-panel', 'bottom')[0], '0');
+    catalogTabClick(f, 'coffee');
+    assert.deepEqual(f.nodes.filter(n => n.dataset.catalogKey).map(n => n.dataset.catalogKey), ['menu-espresso', 'menu-latte']);
+    f.root.emit('click', { target: catalogButton(f, 'menu-latte') });
+    assert.equal(f.element('#rotate-furniture').disabled, true);
+    f.click('#store-furniture');
+    catalogTabClick(f, 'stored');
+    assert.deepEqual(f.nodes.filter(n => n.dataset.catalogKey).map(n => n.dataset.catalogKey), ['menu-latte']);
+    assert.match(f.element('#renovation-hint').textContent, /配方与等级仍保留/);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-026 actual palette pointer handlers drag one new table, defer charge and suppress synthetic click duplication', () => {
+  const f = fixture();
+  try {
+    openRenovation(f); const before = f.state();
+    f.renderer.placementPicker = () => ({ x: 0, z: 5 });
+    const button = armCatalog(f, 'new-table');
+    assert.equal(f.root.hasPointerCapture(71), true);
+    dragPointer(f, 'pointermove', 700, 80);
+    assert.equal(f.renderer.renovation.layout.furniture.length, 3);
+    assert.equal(f.renderer.renovation.valid, true);
+    assert.equal(f.element('#renovation-apply').disabled, true, 'cannot commit mid-gesture');
+    assert.deepEqual(f.state(), before);
+    dragPointer(f, 'pointerup', 700, 80);
+    assert.equal(f.root.hasPointerCapture(71), false);
+    assert.equal(f.element('#catalog-drag-label').hidden, true);
+    f.root.emit('click', { target: button, detail: 1 });
+    assert.equal(f.renderer.renovation.layout.furniture.filter(item => item.kind === 'table').length, 1);
+    assert.deepEqual(f.state(), before);
+    f.click('#renovation-apply');
+    assert.equal(f.state().wallet, before.wallet - LAYOUT_PRICES.table);
+    assert.equal(f.state().layout.furniture.length, 3);
+    const committed = f.state(); f.click('#renovation-apply'); assert.deepEqual(f.state(), committed);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-026 captured non-drag palette tap selects once and keyboard activation remains usable', () => {
+  const f = fixture();
+  try {
+    openRenovation(f);
+    const button = armCatalog(f, 'new-table');
+    dragPointer(f, 'pointerup', 202, 601);
+    f.root.emit('click', { target: button, detail: 1 });
+    assert.equal(f.renderer.renovation.layout.furniture.length, 3);
+    f.root.emit('click', { target: catalogButton(f, 'new-table'), detail: 0 });
+    assert.equal(f.renderer.renovation.layout.furniture.length, 4);
+    assert.equal(f.root.hasPointerCapture(71), false);
+  } finally { f.dispose(); }
+});
+
+for (const placement of [null, { x: 0, z: 0 }, { x: -7, z: 5 }, { x: 11, z: 7 }]) test(`TC-3D-026 invalid palette drop rolls back candidate ${JSON.stringify(placement)}`, () => {
+  const f = fixture();
+  try {
+    openRenovation(f); const before = f.state(), original = structuredClone(f.renderer.renovation.layout);
+    f.renderer.placementPicker = () => placement;
+    armCatalog(f, 'new-table'); dragPointer(f, 'pointermove', 700, 80);
+    assert.equal(f.renderer.renovation.valid, false);
+    assert.equal(f.element('#renovation-status').classList.contains('invalid'), true);
+    dragPointer(f, 'pointerup', 700, 80);
+    assert.deepEqual(f.renderer.renovation.layout, original);
+    assert.deepEqual(f.state(), before);
+  } finally { f.dispose(); }
+});
+
+for (const boundary of ['pointercancel', 'lostpointercapture', 'blur', 'Escape']) test(`TC-3D-026 ${boundary} discards active drag, releases capture and retains prior draft`, () => {
+  const f = fixture();
+  try {
+    openRenovation(f); f.click('#buy-table'); const original = structuredClone(f.renderer.renovation.layout);
+    f.renderer.placementPicker = () => ({ x: 5, z: 5 });
+    armCatalog(f, 'new-table'); dragPointer(f, 'pointermove', 700, 80);
+    assert.equal(f.renderer.renovation.layout.furniture.length, 4);
+    if (boundary === 'lostpointercapture') f.root.emit(boundary, { pointerId: 71 });
+    else if (boundary === 'Escape') f.window.emit('keydown', { key: 'Escape' });
+    else f.window.emit(boundary, { pointerId: 71 });
+    assert.equal(f.element('#renovation-panel').hidden, false);
+    assert.deepEqual(f.renderer.renovation.layout, original);
+    assert.equal(f.root.hasPointerCapture(71), false);
+    assert.equal(f.element('#catalog-drag-label').hidden, true);
+    dragPointer(f, 'pointerup', 700, 80);
+    assert.deepEqual(f.renderer.renovation.layout, original);
+    if (boundary === 'Escape') { f.window.emit('keydown', { key: 'Escape' }); assert.equal(f.element('#renovation-panel').hidden, true); }
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-026 secondary pointers, drops over catalogue and repeated releases cannot place objects', () => {
+  const f = fixture();
+  try {
+    openRenovation(f); const original = structuredClone(f.renderer.renovation.layout);
+    f.renderer.placementPicker = () => ({ x: 0, z: 5 });
+    const button = catalogButton(f, 'new-table');
+    f.root.emit('pointerdown', { target: button, pointerId: 71, isPrimary: false, button: 0, clientX: 200, clientY: 600 });
+    dragPointer(f, 'pointermove', 700, 80); assert.deepEqual(f.renderer.renovation.layout, original);
+    armCatalog(f, 'new-table');
+    dragPointer(f, 'pointermove', 700, 80, { pointerId: 72 }); assert.deepEqual(f.renderer.renovation.layout, original);
+    dragPointer(f, 'pointermove', 700, 80);
+    dragPointer(f, 'pointerup', 200, 500);
+    assert.deepEqual(f.renderer.renovation.layout, original);
+    dragPointer(f, 'pointerup', 700, 80); assert.deepEqual(f.renderer.renovation.layout, original);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-026 scene-origin drag uses shared detached transaction and preserves grab offset', () => {
+  const f = fixture();
+  try {
+    openRenovation(f); const before = f.state();
+    f.renderer.placementPicker = x => x === 20 ? ({ x: 1, z: 0 }) : ({ x: -3, z: 3 });
+    f.action({ type: 'layout-drag', phase: 'start', id: 'counter-a', clientX: 20, clientY: 50 });
+    f.action({ type: 'layout-drag', phase: 'move', id: 'counter-a', clientX: 700, clientY: 50 });
+    assert.equal(f.renderer.renovation.layout.furniture[0].x, -4);
+    assert.equal(f.renderer.renovation.valid, true);
+    f.action({ type: 'layout-drag', phase: 'end', id: 'counter-a', clientX: 700, clientY: 50 });
+    assert.deepEqual(f.state(), before);
+    f.click('#renovation-apply'); assert.equal(f.state().layout.furniture[0].x, -4); assert.equal(f.state().wallet, before.wallet);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-026 stored coffee palette restores the same upgraded recipe sign and rejects overlap', () => {
+  const initial = createInitialState(); initial.coffeeLevels.latte = 4;
+  const f = fixture({ initial });
+  try {
+    openRenovation(f); const before = f.state();
+    f.root.emit('click', { target: catalogButton(f, 'menu-latte') }); f.click('#store-furniture');
+    f.renderer.placementPicker = () => ({ x: 0, z: -3.45 });
+    armCatalog(f, 'menu-latte'); dragPointer(f, 'pointermove', 700, 50);
+    assert.equal(f.renderer.renovation.valid, false);
+    dragPointer(f, 'pointerup', 700, 50);
+    assert.equal(f.renderer.renovation.layout.coffeeSigns[1].stored, true);
+    f.renderer.placementPicker = () => ({ x: 6, z: -3.45 });
+    armCatalog(f, 'menu-latte'); dragPointer(f, 'pointermove', 700, 50); dragPointer(f, 'pointerup', 700, 50);
+    assert.equal(f.renderer.renovation.layout.coffeeSigns.length, 2);
+    assert.equal(f.renderer.renovation.layout.coffeeSigns[1].x, 6);
+    assert.equal(f.renderer.renovation.layout.coffeeSigns[1].stored, false);
+    f.click('#renovation-apply');
+    assert.equal(f.state().coffeeLevels.latte, 4); assert.equal(f.state().wallet, before.wallet);
+    assert.equal(f.state().counters[1].recipe, 'latte');
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-026 touch cards preserve horizontal catalogue browsing and start placement on vertical pull', () => {
+  const f = fixture();
+  try {
+    openRenovation(f); const original = structuredClone(f.renderer.renovation.layout), button = catalogButton(f, 'new-table');
+    f.root.emit('pointerdown', { target: button, pointerId: 71, pointerType: 'touch', isPrimary: true, button: 0, clientX: 200, clientY: 600 });
+    dragPointer(f, 'pointermove', 300, 601, { pointerType: 'touch' });
+    assert.deepEqual(f.renderer.renovation.layout, original);
+    assert.equal(f.element('#catalog-drag-label').hidden, true);
+    dragPointer(f, 'pointercancel', 300, 601, { pointerType: 'touch' });
+    assert.equal(f.root.hasPointerCapture(71), false);
+    assert.deepEqual(declarations('.catalog-card', 'touch-action'), ['pan-x']);
+    f.renderer.placementPicker = () => ({ x: 0, z: 5 });
+    f.root.emit('pointerdown', { target: button, pointerId: 71, pointerType: 'touch', isPrimary: true, button: 0, clientX: 200, clientY: 600 });
+    dragPointer(f, 'pointermove', 205, 50, { pointerType: 'touch' });
+    assert.equal(f.renderer.renovation.layout.furniture.length, 3);
+    dragPointer(f, 'pointerup', 205, 50, { pointerType: 'touch' });
+    assert.equal(f.renderer.renovation.layout.furniture.length, 3);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-026 horizontal touch browsing without pointercancel cannot become a purchase on release', () => {
+  const f = fixture();
+  try {
+    openRenovation(f); const original = structuredClone(f.renderer.renovation.layout), button = catalogButton(f, 'new-table');
+    f.root.emit('pointerdown', { target: button, pointerId: 71, pointerType: 'touch', isPrimary: true, button: 0, clientX: 200, clientY: 600 });
+    dragPointer(f, 'pointermove', 300, 601, { pointerType: 'touch' });
+    dragPointer(f, 'pointermove', 200, 450, { pointerType: 'touch' });
+    dragPointer(f, 'pointerup', 200, 600, { pointerType: 'touch' });
+    f.root.emit('click', { target: button, detail: 1 });
+    assert.deepEqual(f.renderer.renovation.layout, original);
+    assert.equal(f.root.hasPointerCapture(71), false);
   } finally { f.dispose(); }
 });

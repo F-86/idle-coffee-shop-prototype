@@ -1,4 +1,4 @@
-import type { CounterId, FurniturePlacement, GridPoint, LayoutResult, ShopLayout, SliceState } from './types';
+import type { CoffeeSignPlacement, CounterId, FurniturePlacement, GridPoint, LayoutResult, ShopLayout, SliceState } from './types';
 
 /** Draft balance only. Furniture ownership survives storage, with no refund. */
 export const LAYOUT_PRICES = Object.freeze({ counter: 2400, table: 600, expansion: 6000, expansionServed: 40 });
@@ -6,6 +6,16 @@ export const GRID = Object.freeze({ minX: -7, maxX: 10, expandedMaxX: 16, minZ: 
 export const MAX_COUNTERS = 4;
 export const MAX_TABLES = 12;
 export const COUNTER_IDS: readonly CounterId[] = ['counter-a', 'counter-b', 'counter-c', 'counter-d'];
+export const LAYOUT_VERSION = 2;
+/** Fixed height/plane. Anchors clear the renovation plaque, vault and unlocked wall ends. */
+export const COFFEE_WALL = Object.freeze({ y: 2.7, z: -3.45, width: 3.52, minGap: .2 });
+const BASE_COFFEE_WALL_SLOTS = Object.freeze([-2, -1, 0, 1, 2, 3, 4, 5, 6]);
+const EXPANDED_COFFEE_WALL_SLOTS = Object.freeze([...BASE_COFFEE_WALL_SLOTS, 12, 13, 14]);
+export function coffeeWallSlots(layout: Pick<ShopLayout, 'expanded'>): readonly number[] { return layout.expanded ? EXPANDED_COFFEE_WALL_SLOTS : BASE_COFFEE_WALL_SLOTS; }
+export function initialCoffeeSigns(): CoffeeSignPlacement[] { return [
+  { id: 'menu-espresso', recipe: 'espresso', x: 0, stored: false },
+  { id: 'menu-latte', recipe: 'latte', x: 5, stored: false }
+]; }
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 export const gridKey = (point: GridPoint): string => `${point.x},${point.z}`;
 /** Reserve the whole remaining cardinal route and both ends of a moving segment. */
@@ -15,11 +25,23 @@ export function actorReservations(actor: GridPoint & { nav?: GridPoint[] }): Set
   return new Set(points.map(gridKey));
 }
 
-export function initialLayout(): ShopLayout { return { version: 1, active: false, expanded: false, furniture: [
+export function initialLayout(): ShopLayout { return { version: LAYOUT_VERSION, active: false, expanded: false, furniture: [
   { id: 'counter-a', kind: 'counter', counterId: 'counter-a', x: 0, z: 0, rotation: 0, stored: false },
   { id: 'counter-b', kind: 'counter', counterId: 'counter-b', x: 5, z: 0, rotation: 0, stored: false }
-] }; }
+], coffeeSigns: initialCoffeeSigns() }; }
 export function getLayout(state: Pick<SliceState, 'layout'>): ShopLayout { return state.layout ?? initialLayout(); }
+/** The legacy fallback is read-only compatibility, never a repair of malformed v2 data. */
+export function getCoffeeSigns(layout: ShopLayout): CoffeeSignPlacement[] { return (layout as { version: number }).version === 1 ? initialCoffeeSigns() : layout.coffeeSigns; }
+/** Normalize only a valid v1 layout. Unknown versions and explicit malformed signs fail closed. */
+export function normalizeLayout(value: unknown): ShopLayout {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid layout.');
+  const raw = value as Record<string, unknown>;
+  if (raw.version !== 1 && raw.version !== LAYOUT_VERSION || raw.version === 1 && Object.hasOwn(raw, 'coffeeSigns')) throw new Error('Unsupported layout version.');
+  const layout = clone(raw.version === 1 ? { ...raw, version: LAYOUT_VERSION, coffeeSigns: initialCoffeeSigns() } : raw) as unknown as ShopLayout;
+  const checked = validateLayout(layout);
+  if (!checked.ok) throw new Error(checked.message);
+  return layout;
+}
 function rotate(x: number, z: number, rotation: number): GridPoint {
   for (let i = 0; i < rotation; i++) [x, z] = [-z, x];
   return { x, z };
@@ -60,11 +82,19 @@ export function findGridPath(layout: ShopLayout, from: GridPoint, to: GridPoint,
 }
 export function validateLayout(layout: ShopLayout): LayoutResult {
   const fail = (message: string): LayoutResult => ({ ok: false, message });
-  if (!layout || typeof layout !== 'object' || layout.version !== 1 || typeof layout.active !== 'boolean' || typeof layout.expanded !== 'boolean' || !Array.isArray(layout.furniture) || layout.furniture.length > MAX_COUNTERS + MAX_TABLES || layout.trafficTurn !== undefined && !['customer', 'manager'].includes(layout.trafficTurn)) return fail('布局版本或家具清单无效。');
+  if (!layout || typeof layout !== 'object' || layout.version !== LAYOUT_VERSION || typeof layout.active !== 'boolean' || typeof layout.expanded !== 'boolean' || !Array.isArray(layout.furniture) || layout.furniture.length > MAX_COUNTERS + MAX_TABLES || layout.trafficTurn !== undefined && !['customer', 'manager'].includes(layout.trafficTurn)) return fail('布局版本或家具清单无效。');
+  if (!Array.isArray(layout.coffeeSigns) || layout.coffeeSigns.length !== 2) return fail('咖啡墙牌清单无效。');
+  const signIds = new Set<string>(), slots = coffeeWallSlots(layout);
+  for (const sign of layout.coffeeSigns) {
+    if (!sign || typeof sign !== 'object' || Object.keys(sign).sort().join() !== 'id,recipe,stored,x' || !['espresso', 'latte'].includes(sign.recipe) || sign.id !== `menu-${sign.recipe}` || signIds.has(sign.id) || typeof sign.stored !== 'boolean' || !slots.includes(sign.x)) return fail('咖啡墙牌标识或墙面位置无效。');
+    signIds.add(sign.id);
+  }
+  const placedSigns = layout.coffeeSigns.filter(sign => !sign.stored);
+  if (placedSigns.length === 2 && Math.abs(placedSigns[0].x - placedSigns[1].x) < COFFEE_WALL.width + COFFEE_WALL.minGap) return fail('咖啡墙牌重叠了，请沿墙留出空间。');
   const ids = new Set<string>(), counters = new Set<string>(), occupied = new Set<string>(), ports: GridPoint[] = [GRID.entry, GRID.vault, { x: -7, z: 6 }];
   let activeCounters = 0, tables = 0;
   for (const item of layout.furniture) {
-    if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !/^[a-z0-9-]{1,40}$/.test(item.id) || ids.has(item.id) || !['counter', 'table'].includes(item.kind) || typeof item.stored !== 'boolean' || !Number.isInteger(item.rotation) || item.rotation < 0 || item.rotation > 3 || !inGrid(layout, item)) return fail('家具标识、方向或格子坐标无效。');
+    if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !/^[a-z0-9-]{1,40}$/.test(item.id) || ids.has(item.id) || signIds.has(item.id) || !['counter', 'table'].includes(item.kind) || typeof item.stored !== 'boolean' || !Number.isInteger(item.rotation) || item.rotation < 0 || item.rotation > 3 || !inGrid(layout, item)) return fail('家具标识、方向或格子坐标无效。');
     ids.add(item.id);
     if (item.kind === 'counter') {
       if (!item.counterId || !COUNTER_IDS.includes(item.counterId) || counters.has(item.counterId) || item.id !== item.counterId) return fail('柜台家具与资产对应无效。');
@@ -101,6 +131,9 @@ export function addFurniture(draft: ShopLayout, kind: 'counter' | 'table', x: nu
 export function moveFurniture(draft: ShopLayout, id: string, x: number, z: number): boolean { const item = draft.furniture.find(item => item.id === id); if (!item) return false; item.x = x; item.z = z; item.stored = false; return true; }
 export function rotateFurniture(draft: ShopLayout, id: string): boolean { const item = draft.furniture.find(item => item.id === id); if (!item) return false; item.rotation = (item.rotation + 1) % 4 as FurniturePlacement['rotation']; return true; }
 export function storeFurniture(draft: ShopLayout, id: string): boolean { const item = draft.furniture.find(item => item.id === id); if (!item || item.kind === 'counter' && !item.stored && draft.furniture.filter(other => other.kind === 'counter' && !other.stored).length <= 1) return false; item.stored = true; return true; }
+/** Like furniture movement, invalid previews are allowed here and rejected on commit. */
+export function moveCoffeeSign(draft: ShopLayout, id: string, x: number): boolean { const sign = draft.coffeeSigns.find(sign => sign.id === id); if (!sign) return false; sign.x = x; sign.stored = false; return true; }
+export function storeCoffeeSign(draft: ShopLayout, id: string): boolean { const sign = draft.coffeeSigns.find(sign => sign.id === id); if (!sign) return false; sign.stored = true; return true; }
 export function layoutCost(state: SliceState, draft: ShopLayout): LayoutResult {
   const previous = getLayout(state);
   if (previous.expanded && !draft.expanded) return { ok: false, message: '已扩建的店面不能缩回。' };

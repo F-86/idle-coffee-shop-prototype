@@ -1,4 +1,4 @@
-import { copyLayout, initialLayout, layoutCost, validateLayout, GRID } from './layout';
+import { copyLayout, initialLayout, layoutCost, normalizeLayout, validateLayout, GRID } from './layout';
 import { createLayoutSimulation } from './layoutSimulation';
 import type { RouteObserver, RouteTraceEvent } from './routeTrace';
 import type { Counter, CounterId, CounterQuote, CoffeeQuote, Customer, OfflineJob, OfflinePolicyVersion, Recipe, RecipeId, SliceEngine, SliceEvent, SliceState } from './types';
@@ -117,6 +117,7 @@ export function createInitialState(): SliceState {
 export function createEngine(initial: SliceState = createInitialState(), observeRoute?: RouteObserver): SliceEngine {
   const state = clone(initial);
   migrateCoffeeEconomy(state);
+  state.layout = normalizeLayout(state.layout);
   migrateManagerRoute(state);
   migrateCustomerRoutes(state);
   state.stepCarry ??= 0;

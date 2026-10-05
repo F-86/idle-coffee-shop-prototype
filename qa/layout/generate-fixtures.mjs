@@ -6,7 +6,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
   catch (error) { if (specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier)) return nextResolve(`${specifier}.ts`, context); throw error; }
 } });
 const { createEngine, createInitialState } = await import('../../src/slice/core/engine.ts');
-const { addFurniture } = await import('../../src/slice/core/layout.ts');
+const { addFurniture, moveCoffeeSign, storeCoffeeSign, storeFurniture } = await import('../../src/slice/core/layout.ts');
 const { createPortableSave, overviewOf } = await import('../../src/slice/core/portableSave.ts');
 const { validateState } = await import('../../src/slice/core/persistence.ts');
 const destination = process.argv[2];
@@ -28,6 +28,17 @@ addFurniture(draft, 'table', 3, 5);
 const result = engine.commitLayout(draft);
 if (!result.ok) throw Error(result.message);
 scenarios.push(['expanded-four-counters', engine.snapshot()]);
+const storedEngine = createEngine(engine.snapshot());
+for (let level = 0; level < 3; level++) if (!storedEngine.upgradeCoffee('latte')) throw Error('QA coffee upgrade failed');
+if (!storedEngine.beginLayoutEdit()) throw Error('QA storage edit failed');
+for (let step = 0; step < 4000 && storedEngine.layoutEditStatus() !== 'ready'; step++) storedEngine.advance(.05);
+const storedDraft = storedEngine.createLayoutDraft();
+if (!storedDraft) throw Error('QA storage draft unavailable');
+storeFurniture(storedDraft, 'counter-d');
+storeCoffeeSign(storedDraft, 'menu-latte');
+moveCoffeeSign(storedDraft, 'menu-espresso', -2);
+if (!storedEngine.commitLayout(storedDraft).ok) throw Error('QA storage commit failed');
+scenarios.push(['stored-coffee-and-counter', storedEngine.snapshot()]);
 engine.advance(180);
 scenarios.push(['expanded-in-flight', engine.snapshot()]);
 for (const [name, state] of scenarios) {

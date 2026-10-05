@@ -87,7 +87,7 @@ for (const version of [1, 2]) test(`TC-3D-025 original portable${version} bytes 
 
 test('TC-3D-025 new layout/economy/route versions protect original bytes until explicit recovery', () => {
   assert.equal(ECONOMY_VERSION, 3); assert.equal(PORTABLE_VERSION, 3);
-  for (const mutate of [state => { state.economyVersion = 4; }, state => { state.layout.version = 2; }, state => { state.managerRouteVersion = 3; }, state => { state.customerRouteVersion = 4; }]) {
+  for (const mutate of [state => { state.economyVersion = 4; }, state => { state.layout.version = 3; }, state => { state.managerRouteVersion = 3; }, state => { state.customerRouteVersion = 4; }]) {
     const state = createInitialState(); mutate(state); const raw = rawEnvelope(state), storage = createMemoryStorage(); storage.setItem(SAVE_KEY, raw);
     const repo = new LocalSaveRepository(storage), loaded = repo.load(999999); assert.equal(loaded.status, 'future'); assert.equal(loaded.protectedRaw, true); assert.equal(repo.save(createInitialState(), 999999).ok, false); assert.equal(repo.reset().ok, false); assert.equal(storage.getItem(SAVE_KEY), raw);
     const reset = repo.reset({ confirmProtected: true }); assert.equal(reset.ok, true); assert.equal(storage.getItem(reset.backupKey), raw);
@@ -135,7 +135,7 @@ test('TC-3D-025 active offline cancellation leaves original layout, cash, paths 
 });
 
 test('TC-3D-025 explicit corrupt layouts on legacy economies never migrate away bad ownership', () => {
-  for (const economy of [1, 2]) for (const layout of [null, [], 1, { ...initialLayout(), active: true }, { ...initialLayout(), expanded: true }, { ...initialLayout(), version: 2 }]) {
+  for (const economy of [1, 2]) for (const layout of [null, [], 1, { ...initialLayout(), active: true }, { ...initialLayout(), expanded: true }, { ...initialLayout(), version: 3 }]) {
     const state = legacyState(economy); state.layout = copy(layout); const before = copy(state);
     assert.equal(validateState(state).ok, false, `${economy}:${JSON.stringify(layout)}`); assert.deepEqual(state, before);
   }
@@ -213,7 +213,7 @@ test('TC-3D-025 active manager route targets, action positions and collection cu
 
 test('TC-3D-025 portable3 rejects future layout data and forged placed-furniture previews with valid checksums', async () => {
   const original = payload(activeState({ stored: true }));
-  for (const mutate of [value => { value.state.layout.version = 2; }, value => { value.state.economyVersion = 4; value.economyVersion = 4; }, value => { value.overview.placedCounters++; }, value => { value.overview.placedSeats++; }, value => { value.overview.expanded = false; }, value => { delete value.state.layout; }]) {
+  for (const mutate of [value => { value.state.layout.version = 3; }, value => { value.state.economyVersion = 4; value.economyVersion = 4; }, value => { value.overview.placedCounters++; }, value => { value.overview.placedSeats++; }, value => { value.overview.expanded = false; }, value => { delete value.state.layout; }]) {
     const value = copy(original); mutate(value); assert.equal((await parsePortableSave(independentFile(value, 3).text)).ok, false, mutate.toString());
   }
   assert.equal((await parsePortableSave(independentFile(original, 4).text)).ok, false);
