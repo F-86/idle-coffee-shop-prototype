@@ -31,3 +31,6 @@
 清晰60帧Mac实测：[完整报告与冻结原文](testing/runs/2026-10-05-clear-60-mac/report.md)。固定b1ebbdd版本，三段累计120/60/120fps且buffer相同；偏好刷新持久化通过。后续ba7c6e0离线修复、字牌像素和温度不包含在这次真机验收中。
 
 离线修复Mac检查：[受阻记录与来源勘误](testing/runs/2026-10-05-offline-boundary-mac/report.md)。a28版本独立策略v2存档setup完成，visibility转换未可靠观察；关闭重开、单次结算和防重复均无真机通过证据。保留b1清晰60帧历史PASS，不混算两项结果。
+
+
+存档恢复保护：[计划](testing/plans/save-recovery-safety.md)、[TC-3D-019](testing/cases/slice/TC-3D-019.md)。失败读取不能替换/解锁当前店，存储恢复也不能自行覆盖旧档；缺失需明确新店，原始档与有效当前副本可分别导出。

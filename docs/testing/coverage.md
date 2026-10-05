@@ -56,3 +56,8 @@ REQ-3D-026 → [TC-3D-016](cases/slice/TC-3D-016.md)、[计划](plans/clear-60.m
 ## 连续离线时间与安全升级
 
 REQ-3D-027 → [TC-3D-017](cases/slice/TC-3D-017.md)、[计划](plans/offline-boundary.md)。30秒边界/2小时上限、隐藏与刷新相同快照、分片余数、旧端点一次性策略标记、失败/并发回滚、未来时间、领取ID/历史淘汰与唯一RAF；真实浏览器独立验收，乐观localStorage检查不冒充跨进程原子CAS。
+
+
+## 存档恢复失败保护
+
+REQ-3D-029 → [TC-3D-019](cases/slice/TC-3D-019.md)、[计划](plans/save-recovery-safety.md)。570→0丢档链、仓库写屏障、失败/缺失/坏档分流、明确新店、备份/移除失败与CAS、重复恢复/时钟/后台保护；假DOM执行实际handler，不替代真实浏览器验收。

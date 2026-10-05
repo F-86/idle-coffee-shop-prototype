@@ -95,7 +95,7 @@ class FakeElement {
   focus() { this.focused++; this.ownerDocument.activeElement = this; }
   getBoundingClientRect() { return { left: 100, right: 500, top: 100, bottom: 650, width: 400, height: 550 }; }
 }
-function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, storageUnavailable = false, writeUnavailable = false, conflictDuringClaim = false, deferDialogClose = false, renderMode, query = '?qa=1', renderUnavailable = false, now = Date.now() } = {}) {
+function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, storageUnavailable = false, readUnavailable = false, writeUnavailable = false, conflictDuringClaim = false, deferDialogClose = false, renderMode, query = '?qa=1', renderUnavailable = false, now = Date.now() } = {}) {
   const clock = { now, performance: 0 };
   const nodes = [], closeEvents = [];
   const document = new FakeElement('document', null);
@@ -130,10 +130,11 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   if (raw !== undefined) memory.setItem(SAVE_KEY, raw);
   else if (initial) { const repo = new LocalSaveRepository(memory); repo.load(clock.now); assert.equal(repo.save(initial, clock.now - savedAtAgoSeconds * 1000).ok, true); }
   if (renderMode !== undefined) memory.setItem(RENDER_MODE_KEY, renderMode);
-  const storageControl = { writeUnavailable };
+  const storageControl = { readUnavailable, writeUnavailable, removeUnavailable: false };
   let storageReads = 0;
   const storage = storageUnavailable ? { getItem() { throw new Error('storage unavailable'); }, setItem() { throw new Error('storage unavailable'); }, removeItem() { throw new Error('storage unavailable'); } } : {
     getItem(key) {
+      if (storageControl.readUnavailable) throw new Error('reads unavailable');
       if (key === SAVE_KEY && conflictDuringClaim && ++storageReads === 2) {
         const foreign = JSON.parse(memory.getItem(SAVE_KEY)); foreign.recordChangeTag = 'concurrent-offline-claim';
         memory.setItem(SAVE_KEY, JSON.stringify(foreign));
@@ -141,7 +142,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
       return memory.getItem(key);
     },
     setItem(key, value) { if (storageControl.writeUnavailable) throw new Error('writes unavailable'); memory.setItem(key, value); },
-    removeItem(key) { if (storageControl.writeUnavailable) throw new Error('writes unavailable'); memory.removeItem(key); },
+    removeItem(key) { if (storageControl.writeUnavailable || storageControl.removeUnavailable) throw new Error('writes unavailable'); memory.removeItem(key); },
   };
   const window = new FakeElement('window', document);
   window.localStorage = storage;
@@ -574,19 +575,19 @@ test('TC-3D-008 REQ-3D-006 HUD settings preserve manual save and export, with co
   } finally { corrupt.dispose(); }
 });
 
-test('TC-3D-008 REQ-3D-015 names and save feedback are transient; disabled browser storage still permits backup (app harness)', async () => {
+test('TC-3D-008 REQ-3D-015 names and save feedback are transient; unreadable startup stays protected without exporting a fake shop (app harness)', async () => {
   const f = fixture({ storageUnavailable: true });
   try {
-    assert.match(f.element('#save-status').textContent, /不可用/);
+    assert.match(f.element('#save-status').textContent, /拒绝读取|不可用/);
     f.click('#settings');
     f.click('#save');
-    assert.match(f.element('#save-status').textContent, /失败/);
+    assert.match(f.element('#save-status').textContent, /拒绝读取|不可用/);
     assert.equal(f.element('#toast').classList.contains('visible'), true);
     for (const callback of [...f.timers.values()]) callback();
     assert.equal(f.element('#toast').classList.contains('visible'), false, 'feedback does not become permanent HUD');
     f.click('#export');
-    assert.equal(f.downloads.length, 1);
-    assert.deepEqual(JSON.parse(await f.blobs[0].text()).state, f.state());
+    assert.equal(f.element('#export').disabled, true); assert.equal(f.downloads.length, 0);
+    assert.equal(f.state().paused, true); assert.equal(f.element('#reload').hidden, false);
     assert.doesNotMatch(outsideModal, /pan-hint|open-status/);
     assert.match(main, /setTimeout\([\s\S]*?#toast[\s\S]*?classList\.remove\("visible"\)[\s\S]*?3500\)/);
   } finally { f.dispose(); }
@@ -606,7 +607,7 @@ test('TC-3D-008 REQ-3D-006 external save conflict freezes and blocks removed pau
     f.click('#dialog-close');
     f.click('#settings');
     assert.equal(f.element('#reload').hidden, false);
-    assert.match(f.element('#save-status').textContent, /变化|最新/);
+    assert.match(f.element('#save-status').textContent, /变化|最新|更新/);
     f.click('#save');
     assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).recordChangeTag, 'other-client');
   } finally { f.dispose(); }
@@ -1401,5 +1402,183 @@ test('TC-3D-017 clock rollback hidden cycles cannot reclaim time before the dura
     f.document.hidden = false; f.document.emit('visibilitychange');
     assert.equal(f.state().elapsed, 0); assert.equal(f.state().stepCarry, .01);
     const once = f.state(); f.window.emit('pageshow', { persisted: true }); assert.deepEqual(f.state(), once);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-019 failed latest-save reads retain the 570-earned frozen shop and cannot overwrite it after storage recovers', () => {
+  const initial = createInitialState(); initial.manager.carrying = 570; initial.totalEarned = 570;
+  Object.assign(initial.manager, { phase: 'depositing', target: 2, timer: .55 });
+  const f = fixture({ initial, now: 130000, savedAtAgoSeconds: 30, writeUnavailable: true });
+  try {
+    const durable = f.memory.getItem(SAVE_KEY), frozen = f.state();
+    assert.equal(frozen.paused, true); assert.equal(frozen.totalEarned, 570);
+    const session = f.window.__coffeeSliceDebug.readRoutes().session;
+    f.storageControl.writeUnavailable = false; f.storageControl.readUnavailable = true;
+    f.click('#settings'); f.click('#reload'); f.click('#reload');
+    assert.deepEqual(f.state(), frozen, 'failed reload must never publish the initial-shop fallback');
+    assert.equal(f.window.__coffeeSliceDebug.readRoutes().session, session, 'failed recovery is not a state replacement');
+    assert.equal(f.element('#reload').hidden, false);
+    assert.match(f.element('#save-status').textContent, /读取.*失败|拒绝读取|不可用/);
+    assert.equal(f.element('#new-shop').hidden, true, 'unreadable storage is not permission to reset');
+    f.storageControl.readUnavailable = false;
+    f.click('#save'); f.tick(10); f.action({ type: 'invite' });
+    f.document.hidden = true; f.document.emit('visibilitychange'); f.tick(35);
+    f.document.hidden = false; f.document.emit('visibilitychange'); f.window.emit('pageshow', { persisted: true });
+    assert.deepEqual(f.state(), frozen, 'save, RAF and visibility cannot release failed recovery');
+    assert.equal(f.memory.getItem(SAVE_KEY), durable, 'recovering storage alone cannot authorize an overwrite');
+    f.click('#reload');
+    assert.equal(f.state().paused, false); assert.ok(f.state().totalEarned >= 570);
+    assert.equal(f.element('#reload').hidden, true);
+    const once = f.state(), claimed = f.memory.getItem(SAVE_KEY);
+    f.click('#reload'); assert.deepEqual(f.state(), once); assert.equal(f.memory.getItem(SAVE_KEY), claimed);
+    f.tick(.1); assert.ok(f.state().elapsed > once.elapsed);
+    f.click('#save'); assert.ok(JSON.parse(f.memory.getItem(SAVE_KEY)).state.totalEarned >= 570);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-019 corrupt, future and missing reloads preserve current progress; only confirmed new-shop can replace it', async () => {
+  const progressed = createEngine(); progressed.advance(120);
+  for (const replacement of ['{ corrupt latest archive', JSON.stringify({ schemaVersion: 2 }), null]) {
+    const f = fixture({ initial: progressed.snapshot(), now: 130000 });
+    try {
+      if (replacement === null) f.memory.removeItem(SAVE_KEY); else f.memory.setItem(SAVE_KEY, replacement);
+      f.window.emit('storage', { key: SAVE_KEY, newValue: replacement });
+      const frozen = f.state();
+      f.click('#settings'); f.click('#reload');
+      assert.deepEqual(f.state(), frozen);
+      assert.equal(f.element('#reload').hidden, false); assert.equal(f.element('#new-shop').hidden, false);
+      assert.match(f.element('#save-status').textContent, replacement === null ? /未找到|缺失/ : /存档/);
+      f.click('#save'); f.tick(10); assert.equal(f.memory.getItem(SAVE_KEY), replacement);
+      assert.deepEqual(f.state(), frozen);
+      if (replacement !== null) {
+        f.click('#export'); assert.equal(await f.blobs.at(-1).text(), replacement);
+        assert.equal(f.element('#export-current').hidden, false);
+        f.click('#export-current'); assert.deepEqual(JSON.parse(await f.blobs.at(-1).text()).state, frozen);
+      }
+      f.window.confirm = () => false;
+      f.click('#new-shop'); assert.deepEqual(f.state(), frozen); assert.equal(f.memory.getItem(SAVE_KEY), replacement);
+      const backups = [], setItem = f.memory.setItem;
+      f.memory.setItem = (key, value) => { if (key.startsWith(`${SAVE_KEY}-backup-`)) backups.push(value); setItem(key, value); };
+      f.window.confirm = () => true; f.click('#new-shop');
+      assert.equal(f.state().totalEarned, 0); assert.equal(f.state().paused, false);
+      assert.equal(f.element('#reload').hidden, true); assert.equal(f.element('#new-shop').hidden, true);
+      assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).state.totalEarned, 0);
+      assert.deepEqual(backups, replacement === null ? [] : [replacement]);
+      const fresh = f.state(); f.tick(.05); assert.ok(f.state().elapsed > fresh.elapsed);
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-019 startup read failure stays protected until a successful read, while a verified empty first launch starts normally', () => {
+  const progressed = createEngine(); progressed.advance(120);
+  const f = fixture({ initial: progressed.snapshot(), readUnavailable: true, now: 130000 });
+  try {
+    const durable = f.memory.getItem(SAVE_KEY), blocked = f.state();
+    assert.equal(blocked.paused, true); assert.equal(f.element('#reload').hidden, false);
+    f.storageControl.readUnavailable = false;
+    f.tick(10); f.click('#save'); assert.equal(f.memory.getItem(SAVE_KEY), durable);
+    assert.deepEqual(f.state(), blocked);
+    f.click('#reload'); assert.equal(f.state().paused, false);
+    const expected = createEngine(progressed.snapshot()); expected.advance(5);
+    assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(expected.snapshot()), 'policy-v2 retains its existing half-speed recovery interval');
+  } finally { f.dispose(); }
+  const fresh = fixture({ initial: null, now: 130000 });
+  try {
+    assert.equal(fresh.state().paused, false); assert.equal(fresh.element('#reload').hidden, true);
+    fresh.tick(.1); fresh.click('#save'); assert.equal(JSON.parse(fresh.memory.getItem(SAVE_KEY)).state.elapsed, .1);
+  } finally { fresh.dispose(); }
+});
+
+
+test('TC-3D-019 cancelled reload, failed reset and a new concurrent save never release recovery protection', () => {
+  const progressed = createEngine(); progressed.advance(120);
+  const f = fixture({ initial: progressed.snapshot(), now: 130000 });
+  try {
+    const original = f.memory.getItem(SAVE_KEY), replacement = '{ unreadable replacement';
+    f.memory.setItem(SAVE_KEY, replacement); f.window.emit('storage', { key: SAVE_KEY, newValue: replacement });
+    const frozen = f.state();
+    f.window.confirm = () => false; f.click('#reload'); assert.deepEqual(f.state(), frozen);
+    f.window.confirm = () => true; f.click('#reload');
+    for (const failure of ['writeUnavailable', 'removeUnavailable']) {
+      f.storageControl[failure] = true; f.click('#new-shop'); f.storageControl[failure] = false;
+      assert.deepEqual(f.state(), frozen); assert.equal(f.memory.getItem(SAVE_KEY), replacement);
+      assert.equal(f.element('#reload').hidden, false);
+      f.click('#save'); assert.equal(f.memory.getItem(SAVE_KEY), replacement);
+    }
+    f.memory.setItem(SAVE_KEY, original);
+    f.click('#new-shop');
+    assert.equal(f.memory.getItem(SAVE_KEY), original, 'reset cannot erase a newly replaced CAS base');
+    assert.deepEqual(f.state(), frozen);
+    f.click('#reload'); assert.equal(f.state().paused, false);
+    assert.deepEqual(f.state(), progressed.snapshot());
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-019 startup outage followed by missing data needs explicit new-shop, never automatic recovery', () => {
+  const f = fixture({ initial: null, now: 130000, readUnavailable: true });
+  try {
+    const frozen = f.state(); f.storageControl.readUnavailable = false;
+    f.click('#reload'); f.click('#reload');
+    assert.deepEqual(f.state(), frozen); assert.equal(f.state().paused, true);
+    assert.match(f.element('#save-status').textContent, /未找到/);
+    assert.equal(f.element('#reload').hidden, false); assert.equal(f.element('#new-shop').hidden, false);
+    f.tick(10); f.click('#save'); assert.equal(f.memory.getItem(SAVE_KEY), null);
+    f.click('#new-shop'); assert.equal(f.state().paused, false);
+    assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).state.totalEarned, 0);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-019 shutdown after failed recovery never writes prior or fallback state', () => {
+  for (const path of ['dispose', 'pagehide']) {
+    const progressed = createEngine(); progressed.advance(120);
+    const f = fixture({ initial: progressed.snapshot(), now: 130000, savedAtAgoSeconds: 30, writeUnavailable: true });
+    const durable = f.memory.getItem(SAVE_KEY);
+    f.storageControl.writeUnavailable = false; f.storageControl.readUnavailable = true;
+    f.click('#reload'); f.storageControl.readUnavailable = false;
+    if (path === 'dispose') f.dispose(); else f.window.emit('pagehide', { persisted: false });
+    assert.equal(f.memory.getItem(SAVE_KEY), durable);
+    assert.equal(f.frames.size, 0);
+    assert.equal(f.renderer.disposed, true);
+  }
+});
+
+test('TC-3D-019 protected raw export survives a later read outage and clears after recovery', async () => {
+  const progressed = createEngine(); progressed.advance(120);
+  const f = fixture({ initial: progressed.snapshot(), now: 130000 });
+  try {
+    const good = f.memory.getItem(SAVE_KEY), broken = '{ damaged';
+    f.memory.setItem(SAVE_KEY, broken); f.window.emit('storage', { key: SAVE_KEY, newValue: broken });
+    f.click('#reload'); const frozen = f.state();
+    f.storageControl.readUnavailable = true; f.click('#reload');
+    f.click('#export'); assert.equal(await f.blobs.at(-1).text(), broken);
+    f.click('#export-current'); assert.deepEqual(JSON.parse(await f.blobs.at(-1).text()).state, frozen);
+    f.storageControl.readUnavailable = false; f.memory.setItem(SAVE_KEY, good); f.click('#reload');
+    assert.equal(f.element('#export-current').hidden, true);
+    assert.equal(f.element('#export').disabled, false);
+    f.click('#export'); assert.deepEqual(JSON.parse(await f.blobs.at(-1).text()).state, progressed.snapshot());
+  } finally { f.dispose(); }
+});
+
+
+test('TC-3D-019 hidden-return settlement failure followed by unavailable reload preserves the 570-earned live shop', () => {
+  const initial = createInitialState(); initial.manager.carrying = 570; initial.totalEarned = 570;
+  Object.assign(initial.manager, { phase: 'depositing', target: 2, timer: .55 });
+  const f = fixture({ initial, now: 100000 });
+  try {
+    f.document.hidden = true; f.document.emit('visibilitychange');
+    const durable = f.memory.getItem(SAVE_KEY);
+    f.storageControl.writeUnavailable = true; f.clock.now += 29900; f.clock.performance += 29900;
+    f.document.hidden = false; f.document.emit('visibilitychange');
+    const frozen = f.state(); assert.equal(frozen.totalEarned, 570); assert.equal(frozen.paused, true);
+    f.storageControl.writeUnavailable = false; f.storageControl.readUnavailable = true;
+    f.click('#reload'); f.click('#reload'); assert.deepEqual(f.state(), frozen);
+    f.storageControl.readUnavailable = false; f.click('#save'); f.tick(10);
+    f.window.emit('pageshow', { persisted: true }); assert.deepEqual(f.state(), frozen);
+    assert.equal(f.memory.getItem(SAVE_KEY), durable);
+    f.click('#reload'); assert.equal(f.state().paused, false);
+    const expected = createEngine(initial); expected.advance(19.95);
+    assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(expected.snapshot()));
+    const once = f.state(), onceRaw = f.memory.getItem(SAVE_KEY);
+    f.click('#reload'); assert.deepEqual(f.state(), once); assert.equal(f.memory.getItem(SAVE_KEY), onceRaw);
   } finally { f.dispose(); }
 });

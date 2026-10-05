@@ -4,7 +4,7 @@ import type { SliceState } from './types';
 export const SAVE_KEY = 'mellow-bean-3d-v1';
 export const OFFLINE_POLICY_VERSION = 2;
 export interface StorageLike { getItem(key: string): string | null; setItem(key: string, value: string): void; removeItem(key: string): void }
-export type SaveStatus = 'new' | 'loaded' | 'saved' | 'corrupt' | 'future' | 'unavailable' | 'conflict' | 'invalid-state' | 'offline-save-failed';
+export type SaveStatus = 'new' | 'missing' | 'loaded' | 'saved' | 'corrupt' | 'future' | 'unavailable' | 'conflict' | 'invalid-state' | 'offline-save-failed';
 export interface OfflineResult { accepted: boolean; amount: number; seconds: number }
 export interface LoadResult { state: SliceState; status: SaveStatus; message: string; offline?: OfflineResult; protectedRaw: boolean }
 export interface SaveResult { ok: boolean; status: SaveStatus; message: string; recordChangeTag?: string; backupKey?: string }
@@ -139,11 +139,18 @@ export class LocalSaveRepository {
   private protectedRaw = false;
   private protectedStatus: SaveStatus = 'corrupt';
   private lastMessage = '';
+  // A failed load must not lend its old CAS base to a replacement/fallback state.
+  private recoveryRequired: { status: SaveStatus; message: string } | null = null;
   constructor(storage?: StorageLike | null) {
     if (storage !== undefined) this.storage = storage;
     else { try { this.storage = globalThis.localStorage ?? null; } catch { this.storage = null; } }
   }
+  private failedLoad(status: SaveStatus, message: string, state = createInitialState(), offline?: OfflineResult): LoadResult {
+    this.recoveryRequired = { status, message };
+    return { state, status, message, offline, protectedRaw: this.protectedRaw };
+  }
   private write(state: SliceState, now: number): SaveResult {
+    if (this.recoveryRequired) return { ok: false, ...this.recoveryRequired };
     if (!this.storage) return { ok: false, status: 'unavailable', message: '本地存储不可用，本轮进度仅保留在页面内。' };
     if (this.protectedRaw) return { ok: false, status: this.protectedStatus, message: this.lastMessage };
     const checked = validateState(state);
@@ -163,17 +170,20 @@ export class LocalSaveRepository {
       return { ok: true, status: 'saved', message: '本地存档已保存。', recordChangeTag };
     } catch { return { ok: false, status: 'unavailable', message: '浏览器拒绝写入存档，本轮进度尚未保存。' }; }
   }
-  load(now = Date.now()): LoadResult {
-    const fallback = (status: SaveStatus, message: string): LoadResult => ({ state: createInitialState(), status, message, protectedRaw: this.protectedRaw });
-    if (!this.storage || !number(now, 0, 8.64e15)) return fallback('unavailable', '本地存储不可用，本轮进度仅保留在页面内。');
+  load(now = Date.now(), { allowNew = !this.initialized && !this.recoveryRequired }: { allowNew?: boolean } = {}): LoadResult {
+    if (!this.storage || !number(now, 0, 8.64e15)) return this.failedLoad('unavailable', '本地存储不可用，已暂停保存；请重试读取。');
     let raw: string | null;
-    try { raw = this.storage.getItem(SAVE_KEY); } catch { return fallback('unavailable', '浏览器拒绝读取存档，本轮进度仅保留在页面内。'); }
+    try { raw = this.storage.getItem(SAVE_KEY); } catch { return this.failedLoad('unavailable', '浏览器拒绝读取存档，当前进度已保留；请重试读取。'); }
     this.baseRaw = raw; this.initialized = true; this.protectedRaw = false; this.lastMessage = '';
-    if (raw === null) return fallback('new', '新店已准备好。');
+    this.recoveryRequired = null;
+    if (raw === null) {
+      if (!allowNew) return this.failedLoad('missing', '未找到最新存档，当前进度已保留；请重试读取，或明确开始新店。');
+      return { state: createInitialState(), status: 'new', message: '新店已准备好。', protectedRaw: false };
+    }
     const parsed = decode(raw);
     if (!parsed.ok) {
       this.protectedRaw = true; this.protectedStatus = parsed.status; this.lastMessage = parsed.message;
-      return fallback(parsed.status, parsed.message);
+      return this.failedLoad(parsed.status, parsed.message);
     }
     const { envelope } = parsed;
     const seconds = Math.max(0, (now - envelope.savedAt) / 1000);
@@ -188,17 +198,18 @@ export class LocalSaveRepository {
     // IDs are bounded independently of untrusted (up to 256-character) CAS tags.
     // Durable endpoints + expected bytes remain the authority for interval replay.
     const offline = seconds > 0 ? engine.applyOffline(seconds, `local:${tag()}`) : undefined;
-    if (offline && !offline.accepted) return { state, status: 'offline-save-failed', message: '离线结算未完成，存档未改变，请读取最新档。', offline, protectedRaw: this.protectedRaw };
+    if (offline && !offline.accepted) return this.failedLoad('offline-save-failed', '离线结算未完成，存档未改变，请读取最新档。', state, offline);
     const snapshot = engine.snapshot();
     // Do not expose speculative money, movement or claims until the endpoint and
     // credited state are committed together. Failure leaves the live input intact.
     const written = this.write(snapshot, now);
-    if (!written.ok) return { state, status: written.status === 'conflict' ? 'conflict' : 'offline-save-failed', message: `${written.message} 离线收益尚未领取。`, offline: { accepted: false, amount: 0, seconds: 0 }, protectedRaw: this.protectedRaw };
+    if (!written.ok) return this.failedLoad(written.status === 'conflict' ? 'conflict' : 'offline-save-failed', `${written.message} 离线收益尚未领取。`, state, { accepted: false, amount: 0, seconds: 0 });
     return { state: snapshot, status: 'loaded', message: state.paused ? '本地存档已恢复，暂停期间没有离线收益。' : '本地存档已恢复，离线收益已完成一次结算。', offline, protectedRaw: false };
   }
   /** Commit a live hidden interval without reloading/replacing this client's CAS base. */
   settleOffline(state: SliceState, hiddenAt: number, now = Date.now()): LoadResult {
-    if (!number(hiddenAt, 0, 8.64e15) || !number(now, 0, 8.64e15)) return { state, status: 'offline-save-failed', message: '离线结算时间无效，存档未改变。', offline: { accepted: false, amount: 0, seconds: 0 }, protectedRaw: this.protectedRaw };
+    if (this.recoveryRequired) return { state, ...this.recoveryRequired, offline: { accepted: false, amount: 0, seconds: 0 }, protectedRaw: this.protectedRaw };
+    if (!number(hiddenAt, 0, 8.64e15) || !number(now, 0, 8.64e15)) return this.failedLoad('offline-save-failed', '离线结算时间无效，存档未改变。', state, { accepted: false, amount: 0, seconds: 0 });
     const previous = this.baseRaw === null ? null : decode(this.baseRaw);
     // A failed hide-time save does not erase unsaved visible progress; conversely
     // a future durable anchor cannot be reclaimed after the wall clock rolls back.
@@ -213,10 +224,10 @@ export class LocalSaveRepository {
       const raw = this.storage.getItem(SAVE_KEY);
       if (this.initialized && raw !== this.baseRaw) return { ok: false, status: 'conflict', message: '另一个窗口已修改存档，请先重新读取。' };
       const decoded = raw === null ? null : decode(raw);
-      if ((this.protectedRaw || decoded && !decoded.ok) && !options.confirmProtected) return { ok: false, status: decoded && !decoded.ok ? decoded.status : this.protectedStatus, message: '原始存档已保护，请先导出，并确认新开一家店。' };
+      if ((this.recoveryRequired || this.protectedRaw || decoded && !decoded.ok) && !options.confirmProtected) return { ok: false, status: decoded && !decoded.ok ? decoded.status : this.recoveryRequired?.status ?? this.protectedStatus, message: '原始存档已保护，请先导出，并确认新开一家店。' };
       const backupKey = raw === null ? undefined : `${SAVE_KEY}-backup-${tag()}`;
       if (backupKey) this.storage.setItem(backupKey, raw!);
-      this.storage.removeItem(SAVE_KEY); this.baseRaw = null; this.initialized = true; this.protectedRaw = false; this.lastMessage = '';
+      this.storage.removeItem(SAVE_KEY); this.baseRaw = null; this.initialized = true; this.protectedRaw = false; this.lastMessage = ''; this.recoveryRequired = null;
       return { ok: true, status: 'new', message: backupKey ? '已备份原始字节，新版本本地存档已重置。' : '新版本本地存档已重置。', backupKey };
     }
     catch { return { ok: false, status: 'unavailable', message: '浏览器拒绝重置存档。' }; }
