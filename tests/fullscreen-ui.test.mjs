@@ -17,10 +17,11 @@ const { FrameInterpolator } = await import('../src/slice/render/FrameInterpolato
 const { RouteDiagnostics, isRouteQA } = await import('../src/slice/qa/RouteDiagnostics.ts');
 const { RouteQAPanel } = await import('../src/slice/qa/RouteQAPanel.ts');
 const { PerformanceQAPanel } = await import('../src/slice/qa/PerformanceQAPanel.ts');
-const { createEngine, createInitialState, recipeById, counterPrice, counterBrewSeconds, coffeePrice, coffeeBrewSeconds, COFFEE_MAX_LEVEL } = await import('../src/slice/core/engine.ts');
+const { createEngine, createInitialState, recipeById, counterPrice, counterBrewSeconds, counterAffinities, coffeePrice, coffeeBrewSeconds, COFFEE_MAX_LEVEL } = await import('../src/slice/core/engine.ts');
 const { INGREDIENT_CONFIG } = await import('../src/slice/core/ingredients.ts');
 const { LocalSaveRepository, SAVE_KEY, createMemoryStorage } = await import('../src/slice/core/persistence.ts');
 const { addFurniture, getLayout, GRID, LAYOUT_PRICES, layoutCost, MAX_COUNTERS, MAX_TABLES, moveFurniture, rotateFurniture, storeFurniture, validateLayout } = await import('../src/slice/core/layout.ts');
+const { furnitureInventory } = await import('../src/slice/core/furnitureCatalog.ts');
 const { createPortableSave, parsePortableSave, overviewOf, portableFilename, MAX_PORTABLE_BYTES } = await import('../src/slice/core/portableSave.ts');
 
 // These checks inspect actual markup/CSS and execute actual app handlers with a fake
@@ -92,6 +93,7 @@ class FakeElement {
   matches(selector) {
     return selector.split(',').some(part => {
       const value = part.trim();
+      if (value === ':focus-visible') return this.ownerDocument.keyboardInput === true && this.ownerDocument.activeElement === this;
       if (value.startsWith('#')) return this.id === value.slice(1);
       if (value.startsWith('.')) return this.classList.contains(value.slice(1));
       if (value.startsWith('[')) return this.hasAttribute(value.slice(1, -1));
@@ -228,7 +230,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   }
   class FakeDate extends Date { constructor(...args) { super(...(args.length ? args : [clock.now])); } static now() { return clock.now; } }
   const source = main.replace(/^import\s[\s\S]*?;\n/gm, '').replace(/if \(import\.meta\.hot\) import\.meta\.hot\.dispose\(\(\) => cleanup\(\)\);/, 'captureCleanup(() => cleanup());');
-  const context = { document, window, location: { search: query }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, HTMLInputElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, RouteDiagnostics, isRouteQA, RouteQAPanel, PerformanceQAPanel, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, INGREDIENT_CONFIG, createEngine, recipeById, counterPrice, counterBrewSeconds, coffeePrice, coffeeBrewSeconds, COFFEE_MAX_LEVEL, addFurniture, getLayout, GRID, LAYOUT_PRICES, layoutCost, MAX_COUNTERS, MAX_TABLES, moveFurniture, rotateFurniture, storeFurniture, validateLayout, LocalSaveRepository, SAVE_KEY, createPortableSave: trackFileTask(portableOverrides.createPortableSave ?? createPortableSave), parsePortableSave: trackFileTask(portableOverrides.parsePortableSave ?? parsePortableSave), overviewOf, portableFilename, MAX_PORTABLE_BYTES, crypto: globalThis.crypto, TextEncoder, File, navigator, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL: url => revokedUrls.push(url) }, Blob, console, setTimeout: (callback, delay = 0) => { const id = ++nextId; timers.set(id, callback); timerDelays.set(id, delay); return id; }, clearTimeout: id => { timers.delete(id); timerDelays.delete(id); }, requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
+  const context = { document, window, location: { search: query }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, HTMLInputElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, RouteDiagnostics, isRouteQA, RouteQAPanel, PerformanceQAPanel, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, INGREDIENT_CONFIG, createEngine, recipeById, counterPrice, counterBrewSeconds, counterAffinities, coffeePrice, coffeeBrewSeconds, COFFEE_MAX_LEVEL, furnitureInventory, addFurniture, getLayout, GRID, LAYOUT_PRICES, layoutCost, MAX_COUNTERS, MAX_TABLES, moveFurniture, rotateFurniture, storeFurniture, validateLayout, LocalSaveRepository, SAVE_KEY, createPortableSave: trackFileTask(portableOverrides.createPortableSave ?? createPortableSave), parsePortableSave: trackFileTask(portableOverrides.parsePortableSave ?? parsePortableSave), overviewOf, portableFilename, MAX_PORTABLE_BYTES, crypto: globalThis.crypto, TextEncoder, File, navigator, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL: url => revokedUrls.push(url) }, Blob, console, setTimeout: (callback, delay = 0) => { const id = ++nextId; timers.set(id, callback); timerDelays.set(id, delay); return id; }, clearTimeout: id => { timers.delete(id); timerDelays.delete(id); }, requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
   runInNewContext(stripTypeScriptTypes(source), context, { timeout: 1500 });
   const debug = window.__coffeeSliceDebug;
   const state = () => structuredClone(debug.readState());
@@ -3311,7 +3313,7 @@ test('TC-3D-025 REQ-3D-035 renovation draft does not mutate wallet, saved pause 
   try {
     openRenovation(f);
     const before = f.state();
-    f.click('#buy-table');
+    purchaseAndPlace(f, 'table');
     assert.deepEqual(f.state(), before, 'buy is a detached draft until apply');
     assert.equal(f.renderer.renovation.layout.furniture.length, 3);
     f.action({ type: 'layout-cell', x: -7, z: 5 });
@@ -3335,7 +3337,7 @@ test('TC-3D-025 renovation commit charges table once and remains paused; repeate
   try {
     openRenovation(f);
     const before = f.state();
-    f.click('#buy-table');
+    purchaseAndPlace(f, 'table');
     assert.equal(f.element('#renovation-apply').disabled, false);
     f.click('#renovation-apply');
     const committed = f.state();
@@ -3355,7 +3357,7 @@ test('TC-3D-025 hiding or losing storage authority cancels uncommitted renovatio
   for (const boundary of ['hidden', 'conflict']) {
     const f = fixture();
     try {
-      openRenovation(f); const before = f.state(); f.click('#buy-table');
+      openRenovation(f); const before = f.state(); purchaseAndPlace(f, 'table');
       if (boundary === 'hidden') { f.document.hidden = true; f.document.emit('visibilitychange'); }
       else f.window.emit('storage', { key: SAVE_KEY, newValue: 'different-tab' });
       assert.equal(f.element('#renovation-panel').hidden, true);
@@ -3390,7 +3392,7 @@ test('TC-3D-025 rotate, store, restore and Escape remain draft-only and last cou
 test('TC-3D-025 Escape discards renovation even after focus leaves its workbench', () => {
   const f = fixture();
   try {
-    openRenovation(f); const before = f.state(); f.click('#buy-table');
+    openRenovation(f); const before = f.state(); purchaseAndPlace(f, 'table');
     f.element('#settings').focus();
     f.window.emit('keydown', { key: 'Escape' });
     assert.equal(f.element('#renovation-panel').hidden, true);
@@ -3413,14 +3415,25 @@ function catalogTabClick(f, tab) {
   f.root.emit('click', { target: button });
 }
 
-test('TC-3D-026 REQ-3D-036 compact pictured furniture catalogue separates owned and purchasable items from coffee', () => {
+function purchaseAndPlace(f, kind) {
+  f.click(`#buy-${kind}`);
+  f.root.emit('click', { target: catalogButton(f, `group-${kind}`), detail: 0 });
+}
+function stageTable(f) { f.click('#buy-table'); }
+function availableCount(f, kind) { return catalogButton(f, `group-${kind}`).children.find(node => node.className === 'catalog-detail').textContent; }
+
+test('TC-3D-030 REQ-3D-043 one pictured card per furniture type shows draft inventory and explicit zero-stock purchase', () => {
   const f = fixture();
   try {
     openRenovation(f);
-    assert.deepEqual(f.nodes.filter(n => n.dataset.catalogKey).map(n => n.dataset.catalogKey), ['counter-a', 'counter-b', 'new-counter', 'new-table']);
+    assert.deepEqual(f.nodes.filter(n => n.dataset.catalogKey).map(n => n.dataset.catalogKey), ['group-counter', 'group-table']);
+    assert.equal(availableCount(f, 'counter'), '可放置 ×0');
+    assert.match(catalogButton(f, 'group-counter').children.find(n => n.className === 'catalog-count').textContent, /已购 2 · 已放置 2/);
+    assert.equal(catalogButton(f, 'group-counter').disabled, true);
+    assert.match(f.element('#buy-counter').textContent, /购买.*24.00/);
+    assert.equal(declarations('.catalog-purchase', 'position')[0], 'absolute');
+    assert.equal(declarations('.catalog-purchase', 'right')[0], '3px');
     assert.equal(declarations('.renovation-panel', 'width')[0], 'min(880px, calc(100vw - 32px))');
-    assert.equal(declarations('.renovation-panel', 'left')[0], '50%');
-    assert.ok(declarations('.renovation-panel', 'bottom')[0].includes('safe-area-inset-bottom'));
     assert.equal(f.nodes.some(n => n.dataset.catalogTab === 'coffee'), false);
     for (const card of f.nodes.filter(n => n.dataset.catalogKey)) {
       const art = card.children.find(node => node.tagName === 'IMG'); assert.ok(art);
@@ -3429,10 +3442,11 @@ test('TC-3D-026 REQ-3D-036 compact pictured furniture catalogue separates owned 
       assert.ok(art.getAttribute('alt')); assert.equal(art.getAttribute('draggable'), 'false');
     }
     catalogTabClick(f, 'counter');
-    assert.deepEqual(f.nodes.filter(n => n.dataset.catalogKey).map(n => n.dataset.catalogKey), ['counter-a', 'counter-b', 'new-counter']);
-    f.root.emit('click', { target: catalogButton(f, 'counter-b') }); f.click('#store-furniture');
+    assert.deepEqual(f.nodes.filter(n => n.dataset.catalogKey).map(n => n.dataset.catalogKey), ['group-counter']);
+    f.action({ type: 'layout-select', id: 'counter-b' }); f.click('#store-furniture');
+    assert.equal(availableCount(f, 'counter'), '可放置 ×1'); assert.equal(f.element('#buy-counter'), null);
     catalogTabClick(f, 'stored');
-    assert.deepEqual(f.nodes.filter(n => n.dataset.catalogKey).map(n => n.dataset.catalogKey), ['counter-b']);
+    assert.deepEqual(f.nodes.filter(n => n.dataset.catalogKey).map(n => n.dataset.catalogKey), ['group-counter']);
     assert.equal(f.element('#rotate-furniture').disabled, true);
   } finally { f.dispose(); }
 });
@@ -3463,12 +3477,13 @@ test('TC-3D-029 renovation catalog stays compact and movement buttons can wrap w
   assert.equal(declarations('.furniture-list', 'overflow-x')[0], 'auto', 'catalogue retains its horizontal browsing gesture');
 });
 
-test('TC-3D-026 actual palette pointer handlers drag one new table, defer charge and suppress synthetic click duplication', () => {
+test('TC-3D-030 explicit purchase stages stock; drag places once, defers charge and suppresses synthetic click duplication', () => {
   const f = fixture();
   try {
-    openRenovation(f); const before = f.state();
+    openRenovation(f); const before = f.state(); stageTable(f);
+    assert.equal(availableCount(f, 'table'), '可放置 ×1'); assert.equal(f.element('#buy-table'), null);
     f.renderer.placementPicker = () => ({ x: 0, z: 5 });
-    const button = armCatalog(f, 'new-table');
+    const button = armCatalog(f, 'group-table');
     assert.equal(f.root.hasPointerCapture(71), true);
     dragPointer(f, 'pointermove', 700, 80);
     assert.equal(f.renderer.renovation.layout.furniture.length, 3);
@@ -3491,13 +3506,15 @@ test('TC-3D-026 actual palette pointer handlers drag one new table, defer charge
 test('TC-3D-026 captured non-drag palette tap selects once and keyboard activation remains usable', () => {
   const f = fixture();
   try {
-    openRenovation(f);
-    const button = armCatalog(f, 'new-table');
+    openRenovation(f); stageTable(f);
+    const button = armCatalog(f, 'group-table');
     dragPointer(f, 'pointerup', 202, 601);
     f.root.emit('click', { target: button, detail: 1 });
     assert.equal(f.renderer.renovation.layout.furniture.length, 3);
-    f.root.emit('click', { target: catalogButton(f, 'new-table'), detail: 0 });
-    assert.equal(f.renderer.renovation.layout.furniture.length, 4);
+    f.root.emit('click', { target: catalogButton(f, 'group-table'), detail: 0 });
+    assert.equal(f.renderer.renovation.layout.furniture.length, 3, 'exhausted group activation cannot buy again');
+    assert.equal(availableCount(f, 'table'), '可放置 ×0');
+    assert.ok(f.element('#buy-table'));
     assert.equal(f.root.hasPointerCapture(71), false);
   } finally { f.dispose(); }
 });
@@ -3505,9 +3522,9 @@ test('TC-3D-026 captured non-drag palette tap selects once and keyboard activati
 for (const placement of [null, { x: 0, z: 0 }, { x: -7, z: 5 }, { x: 11, z: 7 }]) test(`TC-3D-026 invalid palette drop rolls back candidate ${JSON.stringify(placement)}`, () => {
   const f = fixture();
   try {
-    openRenovation(f); const before = f.state(), original = structuredClone(f.renderer.renovation.layout);
+    openRenovation(f); stageTable(f); const before = f.state(), original = structuredClone(f.renderer.renovation.layout);
     f.renderer.placementPicker = () => placement;
-    armCatalog(f, 'new-table'); dragPointer(f, 'pointermove', 700, 80);
+    armCatalog(f, 'group-table'); dragPointer(f, 'pointermove', 700, 80);
     assert.equal(f.renderer.renovation.valid, false);
     assert.equal(f.element('#renovation-status').classList.contains('invalid'), true);
     dragPointer(f, 'pointerup', 700, 80);
@@ -3519,9 +3536,9 @@ for (const placement of [null, { x: 0, z: 0 }, { x: -7, z: 5 }, { x: 11, z: 7 }]
 for (const boundary of ['pointercancel', 'lostpointercapture', 'blur', 'Escape']) test(`TC-3D-026 ${boundary} discards active drag, releases capture and retains prior draft`, () => {
   const f = fixture();
   try {
-    openRenovation(f); f.click('#buy-table'); const original = structuredClone(f.renderer.renovation.layout);
+    openRenovation(f); purchaseAndPlace(f, 'table'); stageTable(f); const original = structuredClone(f.renderer.renovation.layout);
     f.renderer.placementPicker = () => ({ x: 5, z: 5 });
-    armCatalog(f, 'new-table'); dragPointer(f, 'pointermove', 700, 80);
+    armCatalog(f, 'group-table'); dragPointer(f, 'pointermove', 700, 80);
     assert.equal(f.renderer.renovation.layout.furniture.length, 4);
     if (boundary === 'lostpointercapture') f.root.emit(boundary, { pointerId: 71 });
     else if (boundary === 'Escape') f.window.emit('keydown', { key: 'Escape' });
@@ -3539,12 +3556,12 @@ for (const boundary of ['pointercancel', 'lostpointercapture', 'blur', 'Escape']
 test('TC-3D-026 secondary pointers, drops over catalogue and repeated releases cannot place objects', () => {
   const f = fixture();
   try {
-    openRenovation(f); const original = structuredClone(f.renderer.renovation.layout);
+    openRenovation(f); stageTable(f); const original = structuredClone(f.renderer.renovation.layout);
     f.renderer.placementPicker = () => ({ x: 0, z: 5 });
-    const button = catalogButton(f, 'new-table');
+    const button = catalogButton(f, 'group-table');
     f.root.emit('pointerdown', { target: button, pointerId: 71, isPrimary: false, button: 0, clientX: 200, clientY: 600 });
     dragPointer(f, 'pointermove', 700, 80); assert.deepEqual(f.renderer.renovation.layout, original);
-    armCatalog(f, 'new-table');
+    armCatalog(f, 'group-table');
     dragPointer(f, 'pointermove', 700, 80, { pointerId: 72 }); assert.deepEqual(f.renderer.renovation.layout, original);
     dragPointer(f, 'pointermove', 700, 80);
     dragPointer(f, 'pointerup', 200, 500);
@@ -3573,13 +3590,13 @@ test('TC-3D-026 stored furniture restores the same upgraded counter and rejects 
   const f = fixture({ initial });
   try {
     openRenovation(f); const before = f.state();
-    f.root.emit('click', { target: catalogButton(f, 'counter-b') }); f.click('#store-furniture');
+    f.action({ type: 'layout-select', id: 'counter-b' }); f.click('#store-furniture');
     f.renderer.placementPicker = () => ({ x: 0, z: 0 });
-    armCatalog(f, 'counter-b'); dragPointer(f, 'pointermove', 700, 50);
+    armCatalog(f, 'group-counter'); dragPointer(f, 'pointermove', 700, 50);
     assert.equal(f.renderer.renovation.valid, false); dragPointer(f, 'pointerup', 700, 50);
     assert.equal(f.renderer.renovation.layout.furniture[1].stored, true);
     f.renderer.placementPicker = () => ({ x: 5, z: 4 });
-    armCatalog(f, 'counter-b'); dragPointer(f, 'pointermove', 700, 50); dragPointer(f, 'pointerup', 700, 50);
+    armCatalog(f, 'group-counter'); dragPointer(f, 'pointermove', 700, 50); dragPointer(f, 'pointerup', 700, 50);
     assert.equal(f.renderer.renovation.layout.furniture.length, 2);
     assert.equal(f.renderer.renovation.layout.furniture[1].z, 4);
     assert.equal(f.renderer.renovation.layout.furniture[1].stored, false);
@@ -3593,7 +3610,7 @@ test('TC-3D-026 stored furniture restores the same upgraded counter and rejects 
 test('TC-3D-026 touch cards preserve horizontal catalogue browsing and start placement on vertical pull', () => {
   const f = fixture();
   try {
-    openRenovation(f); const original = structuredClone(f.renderer.renovation.layout), button = catalogButton(f, 'new-table');
+    openRenovation(f); stageTable(f); const original = structuredClone(f.renderer.renovation.layout), button = catalogButton(f, 'group-table');
     f.root.emit('pointerdown', { target: button, pointerId: 71, pointerType: 'touch', isPrimary: true, button: 0, clientX: 200, clientY: 600 });
     dragPointer(f, 'pointermove', 300, 601, { pointerType: 'touch' });
     assert.deepEqual(f.renderer.renovation.layout, original);
@@ -3613,7 +3630,7 @@ test('TC-3D-026 touch cards preserve horizontal catalogue browsing and start pla
 test('TC-3D-026 horizontal touch browsing without pointercancel cannot become a purchase on release', () => {
   const f = fixture();
   try {
-    openRenovation(f); const original = structuredClone(f.renderer.renovation.layout), button = catalogButton(f, 'new-table');
+    openRenovation(f); stageTable(f); const original = structuredClone(f.renderer.renovation.layout), button = catalogButton(f, 'group-table');
     f.root.emit('pointerdown', { target: button, pointerId: 71, pointerType: 'touch', isPrimary: true, button: 0, clientX: 200, clientY: 600 });
     dragPointer(f, 'pointermove', 300, 601, { pointerType: 'touch' });
     dragPointer(f, 'pointermove', 200, 450, { pointerType: 'touch' });
@@ -3659,9 +3676,9 @@ test('TC-3D-027 drops over HUD and dialog controls roll back despite a valid sce
   for (const overlay of ['#business-toggle', '#settings', '#action-dock', '#operation-dialog']) {
     const f = fixture();
     try {
-      openRenovation(f); const before = f.state(), original = structuredClone(f.renderer.renovation.layout);
+      openRenovation(f); stageTable(f); const before = f.state(), original = structuredClone(f.renderer.renovation.layout);
       f.renderer.placementPicker = () => ({ x: 0, z: 5 });
-      armCatalog(f, 'new-table'); dragPointer(f, 'pointermove', 700, 80);
+      armCatalog(f, 'group-table'); dragPointer(f, 'pointermove', 700, 80);
       assert.equal(f.renderer.renovation.valid, true);
       f.document.elementFromPoint = () => f.element(overlay);
       dragPointer(f, 'pointerup', 700, 80);
@@ -3688,7 +3705,7 @@ test('TC-3D-027 coffee panel counter shortcuts open the correct active counter w
       f.root.emit('click', { target: shortcut }); assert.equal(f.element('#operation-dialog').open, false, 'stale closed-panel shortcuts cannot open a dialog');
     }
     openRenovation(f);
-    f.root.emit('click', { target: catalogButton(f, 'counter-b') }); f.click('#store-furniture'); f.click('#renovation-apply');
+    f.action({ type: 'layout-select', id: 'counter-b' }); f.click('#store-furniture'); f.click('#renovation-apply');
     openCoffee(f);
     assert.deepEqual(f.nodes.filter(node => node.dataset.counterRecipe).map(node => node.dataset.counterRecipe), ['counter-a']);
     assert.deepEqual(f.nodes.filter(node => node.dataset.counterUpgrade).map(node => node.dataset.counterUpgrade), ['counter-a']);
@@ -4006,5 +4023,187 @@ test('TC-3D-028 unchanged pantry and recipe statuses do not repeat live-region a
     const count = f.element('#recipe-stock-note').textWrites;
     for (let frame = 0; frame < 30; frame++) f.tick(.2);
     assert.equal(f.element('#recipe-stock-note').textWrites, count);
+  } finally { f.dispose(); }
+});
+
+function ownedCatalogInitial({ tables = 0, counters = 2, storedCounters = [] } = {}) {
+  const engine = createEngine(fundedInitial(100000)); engine.togglePause(); assert.equal(engine.beginLayoutEdit(), true);
+  const draft = engine.createLayoutDraft();
+  while (draft.furniture.filter(item => item.kind === 'counter').length < counters) addFurniture(draft, 'counter', -4, 3).stored = true;
+  for (let i = 0; i < tables; i++) addFurniture(draft, 'table', -4, 3).stored = true;
+  for (const item of draft.furniture.filter(item => item.kind === 'counter')) item.stored = storedCounters.includes(item.id) || item.counterId === 'counter-d';
+  if (storedCounters.includes('counter-a')) Object.assign(draft.furniture.find(item => item.id === 'counter-c'), { x: 0, z: 0, stored: false });
+  assert.equal(engine.commitLayout(draft).ok, true);
+  return engine.snapshot();
+}
+
+test('TC-3D-030 exhausted group clicks and drags cannot buy; explicit purchase stages only one item', () => {
+  const f = fixture();
+  try {
+    openRenovation(f); const before = f.state(), original = structuredClone(f.renderer.renovation.layout);
+    const empty = armCatalog(f, 'group-table');
+    dragPointer(f, 'pointermove', 700, 50); dragPointer(f, 'pointerup', 700, 50);
+    f.root.emit('click', { target: empty, detail: 0 });
+    assert.deepEqual(f.renderer.renovation.layout, original);
+    const buy = f.element('#buy-table');
+    f.click('#buy-table');
+    f.root.emit('click', { target: buy, detail: 1 }); f.root.emit('click', { target: buy, detail: 0 });
+    assert.equal(f.renderer.renovation.layout.furniture.filter(item => item.kind === 'table').length, 1);
+    assert.equal(f.renderer.renovation.layout.furniture.at(-1).stored, true);
+    assert.equal(availableCount(f, 'table'), '可放置 ×1'); assert.equal(f.element('#buy-table'), null);
+    assert.match(catalogButton(f, 'group-table').children.find(n => n.className === 'catalog-count').textContent, /已购 0 · 已放置 0 · 待购 1/);
+    assert.deepEqual(f.state(), before);
+    f.click('#store-furniture');
+    assert.equal(f.renderer.renovation.layout.furniture.length, 2);
+    assert.equal(availableCount(f, 'table'), '可放置 ×0');
+    assert.match(f.element('#renovation-cost').textContent, /免费/);
+    stageTable(f); f.click('#renovation-cancel'); assert.deepEqual(f.state(), before);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-030 owned table quantity decreases 2→1→0 and storing increases it without charge or stale-click duplication', () => {
+  const f = fixture({ initial: ownedCatalogInitial({ tables: 2 }) });
+  try {
+    openRenovation(f); const before = f.state();
+    assert.equal(availableCount(f, 'table'), '可放置 ×2');
+    const first = catalogButton(f, 'group-table'); f.root.emit('click', { target: first, detail: 0 });
+    assert.equal(availableCount(f, 'table'), '可放置 ×1');
+    assert.equal(f.renderer.renovation.selectedId, 'table-1');
+    f.root.emit('click', { target: first, detail: 0 }); assert.equal(availableCount(f, 'table'), '可放置 ×1');
+    f.root.emit('click', { target: catalogButton(f, 'group-table'), detail: 0 });
+    assert.equal(availableCount(f, 'table'), '可放置 ×0'); assert.ok(f.element('#buy-table'));
+    assert.equal(f.renderer.renovation.selectedId, 'table-2');
+    f.click('#store-furniture'); assert.equal(availableCount(f, 'table'), '可放置 ×1'); assert.equal(f.element('#buy-table'), null);
+    assert.deepEqual(f.state(), before); assert.match(f.element('#renovation-cost').textContent, /免费/);
+    f.click('#renovation-cancel'); openRenovation(f); assert.equal(availableCount(f, 'table'), '可放置 ×2');
+    f.click('#renovation-apply'); assert.equal(f.state().wallet, before.wallet); assert.equal(f.state().spend, before.spend);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-030 paid stored inventory is selected before pending purchases and extra purchase stays unavailable', () => {
+  const initial = ownedCatalogInitial({ tables: 1 }); initial.layout.furniture.find(item => item.id === 'table-1').stored = false;
+  const f = fixture({ initial });
+  try {
+    openRenovation(f); const before = f.state();
+    stageTable(f); assert.equal(f.renderer.renovation.layout.furniture.at(-1).id, 'table-2');
+    f.action({ type: 'layout-select', id: 'table-1' }); f.click('#store-furniture');
+    assert.equal(availableCount(f, 'table'), '可放置 ×2'); assert.equal(f.element('#buy-table'), null);
+    f.root.emit('click', { target: catalogButton(f, 'group-table'), detail: 0 });
+    assert.equal(f.renderer.renovation.selectedId, 'table-1');
+    assert.equal(f.renderer.renovation.layout.furniture.find(item => item.id === 'table-2').stored, true);
+    assert.equal(availableCount(f, 'table'), '可放置 ×1');
+    f.action({ type: 'layout-select', id: 'table-2' }); f.click('#store-furniture');
+    assert.match(f.element('#renovation-cost').textContent, /免费/);
+    f.click('#renovation-apply'); assert.equal(f.state().wallet, before.wallet); assert.equal(f.state().spend, before.spend);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-030 compact chooser retains A/B affinity and upgraded instance identity across placement and save reload', () => {
+  const initial = ownedCatalogInitial({ counters: 3, storedCounters: ['counter-a', 'counter-b'] });
+  initial.counters[1].level = 7; initial.counters[1].recipe = 'latte';
+  const f = fixture({ initial });
+  let reload;
+  try {
+    openRenovation(f); const before = f.state(), oldB = before.counters[1];
+    assert.equal(availableCount(f, 'counter'), '可放置 ×2');
+    assert.equal(f.element('#furniture-instance-chooser').hidden, true);
+    f.root.emit('click', { target: catalogButton(f, 'group-counter'), detail: 0 });
+    assert.equal(f.element('#furniture-instance-chooser').hidden, false);
+    assert.equal(availableCount(f, 'counter'), '可放置 ×2');
+    const choice = catalogButton(f, 'counter-b'); assert.match(choice.textContent, /Lv.7.*拿铁.*12%/);
+    assert.equal(choice.children.length, 0, 'instance choice stays a compact text control');
+    f.root.emit('click', { target: choice, detail: 0 });
+    assert.equal(f.renderer.renovation.selectedId, 'counter-b'); assert.equal(availableCount(f, 'counter'), '可放置 ×1');
+    assert.equal(f.element('#furniture-instance-chooser').hidden, true);
+    assert.deepEqual(f.state(), before);
+    f.click('#renovation-apply');
+    const after = f.state(); assert.deepEqual(after.counters[1], { ...oldB, x: after.layout.furniture.find(item => item.id === 'counter-b').x });
+    assert.equal(after.wallet, before.wallet); assert.equal(after.spend, before.spend);
+    reload = fixture({ raw: f.memory.getItem(SAVE_KEY), now: f.clock.now });
+    assert.deepEqual(reload.state().counters, after.counters);
+    openRenovation(reload); assert.equal(availableCount(reload, 'counter'), '可放置 ×1');
+  } finally { reload?.dispose(); f.dispose(); }
+});
+
+test('TC-3D-030 same level/recipe still exposes A/B affinity differences but equivalent C/D auto-select stable ID', () => {
+  const ab = ownedCatalogInitial({ counters: 3, storedCounters: ['counter-a', 'counter-b'] });
+  ab.counters[1].recipe = 'espresso';
+  const f = fixture({ initial: ab });
+  try {
+    openRenovation(f); f.root.emit('click', { target: catalogButton(f, 'group-counter'), detail: 0 });
+    assert.equal(f.element('#furniture-instance-chooser').hidden, false);
+    assert.match(catalogButton(f, 'counter-a').textContent, /25%/); assert.match(catalogButton(f, 'counter-b').textContent, /12%/);
+  } finally { f.dispose(); }
+  const cd = ownedCatalogInitial({ counters: 4, storedCounters: ['counter-c', 'counter-d'] });
+  const g = fixture({ initial: cd });
+  try {
+    openRenovation(g); const before = g.state();
+    g.root.emit('click', { target: catalogButton(g, 'group-counter'), detail: 0 });
+    assert.equal(g.renderer.renovation.selectedId, 'counter-c');
+    assert.equal(g.element('#furniture-instance-chooser').hidden, true);
+    assert.equal(availableCount(g, 'counter'), '可放置 ×1'); assert.deepEqual(g.state(), before);
+  } finally { g.dispose(); }
+});
+
+test('TC-3D-030 explicit pending purchase can commit in storage once and reload as paid stock without version changes', async () => {
+  const f = fixture(); let reload;
+  try {
+    openRenovation(f); const before = f.state(); stageTable(f); f.click('#renovation-apply');
+    const after = f.state(); assert.equal(after.wallet, before.wallet - LAYOUT_PRICES.table);
+    assert.equal(after.layout.furniture.at(-1).stored, true);
+    assert.equal(after.economyVersion, 5); assert.equal(after.layout.version, 3);
+    const bytes = f.memory.getItem(SAVE_KEY); assert.equal(JSON.parse(bytes).offlinePolicyVersion, 4);
+    f.click('#renovation-apply'); assert.equal(f.memory.getItem(SAVE_KEY), bytes);
+    reload = fixture({ raw: bytes, now: f.clock.now }); openRenovation(reload);
+    assert.equal(availableCount(reload, 'table'), '可放置 ×1');
+    assert.match(catalogButton(reload, 'group-table').children.find(n => n.className === 'catalog-count').textContent, /已购 1 · 已放置 0$/);
+    reload.root.emit('click', { target: catalogButton(reload, 'group-table'), detail: 0 }); reload.click('#renovation-apply');
+    assert.equal(reload.state().wallet, after.wallet); assert.equal(reload.state().spend, after.spend);
+    const stored = JSON.parse(reload.memory.getItem(SAVE_KEY));
+    const portable = await createPortableSave({ saveId: stored.saveId, revision: stored.revision, gameSchemaVersion: 1, economyVersion: 5, offlinePolicyVersion: 4, savedAt: stored.savedAt, exportedAt: stored.savedAt, overview: overviewOf(stored.state), state: stored.state });
+    const parsed = await parsePortableSave(portable.text); assert.equal(parsed.ok, true);
+    assert.deepEqual(parsed.file.payload.state.layout, stored.state.layout);
+  } finally { reload?.dispose(); f.dispose(); }
+});
+
+test('TC-3D-030 insufficient balance and maximum owned count cannot create draft purchases', () => {
+  const f = fixture({ initial: fundedInitial(0) });
+  try {
+    openRenovation(f); const before = structuredClone(f.renderer.renovation.layout);
+    f.click('#buy-table'); assert.deepEqual(f.renderer.renovation.layout, before); assert.match(f.element('#toast').textContent, /余额不足/);
+  } finally { f.dispose(); }
+  const initial = ownedCatalogInitial({ counters: 4, storedCounters: ['counter-c', 'counter-d'] });
+  const inventory = furnitureInventory(initial, initial.layout, 'counter');
+  assert.equal(inventory.limit, 4); assert.equal(inventory.items.length, 4);
+});
+
+test('TC-3D-030 keyboard focus follows purchase→inventory→purchase and opens meaningful instance choices', () => {
+  const f = fixture();
+  try {
+    openRenovation(f); f.document.keyboardInput = true;
+    f.element('#buy-table').focus(); f.click('#buy-table', { detail: 0 });
+    assert.equal(f.document.activeElement, catalogButton(f, 'group-table'));
+    f.root.emit('click', { target: f.document.activeElement, detail: 0 });
+    assert.equal(f.document.activeElement, f.element('#buy-table'));
+  } finally { f.dispose(); }
+  const g = fixture({ initial: ownedCatalogInitial({ counters: 3, storedCounters: ['counter-a', 'counter-b'] }) });
+  try {
+    openRenovation(g); g.document.keyboardInput = true;
+    catalogButton(g, 'group-counter').focus(); g.root.emit('click', { target: g.document.activeElement, detail: 0 });
+    assert.equal(g.document.activeElement, catalogButton(g, 'counter-a'));
+    g.root.emit('click', { target: catalogButton(g, 'counter-a'), detail: 0 });
+    assert.equal(g.document.activeElement, catalogButton(g, 'group-counter'));
+  } finally { g.dispose(); }
+});
+
+test('TC-3D-030 rendering after pointer placement leaves unrelated keyboard focus alone', () => {
+  const f = fixture({ initial: ownedCatalogInitial({ tables: 1 }) });
+  try {
+    openRenovation(f); f.document.keyboardInput = true;
+    f.element('#renovation-cancel').focus(); const focused = f.document.activeElement;
+    f.renderer.placementPicker = () => ({ x: 0, z: 5 });
+    armCatalog(f, 'group-table'); dragPointer(f, 'pointermove', 700, 50); dragPointer(f, 'pointerup', 700, 50);
+    assert.equal(f.document.activeElement, focused);
+    assert.equal(availableCount(f, 'table'), '可放置 ×0');
   } finally { f.dispose(); }
 });

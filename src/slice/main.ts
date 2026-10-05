@@ -1,4 +1,4 @@
-import { createEngine, recipeById, counterPrice, counterBrewSeconds } from "./core/engine";
+import { createEngine, recipeById, counterPrice, counterBrewSeconds, counterAffinities } from "./core/engine";
 import { INGREDIENT_CONFIG } from "./core/ingredients";
 import { LocalSaveRepository, SAVE_KEY, type LoadResult, type OfflineSettlement } from "./core/persistence";
 import type {
@@ -19,6 +19,7 @@ import { RouteQAPanel } from "./qa/RouteQAPanel";
 import { PerformanceQAPanel } from "./qa/PerformanceQAPanel";
 import { createPortableSave, parsePortableSave, overviewOf, portableFilename, MAX_PORTABLE_BYTES, type PortableFile } from "./core/portableSave";
 import { addFurniture, getLayout, GRID, LAYOUT_PRICES, layoutCost, MAX_COUNTERS, MAX_TABLES, moveFurniture, rotateFurniture, storeFurniture, validateLayout } from "./core/layout";
+import { furnitureInventory, type FurnitureKind } from "./core/furnitureCatalog";
 import type { FurniturePlacement, ShopLayout } from "./core/types";
 import "./style.css";
 
@@ -126,7 +127,8 @@ root.innerHTML = `
     <div id="renovation-tools" hidden>
       <div class="catalog-toolbar"><div class="catalog-tabs" role="group" aria-label="家具分类"><button data-catalog-tab="all" aria-pressed="true">全部</button><button data-catalog-tab="counter" aria-pressed="false">柜台</button><button data-catalog-tab="table" aria-pressed="false">桌椅</button><button data-catalog-tab="stored" aria-pressed="false">收纳</button></div><button id="expand-shop" class="expand-shop">解锁旁边区域</button></div>
       <div id="furniture-list" class="furniture-list" role="group" aria-label="拖出家具，或点击选择"><p id="catalog-empty" hidden>这里暂时没有收起的物件</p></div>
-      <div class="furniture-controls"><span id="furniture-selected"></span><div role="group" aria-label="移动与旋转家具"><button data-layout-move="left" aria-label="向左移动一格">←</button><button data-layout-move="up" aria-label="向后移动一格">↑</button><button data-layout-move="down" aria-label="向前移动一格">↓</button><button data-layout-move="right" aria-label="向右移动一格">→</button><button id="rotate-furniture">旋转 ↻</button><button id="store-furniture">收起</button></div><p id="renovation-hint">拖出物件放进店里，也能直接拖动店内物件。绿色可放，红色需调整。</p></div>
+      <div id="furniture-instance-chooser" class="furniture-instance-chooser" role="group" aria-label="选择要放回的柜台" hidden></div>
+      <div class="furniture-controls"><span id="furniture-selected"></span><div role="group" aria-label="移动与旋转家具"><button data-layout-move="left" aria-label="向左移动一格">←</button><button data-layout-move="up" aria-label="向后移动一格">↑</button><button data-layout-move="down" aria-label="向前移动一格">↓</button><button data-layout-move="right" aria-label="向右移动一格">→</button><button id="rotate-furniture">旋转 ↻</button><button id="store-furniture">收起</button></div><p id="renovation-hint">拖出库存放进店里，也能直接移动店内物件。库存为 0 时点击购买，完成布置时结算。</p></div>
     </div>
   </aside>
   <div id="catalog-drag-label" class="catalog-drag-label" aria-hidden="true" hidden></div>
@@ -219,6 +221,7 @@ let selectedFurniture: string | null = null;
 let furnitureListKey = "";
 let counterShortcutKey = "";
 let catalogTab = "all";
+let catalogChooser: FurnitureKind | null = null;
 let layoutDrag: { draft: ShopLayout; id: string; valid: boolean; reason: string; offsetX: number; offsetZ: number } | null = null;
 let catalogPointer: { id: number; x: number; y: number; key: string; dragging: boolean; browsing: boolean; pointerType: string } | null = null;
 let suppressCatalogClick = false;
@@ -392,6 +395,7 @@ function startRenovation() {
   selectedFurniture = null;
   furnitureListKey = "";
   catalogTab = "all";
+  catalogChooser = null;
   $("#renovation-panel").hidden = false;
   $("#action-dock").hidden = true;
   $<HTMLButtonElement>("#renovation-apply").disabled = true;
@@ -422,11 +426,10 @@ function catalogCard(key: string, name: string, art: string, detail: string, tag
   const button = document.createElement("button");
   button.className = "catalog-card";
   button.setAttribute("data-catalog-key", key);
-  button.setAttribute("aria-label", `${name}，${detail}，拖到店里或点击选择`);
+  button.setAttribute("aria-label", `${name}，${detail}，${disabled ? "没有可放置库存" : "拖到店里或点击放置"}`);
   button.setAttribute("aria-pressed", String(key === selectedFurniture));
   button.disabled = disabled;
-  if (key.startsWith("new-")) button.setAttribute("id", key === "new-counter" ? "buy-counter" : "buy-table");
-  else button.setAttribute("data-furniture-id", key);
+
   const image = document.createElement("img");
   image.className = "catalog-art";
   image.setAttribute("src", `./assets/catalog-${art}.svg`);
@@ -461,27 +464,74 @@ function renderCounterShortcuts() {
 }
 function renderCatalog() {
   if (!layoutDraft) return;
-  const owned = getLayout(engine.state).furniture;
-  const listKey = JSON.stringify([catalogTab, layoutDraft.furniture.map(item => [item.id, item.stored]), engine.state.coffeeLevels]);
+  const listKey = JSON.stringify([catalogTab, layoutDraft.furniture.map(item => [item.id, item.stored]), engine.state.counters.map(counter => [counter.id, counter.level, counter.recipe]), catalogChooser]);
   if (listKey !== furnitureListKey) {
+    const active = document.activeElement;
+    const focused = active instanceof HTMLButtonElement && active.isConnected && active.matches(":focus-visible") && (active.closest("#furniture-list") || active.closest("#furniture-instance-chooser")) ? active : null;
+    const focusedKey = focused?.dataset.catalogKey;
+    const focusedKind = focused?.dataset.catalogPurchase ?? (focusedKey === "group-counter" ? "counter" : focusedKey === "group-table" ? "table" : layoutDraft.furniture.find(item => item.id === focusedKey)?.kind);
     furnitureListKey = listKey;
     const list = $("#furniture-list");
     for (const child of Array.from(list.children)) child.remove();
-    for (const item of layoutDraft.furniture) {
-      if (catalogTab !== "all" && catalogTab !== item.kind && !(catalogTab === "stored" && item.stored)) continue;
-      const purchased = owned.some(other => other.id === item.id);
-      const detail = purchased ? (item.stored ? "收纳 ×1 · 免费放回" : "已放置 ×1") : `待添置 · ${money(LAYOUT_PRICES[item.kind])}`;
-      list.append(catalogCard(item.id, furnitureName(item), item.kind, detail, item.stored ? "收纳" : purchased ? "拥有" : "待购"));
-    }
     for (const kind of ["counter", "table"] as const) {
-      if (catalogTab !== "all" && catalogTab !== kind) continue;
-      const count = layoutDraft.furniture.filter(item => item.kind === kind).length, max = kind === "counter" ? MAX_COUNTERS : MAX_TABLES;
-      list.append(catalogCard(`new-${kind}`, kind === "counter" ? "新柜台" : "新桌椅", kind, `${money(LAYOUT_PRICES[kind])} · ${count}/${max}`, "＋ 添置", count >= max));
+      const inventory = furnitureInventory(engine.state, layoutDraft, kind);
+      if (catalogTab !== "all" && catalogTab !== kind && !(catalogTab === "stored" && inventory.available.length)) continue;
+      const name = kind === "counter" ? "咖啡柜台" : "桌椅";
+      const entry = document.createElement("div"); entry.className = "catalog-entry";
+      const card = catalogCard(`group-${kind}`, name, kind, `可放置 ×${inventory.available.length}`, "", !inventory.available.length);
+      const count = document.createElement("span"); count.className = "catalog-count";
+      count.textContent = `已购 ${inventory.owned} · 已放置 ${inventory.placed}${inventory.pending ? ` · 待购 ${inventory.pending}` : ""}`;
+      card.append(count); entry.append(card);
+      if (!inventory.available.length) {
+        if (inventory.items.length < inventory.limit) {
+          const buy = document.createElement("button"); buy.className = "catalog-purchase";
+          buy.setAttribute("id", `buy-${kind}`); buy.setAttribute("data-catalog-purchase", kind);
+          buy.setAttribute("aria-label", `购买${name} ${money(LAYOUT_PRICES[kind])}，完成布置时结算`);
+          buy.textContent = `购买 ${money(LAYOUT_PRICES[kind])}`; entry.append(buy);
+        } else { const full = document.createElement("span"); full.className = "catalog-tag"; full.textContent = "已达上限"; entry.append(full); }
+      }
+      list.append(entry);
     }
     if (!list.children.length) { const empty = document.createElement("p"); empty.className = "catalog-empty"; empty.textContent = "这里暂时没有收起的物件"; list.append(empty); }
+    const chooser = $("#furniture-instance-chooser");
+    for (const child of Array.from(chooser.children)) child.remove();
+    const inventory = catalogChooser && furnitureInventory(engine.state, layoutDraft, catalogChooser);
+    chooser.hidden = !inventory || !inventory.needsChoice;
+    if (inventory && inventory.needsChoice) {
+      const hint = document.createElement("span"); hint.textContent = "选择要放回的柜台："; chooser.append(hint);
+      for (const item of inventory.candidates) {
+        const counter = engine.state.counters.find(counter => counter.id === item.counterId);
+        const button = document.createElement("button"); button.setAttribute("data-catalog-key", item.id);
+        button.textContent = `${furnitureName(item)} · Lv.${counter?.level ?? 1} · ${recipeById[counter?.recipe ?? "espresso"].name} · ${counterAffinities[item.counterId!]}`;
+        button.setAttribute("aria-label", `${button.textContent}，点击或拖出放置`); chooser.append(button);
+      }
+    }
+    // A keyboard action can replace its own button. Keep focus within the same
+    // operation, but never interfere with pointer capture or unrelated controls.
+    if (focused && !catalogPointer && !layoutDrag) {
+      const choices = Array.from(chooser.children).filter((child): child is HTMLButtonElement => child instanceof HTMLButtonElement && !!child.dataset.catalogKey);
+      const cards = Array.from(root.querySelectorAll<HTMLButtonElement>("[data-catalog-key]"));
+      const target = !chooser.hidden && focusedKey === `group-${catalogChooser}` ? choices[0]
+        : !chooser.hidden && choices.find(button => button.dataset.catalogKey === focusedKey)
+          || cards.find(button => button.dataset.catalogKey === `group-${focusedKind}` && !button.disabled)
+          || Array.from(root.querySelectorAll<HTMLButtonElement>("[data-catalog-purchase]")).find(button => button.dataset.catalogPurchase === focusedKind)
+          || $<HTMLButtonElement>("#store-furniture");
+      if (target && !target.disabled) target.focus({ preventScroll: true });
+    }
   }
-  root.querySelectorAll<HTMLButtonElement>("[data-catalog-key]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.catalogKey === selectedFurniture)));
+  const selectedKind = layoutDraft.furniture.find(item => item.id === selectedFurniture)?.kind;
+  root.querySelectorAll<HTMLButtonElement>("[data-catalog-key]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.catalogKey === `group-${selectedKind}` || button.dataset.catalogKey === selectedFurniture)));
   root.querySelectorAll<HTMLButtonElement>("[data-catalog-tab]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.catalogTab === catalogTab)));
+}
+/** Resolve owned stock at action time. Group gestures can never create an asset. */
+function availableCatalogItem(key: string): FurniturePlacement | null {
+  if (!layoutDraft) return null;
+  const kind = key === "group-counter" ? "counter" : key === "group-table" ? "table" : null;
+  if (!kind) return layoutDraft.furniture.find(item => item.id === key) ?? null;
+  const inventory = furnitureInventory(engine.state, layoutDraft, kind);
+  if (inventory.needsChoice) { catalogChooser = kind; renderCatalog(); return null; }
+  catalogChooser = null;
+  return inventory.candidates[0] ?? null;
 }
 function renderLayoutDraft() {
   const draft = layoutDrag?.draft ?? layoutDraft;
@@ -521,8 +571,8 @@ function cancelLayoutDrag(render = true) {
 function beginLayoutDrag(key: string, clientX?: number, clientY?: number): boolean {
   if (!layoutDraft || layoutDrag || saveBlocked) return false;
   const draft: ShopLayout = JSON.parse(JSON.stringify(layoutDraft));
-  const newKind = key === "new-counter" ? "counter" : key === "new-table" ? "table" : null;
-  const item = newKind ? addFurniture(draft, newKind, -4, 3) : draft.furniture.find(item => item.id === key);
+  const source = availableCatalogItem(key);
+  const item = source && draft.furniture.find(item => item.id === source.id);
   if (!item) return false;
   selectedFurniture = item.id;
   const origin = clientX !== undefined && clientY !== undefined ? scene?.pickLayoutPlacement(clientX, clientY, selectedFurniture) : null;
@@ -575,19 +625,34 @@ function updateRenovation() {
   }
 }
 function chooseCatalogItem(key: string) {
-  if (key === "new-counter") positionNewFurniture("counter");
-  else if (key === "new-table") positionNewFurniture("table");
-  else { selectedFurniture = key; renderLayoutDraft(); }
-}
-function positionNewFurniture(kind: "counter" | "table") {
-  if (!layoutDraft) return;
-  const item = addFurniture(layoutDraft, kind, -4, 3);
-  if (!item) return;
-  // Suggest a legal nearby placement, but never silently commit or charge it.
-  const candidates = [{ x: -4, z: 3 }, { x: 0, z: 5 }, { x: 5, z: 5 }];
-  for (let z = GRID.minZ; z <= GRID.maxZ; z++) for (let x = GRID.minX; x <= (layoutDraft.expanded ? GRID.expandedMaxX : GRID.maxX); x++) candidates.push({ x, z });
-  for (const point of candidates) { item.x = point.x; item.z = point.z; if (validateLayout(layoutDraft).ok) break; }
+  const item = availableCatalogItem(key);
+  if (!item || !layoutDraft) return;
   selectedFurniture = item.id;
+  if (item.stored) {
+    // Suggest a legal placement for a tap. Dragging uses the chosen floor point.
+    const original = { x: item.x, z: item.z };
+    const candidates = [original, { x: -4, z: 3 }, { x: 0, z: 5 }, { x: 5, z: 5 }];
+    for (let z = GRID.minZ; z <= GRID.maxZ; z++) for (let x = GRID.minX; x <= (layoutDraft.expanded ? GRID.expandedMaxX : GRID.maxX); x++) candidates.push({ x, z });
+    let placed = false;
+    for (const point of candidates) { moveFurniture(layoutDraft, item.id, point.x, point.z); if (validateLayout(layoutDraft).ok) { placed = true; break; } }
+    if (!placed) { Object.assign(item, original, { stored: true }); toast("没有合适的空位，请拖到店内空地调整"); }
+  }
+  catalogChooser = null;
+  renderLayoutDraft();
+}
+function purchaseCatalogFurniture(kind: FurnitureKind) {
+  if (!layoutDraft || layoutDrag || catalogPointer || saveBlocked) return;
+  const inventory = furnitureInventory(engine.state, layoutDraft, kind);
+  if (inventory.available.length || inventory.items.length >= inventory.limit) return;
+  const draft: ShopLayout = JSON.parse(JSON.stringify(layoutDraft));
+  const item = addFurniture(draft, kind, -4, 3);
+  if (!item) return;
+  item.stored = true;
+  const offer = layoutCost(engine.state, draft);
+  if (!offer.ok) { toast(offer.message); return; }
+  // Purchase is an explicit, unpaid addition to this transaction. Stock appears
+  // immediately, removing the buy affordance before any repeated click can run.
+  layoutDraft = draft; selectedFurniture = item.id; catalogChooser = null;
   renderLayoutDraft();
 }
 function sceneAction(action: CoffeeSceneAction) {
@@ -677,7 +742,7 @@ on(root, "click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
     "button",
   );
-  if (!button) return;
+  if (!button || button.disabled || !button.isConnected) return;
   if (button.dataset.catalogKey && suppressCatalogClick && (event as MouseEvent).detail !== 0) { event.preventDefault(); suppressCatalogClick = false; return; }
   if (isRenderMode(button.dataset.renderMode)) {
     const mode = button.dataset.renderMode;
@@ -691,7 +756,9 @@ on(root, "click", (event) => {
     updateRenderModeUI();
     updateUI();
   } else if (button.dataset.catalogTab && renovating && layoutDraft && !layoutDrag) {
-    catalogTab = button.dataset.catalogTab; renderLayoutDraft();
+    catalogTab = button.dataset.catalogTab; catalogChooser = null; renderLayoutDraft();
+  } else if (button.dataset.catalogPurchase && renovating && layoutDraft && !layoutDrag) {
+    if (button.dataset.catalogPurchase === "counter" || button.dataset.catalogPurchase === "table") purchaseCatalogFurniture(button.dataset.catalogPurchase);
   } else if (button.dataset.catalogKey && renovating && layoutDraft && !layoutDrag) {
     chooseCatalogItem(button.dataset.catalogKey);
   } else if (button.dataset.layoutMove && renovating && layoutDraft && selectedFurniture && !layoutDrag) {

@@ -51,3 +51,5 @@
 手动原料闭环：[规格](product/specs/manual-ingredient-stock.md)、[计划](testing/plans/manual-ingredient-stock.md)、[TC-3D-028](testing/cases/slice/TC-3D-028.md)。全店共享豆/奶，制作开始原子扣份，玩家主动购买，库存不足停止新制作；旧杯继续、缺料顾客可离店，离线80%同规则。经济5/文件5/离线策略4，旧窗口一次迁移。数值未平衡，未加入自动救济或强制留款。
 
 装修操作行回归：[计划](testing/plans/renovation-action-layout.md)、[TC-3D-029](testing/cases/slice/TC-3D-029.md)、[执行报告](testing/runs/2026-10-05-renovation-action-layout/report.md)。修复完成按钮逐字换行，保持操作组完整，压缩目录高度；真实公开页复测与自动化契约分别记录。
+
+同类家具库存：[规格](product/specs/owned-furniture-catalog.md)、[计划](testing/plans/owned-furniture-catalog.md)、[TC-3D-030](testing/cases/slice/TC-3D-030.md)、[执行报告](testing/runs/2026-10-05-owned-furniture-catalog/report.md)。咖啡柜台/桌椅各一张图片卡，可用数量随草稿放置与收起变化；零库存才明确购买，完成才扣款，柜台身份/升级/配方/亲和保留。自动化结果与 NOT_RUN 的真实浏览器阶段分开记录，不含合并或部署授权。
