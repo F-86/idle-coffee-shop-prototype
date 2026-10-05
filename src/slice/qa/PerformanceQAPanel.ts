@@ -10,6 +10,7 @@ export class PerformanceQAPanel {
   private readonly listeners = new AbortController();
   private nextDisplay = -Infinity;
   private frozen = false;
+  private lastFocused: boolean | null = null;
   private disposed = false;
   private readonly readContext: () => string;
 
@@ -40,10 +41,16 @@ export class PerformanceQAPanel {
   }
   reset(reason: string): void {
     this.sampler.reset(reason); this.nextDisplay = -Infinity; this.frozen = false;
+    this.lastFocused = null;
   }
   get active(): boolean { return !this.disposed && this.panel.open && !this.frozen; }
   update(now: number, rendererAvailable: boolean, focused: boolean): void {
     if (!this.active) return;
+    // A directly observed focus change is sufficient to break continuity even
+    // if a browser/tool omits the matching window blur/focus event.
+    if (!focused && this.lastFocused !== false) this.reset('observed unfocused; sampling stopped');
+    else if (focused && this.lastFocused === false) this.reset('focus resumed after observed pause');
+    this.lastFocused = focused;
     if (rendererAvailable && focused) this.sampler.frame(now);
     if (now < this.nextDisplay) return;
     this.nextDisplay = now + 1000;

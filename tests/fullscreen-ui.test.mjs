@@ -1168,6 +1168,29 @@ test('TC-3D-015 visible-but-unfocused pages cannot contaminate foreground timing
   } finally { f.dispose(); }
 });
 
+test('TC-3D-015 observed focus loss excludes its gap even when lifecycle events are missing', () => {
+  const f = fixture();
+  try {
+    const p = openPerformance(f); f.tick(.01); f.tick(.01);
+    assert.equal(f.window.__coffeeSliceDebug.readPerformance().totalIntervals, 1);
+    f.document.hasFocus = () => false;
+    f.tick(1); f.tick(1); // Deliberately no window blur/focus events.
+    assert.equal(f.window.__coffeeSliceDebug.readPerformance().totalIntervals, 0);
+    assert.match(p.text.textContent, /PAUSED · page unfocused/);
+    f.document.hasFocus = () => true;
+    f.tick(.01); // First resumed render establishes a new timestamp origin.
+    assert.equal(f.window.__coffeeSliceDebug.readPerformance().totalIntervals, 0);
+    f.tick(.01);
+    const resumed = f.window.__coffeeSliceDebug.readPerformance();
+    assert.equal(resumed.p95Ms, 10); assert.equal(resumed.totalMs, 10);
+    assert.equal(resumed.totalOver50, 0); assert.equal(resumed.totalOver100, 0);
+    assert.match(resumed.reason, /observed pause/);
+    assert.equal(f.frames.size, 1);
+    const state = f.state();
+    assert.ok(Math.abs(state.elapsed + state.stepCarry - 2.04) < 1e-9, 'all 2.04 seconds still reach the business simulation');
+  } finally { f.dispose(); }
+});
+
 test('TC-3D-015 context loss invalidates measurements even when the scene object survives', () => {
   const f = fixture();
   try {
