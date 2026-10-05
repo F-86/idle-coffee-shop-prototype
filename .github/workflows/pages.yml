@@ -33,6 +33,15 @@ jobs:
         run: npm run typecheck
       - name: Build for the repository Pages path
         run: npm run build -- --base=/idle-coffee-shop-prototype/
+      - name: Check isolated file probe
+        run: |
+          npm exec -- tsc --noEmit -p qa/file-probe/tsconfig.json
+          node --test qa/file-probe/probe.test.mjs
+      - name: Add isolated file probe under its own path
+        run: |
+          npm exec -- vite build --config qa/file-probe/vite.config.ts
+          test ! -e dist/file-probe
+          cp -R .qa-dist/file-probe dist/file-probe
       - name: Upload built site only
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
