@@ -1,5 +1,5 @@
 import { createEngine, recipeById, managerSpeed } from "./core/engine";
-import { LocalSaveRepository, SAVE_KEY } from "./core/persistence";
+import { LocalSaveRepository, SAVE_KEY, type LoadResult, type OfflineSettlement } from "./core/persistence";
 import type {
   CounterId,
   RecipeId,
@@ -35,7 +35,8 @@ root.innerHTML = `
     </div>
     <div id="coffee-panel" class="operation-panel" hidden><div class="coffee-medallion" id="coffee-symbol" aria-hidden="true">☕</div><p id="coffee-detail"></p><p class="detail-note">两款配方已解锁。分配到柜台后，下一杯开始生效。</p><div class="assign-buttons"><button data-assign="counter-a">供给柜台 A</button><button data-assign="counter-b">供给柜台 B</button></div></div>
     <div id="vault-panel" class="operation-panel" hidden><div class="vault-total"><span>已存入金库</span><strong id="vault-total"></strong></div><div class="detail-grid"><span>台面待收<strong id="pending"></strong></span><span>经理运送<strong id="carrying"></strong></span></div><p class="detail-note">钱留在台面，再由经理沿后方通道送回。送到金库才可用于升级。</p><p id="served" class="detail-note"></p><h2 class="manager-heading">收钱经理</h2><div class="detail-grid"><span>收运等级<strong id="manager-rank"></strong></span><span>收运效率<strong id="manager-speed"></strong></span></div><p id="manager-status" class="detail-note"></p><p id="manager-preview"></p><button id="manager-upgrade" class="primary-button"></button></div>
-    <div id="settings-panel" class="operation-panel" hidden><p id="save-status" class="save-status">本地自动保存</p><p class="detail-note">当前只保存到本浏览器，iCloud 尚未配置。</p><div class="settings-grid"><button id="save">保存进度</button><button id="export">导出备份</button><button id="export-current" hidden>导出当前副本</button><button id="reload" hidden>读取最新档</button><button id="new-shop" hidden>备份并开始新店</button></div><p class="settings-label" id="render-mode-label">画面与流畅度</p><div class="render-mode-picker" role="group" aria-labelledby="render-mode-label" aria-describedby="render-mode-note"><button data-render-mode="smooth">清晰流畅<small>跟随屏幕刷新</small></button><button data-render-mode="clear-60">清晰 60 帧<small>同等清晰度</small></button><button data-render-mode="balanced">平衡<small>较低清晰度 · 最高 60 帧</small></button><button data-render-mode="low-power">省电<small>低清晰度 · 最高 30 帧</small></button></div><p class="detail-note" id="render-mode-note"></p><p class="settings-label">逛逛小店</p><div class="jump-grid"><button data-focus="counter-a-recipe">柜台 A</button><button data-focus="counter-b-recipe">柜台 B</button><button data-focus="menu-espresso">咖啡墙</button><button data-focus="vault">金库</button><button data-focus="invite">入口</button></div><details><summary>怎么玩</summary><p>客人会自动进入、排队和取杯，入口也能招呼客人。柜台升级更快更值钱，在金库里升级经理提高收运。点柜台前脸的配方牌换咖啡，墙上菜单能查看配方或分配到柜台。制作中的那一杯不会被追改。</p><p>离线收益最多结算 2 小时，且只结算一次。此版本没有真实跨设备同步。</p></details></div>
+    <div id="settings-panel" class="operation-panel" hidden><p id="save-status" class="save-status">本地自动保存</p><p class="detail-note">当前只保存到本浏览器，iCloud 尚未配置。</p><div class="settings-grid"><button id="save">保存进度</button><button id="export">导出备份</button><button id="export-current" hidden>导出当前副本</button><button id="reload" hidden>读取最新档</button><button id="new-shop" hidden>备份并开始新店</button></div><p class="settings-label" id="render-mode-label">画面与流畅度</p><div class="render-mode-picker" role="group" aria-labelledby="render-mode-label" aria-describedby="render-mode-note"><button data-render-mode="smooth">清晰流畅<small>跟随屏幕刷新</small></button><button data-render-mode="clear-60">清晰 60 帧<small>同等清晰度</small></button><button data-render-mode="balanced">平衡<small>较低清晰度 · 最高 60 帧</small></button><button data-render-mode="low-power">省电<small>低清晰度 · 最高 30 帧</small></button></div><p class="detail-note" id="render-mode-note"></p><p class="settings-label">逛逛小店</p><div class="jump-grid"><button data-focus="counter-a-recipe">柜台 A</button><button data-focus="counter-b-recipe">柜台 B</button><button data-focus="menu-espresso">咖啡墙</button><button data-focus="vault">金库</button><button data-focus="invite">入口</button></div><details><summary>怎么玩</summary><p>客人会自动进入、排队和取杯，入口也能招呼客人。柜台升级更快更值钱，在金库里升级经理提高收运。点柜台前脸的配方牌换咖啡，墙上菜单能查看配方或分配到柜台。制作中的那一杯不会被追改。</p><p>离线按80%经营速度推进，无时长上限；钱由经理送回金库后可用。此版本没有真实跨设备同步。</p></details></div>
+    <div id="offline-panel" class="operation-panel" hidden><div id="offline-working"><p id="offline-progress-text" role="status" aria-live="polite">正在计算离线经营进度…</p><progress id="offline-progress" max="1" value="0" aria-label="离线经营结算进度"></progress><p class="detail-note">结算完成并安全保存后才会到账。取消会保留原有进度，稍后可以重试。</p><button id="offline-cancel" class="secondary-button">取消结算</button></div><div id="offline-result" hidden><p id="offline-deposited" class="offline-deposited"></p><p id="offline-duration"></p><p id="offline-generated"></p><p id="offline-pending"></p><p id="offline-legacy" class="detail-note" hidden></p><button id="offline-done" class="primary-button">继续营业</button></div></div>
   </dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>`;
@@ -70,7 +71,8 @@ try {
   };
 }
 const repository = new LocalSaveRepository(browserStorage);
-const loaded = repository.load(Date.now());
+const loadPerformance = performance.now();
+const loaded = repository.load(Date.now(), { deferOffline: true });
 const routeDiagnostics = isRouteQA(location.search) ? new RouteDiagnostics() : null;
 let engine: SliceEngine = createEngine(loaded.state, routeDiagnostics?.observe);
 const routePanel = routeDiagnostics ? new RouteQAPanel(root, routeDiagnostics, () => engine.state) : null;
@@ -79,7 +81,7 @@ let stopped = false,
   lastSave = Date.now(),
   hiddenAt: number | null = document.hidden ? Date.now() : null;
 let renderMode: RenderMode = readRenderMode(browserStorage);
-const renderBudget = new RenderBudget(performance.now(), renderMode);
+const renderBudget = new RenderBudget(loadPerformance, renderMode);
 const presentation = new FrameInterpolator(engine.state);
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 const listeners = new AbortController();
@@ -97,7 +99,7 @@ let saveBlocked = loaded.protectedRaw || (loaded.status !== "new" && loaded.stat
 // All unresolved reads freeze play, not only CAS/settlement failures. A fallback
 // initial state is a display placeholder, never authority to replace a save.
 let conflictBlocked = saveBlocked;
-let hasUsableState = ["new", "loaded", "conflict", "offline-save-failed"].includes(loaded.status);
+let hasUsableState = ["new", "loaded", "settling", "conflict", "offline-save-failed"].includes(loaded.status);
 // A valid old manual-pause save stays paused during repository offline settlement.
 // This no-pause UI resumes only current play after verified load/new initialization.
 if (conflictBlocked && !engine.state.paused) engine.togglePause();
@@ -105,13 +107,23 @@ else if (!conflictBlocked && engine.state.paused) engine.togglePause();
 $("#reload").hidden = !saveBlocked;
 $("#new-shop").hidden = !loaded.protectedRaw && loaded.status !== "missing";
 let selected: CounterId = "counter-a";
-let panel: "counter" | "coffee" | "vault" | "settings" | null =
+let panel: "counter" | "coffee" | "vault" | "settings" | "offline" | null =
     null,
   viewedRecipe: RecipeId = "espresso";
 let scene: CoffeeScene | null = null;
 let qaContextLost = false;
 let sceneInteractive = true;
 let returnFocus: HTMLElement | null = null;
+type OfflineRetry = { kind: "load" } | { kind: "hidden"; state: SliceState; hiddenAt: number };
+let offlineJob: { pending: OfflineSettlement; controller: AbortController; started: number; lastObserved: number } | null = null;
+let offlineRetry: OfflineRetry | null = null;
+let resumeOfflineAfterHide = false;
+let offlineReturnPanel: "counter" | "coffee" | "vault" | "settings" | null = null;
+// Only a completed visible computation proves a long unrendered interval was
+// foreground work. Other long clock gaps need explicit recovery, not guessing.
+let verifiedForegroundSeconds = 0;
+const LONG_FOREGROUND_GAP_SECONDS = 60;
+const UNCLASSIFIED_TIME_MESSAGE = "页面长时间未更新，无法确认这段时间的营业状态；已保护当前进度，请先导出当前副本或读取最新存档。";
 function toast(message: string) {
   if (stopped) return;
   $("#toast").textContent = message;
@@ -129,6 +141,8 @@ function save(manual = false, saveAt = Date.now()) {
       );
     return;
   }
+  settleVisibleTail();
+  if (saveBlocked) return;
   try {
     const result = repository.save(engine.snapshot(), saveAt);
     $("#save-status").textContent = result.ok
@@ -154,6 +168,7 @@ function setSceneInteractive(enabled: boolean) {
 }
 function closePanel() {
   if (!dialog.open) return;
+  if (offlineJob) cancelOfflineWork("离线结算已取消，原有进度已保留。请在设置中重试。");
   dialog.close();
   // Native close is queued after open is removed. Navigation immediately after
   // dismissal must not be dropped by the renderer's still-suspended input guard.
@@ -186,7 +201,7 @@ function showPanel(
   }
 }
 function sceneAction(action: CoffeeSceneAction) {
-  if (stopped || dialog.open) return;
+  if (stopped || dialog.open || offlineJob) return;
   if (action.type === "invite") invite();
   else if (action.type === "counter" || action.type === "recipe")
     showPanel("counter", action.id);
@@ -216,6 +231,8 @@ const performancePanel = routeDiagnostics ? new PerformanceQAPanel(root, () => {
   ].join("\n");
 }) : null;
 function invite() {
+  if (!settleVisibleTail()) return;
+  if (conflictBlocked) { toast("请先完成存档恢复或离线结算，再继续营业"); return; }
   if (engine.invite()) toast("欢迎光临！客人正走进小店");
   else
     toast(
@@ -226,6 +243,7 @@ function invite() {
   updateUI();
 }
 function upgrade(id: CounterId) {
+  if (!settleVisibleTail()) return;
   if (conflictBlocked) {
     toast("先读取最新存档，再购买升级");
     return;
@@ -243,6 +261,7 @@ function upgrade(id: CounterId) {
   updateUI();
 }
 function changeRecipe(id: CounterId, recipe: RecipeId) {
+  if (!settleVisibleTail()) return;
   if (conflictBlocked) {
     toast("先读取最新存档，再切换配方");
     return;
@@ -316,6 +335,7 @@ on($("#dialog-close"), "click", closePanel);
 on(dialog, "close", () => {
   // Ignore an older queued close when another scene action has reopened it.
   if (dialog.open) return;
+  if (offlineJob) cancelOfflineWork("离线结算已取消，原有进度已保留。请在设置中重试。");
   panel = null;
   setSceneInteractive(true);
   scene?.selectedCounter(null);
@@ -340,6 +360,7 @@ on(dialog, "click", (event) => {
 });
 on($("#counter-upgrade"), "click", () => upgrade(selected));
 on($("#manager-upgrade"), "click", () => {
+  if (!settleVisibleTail()) return;
   if (conflictBlocked) {
     toast("先读取最新存档，再购买升级");
     return;
@@ -394,6 +415,7 @@ function exportBackup(original: boolean) {
 on($("#export"), "click", () => exportBackup(repository.inspect().protectedRaw));
 on($("#export-current"), "click", () => exportBackup(false));
 function blockConflict(message: string) {
+  cancelOfflineWork();
   saveBlocked = true;
   conflictBlocked = true;
   if (!engine.state.paused) engine.togglePause();
@@ -404,43 +426,183 @@ function blockConflict(message: string) {
 }
 on(window, "storage", (event) => {
   const e = event as StorageEvent;
-  if (e.key === SAVE_KEY && e.newValue !== repository.inspect().rawText)
+  if (e.key === SAVE_KEY && e.newValue !== repository.inspect().rawText) {
+    offlineRetry = null;
+    resumeOfflineAfterHide = false;
     blockConflict("另一个窗口更新了小店。已暂停，避免覆盖它的进度。");
+    if (panel === "offline") showPanel("settings");
+  }
 });
-on($("#reload"), "click", () => {
-  if (
-    !window.confirm(
-      "读取最新存档会放弃本窗口未保存的进度。可以先导出当前副本。继续吗？",
-    )
-  )
-    return;
-  const recovered = repository.load(Date.now(), { allowNew: false });
-  updateBackupControls();
-  $("#new-shop").hidden = !recovered.protectedRaw && recovered.status !== "missing";
-  $("#new-shop").textContent = recovered.status === "missing" ? "确认开始新店" : "备份并开始新店";
-  // A recovery action may replace current progress only after a complete load,
-  // including its once-only settlement write. Missing/unreadable is not a new shop.
-  if (recovered.status !== "loaded") {
-    blockConflict(recovered.message);
+function duration(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds * 100) / 100);
+  const days = Math.floor(total / 86400), hours = Math.floor(total % 86400 / 3600);
+  const minutes = Math.floor(total % 3600 / 60), remaining = Math.round(total % 60 * 100) / 100;
+  return [days ? `${days} 天` : "", hours ? `${hours} 小时` : "", minutes ? `${minutes} 分钟` : "", remaining || !total ? `${remaining} 秒` : ""].filter(Boolean).join(" ");
+}
+function cancelOfflineWork(message?: string) {
+  const job = offlineJob;
+  offlineJob = null;
+  if (job) {
+    job.controller.abort();
+    repository.cancelOffline(job.pending);
+  }
+  if (message) {
+    resumeOfflineAfterHide = false;
+    saveBlocked = conflictBlocked = true;
+    $("#reload").hidden = false;
+    $("#reload").textContent = offlineRetry?.kind === "hidden" ? "重试离线结算" : "读取最新档";
+    $("#save-status").textContent = message;
+    toast(message);
+    updateUI();
+  }
+}
+function showOfflineResult(result: LoadResult) {
+  const offline = result.offline;
+  if (!offline?.accepted || offline.awaySeconds === undefined || offline.awaySeconds < 30 ||
+      offline.effectiveSeconds === undefined || offline.effectiveSeconds === 0 ||
+      offline.generatedAmount === undefined || offline.pendingCash === undefined || offline.carrying === undefined) return false;
+  $("#offline-working").hidden = true;
+  $("#offline-result").hidden = false;
+  $("#offline-deposited").textContent = `离开期间已存入金库 ${money(offline.amount)}`;
+  $("#offline-duration").textContent = `离开 ${duration(offline.awaySeconds)} · 有效经营 ${duration(offline.effectiveSeconds)}`;
+  $("#offline-generated").textContent = `期间售出咖啡产生 ${money(offline.generatedAmount)}`;
+  $("#offline-pending").textContent = `台面待收 ${money(offline.pendingCash)} · 经理运送 ${money(offline.carrying)}。送回金库后才可用。`;
+  $("#offline-legacy").hidden = offline.policyVersion === 3;
+  $("#offline-legacy").textContent = "本次按旧规则以50%经营速度、最多2小时完成一次结算；之后按80%经营速度推进，无时长上限。";
+  showPanel("offline");
+  toast(`离开期间已存入金库 ${money(offline.amount)}`);
+  return true;
+}
+function acceptLoaded(result: LoadResult, started: number, reason: "save reload" | "visibility / offline discontinuity" | "startup", verifiedUntil = performance.now()) {
+  if (result.status !== "loaded" && result.status !== "new") {
+    if (result.status === "conflict") { offlineRetry = null; resumeOfflineAfterHide = false; }
+    blockConflict(result.message);
+    if (panel === "offline") showPanel("settings");
     return;
   }
-  routeDiagnostics?.reset("save reload");
-  performancePanel?.reset("save reload");
-  engine = createEngine(recovered.state, routeDiagnostics?.observe);
+  routeDiagnostics?.reset(reason);
+  performancePanel?.reset(reason);
+  engine = createEngine(result.state, routeDiagnostics?.observe);
   hasUsableState = true;
-  updateBackupControls();
-  saveBlocked = false;
-  conflictBlocked = false;
+  saveBlocked = conflictBlocked = false;
   if (engine.state.paused) engine.togglePause();
+  hiddenAt = null;
+  offlineRetry = null;
+  resumeOfflineAfterHide = false;
   $("#reload").hidden = true;
+  $("#reload").textContent = "读取最新档";
   $("#new-shop").hidden = true;
   $("#save-status").textContent = "本地存档已恢复";
-  lastSave = Date.now();
-  hiddenAt = document.hidden ? Date.now() : null;
+  lastSave = result.settledAt ?? Date.now();
+  // Work after the captured settlement endpoint is visible online time. Preserve
+  // it in the ordinary clock, including a manual save before the next RAF.
+  verifiedForegroundSeconds = Math.max(0, (verifiedUntil - started) / 1000);
+  renderBudget.reset(started);
   presentation.reset(engine.state);
-  renderBudget.reset(performance.now());
-  toast(recovered.message);
+  updateBackupControls();
   updateUI();
+  if ((performance.now() - verifiedUntil) / 1000 > LONG_FOREGROUND_GAP_SECONDS) {
+    blockConflict(UNCLASSIFIED_TIME_MESSAGE);
+    if (panel === "offline") showPanel("settings");
+    cancelAnimationFrame(frame);
+    if (!document.hidden && !stopped) frame = requestAnimationFrame(tick);
+    return;
+  }
+  if (!showOfflineResult(result) && panel === "offline") {
+    if (offlineReturnPanel) showPanel(offlineReturnPanel);
+    else closePanel();
+  }
+  if (!result.offline && reason === "save reload") toast(result.message);
+  cancelAnimationFrame(frame);
+  if (document.hidden) suspendVisible();
+  else if (!stopped) frame = requestAnimationFrame(tick);
+}
+function handleLoad(result: LoadResult, retry: OfflineRetry, started: number, reason: "save reload" | "visibility / offline discontinuity" | "startup") {
+  updateBackupControls();
+  $("#new-shop").hidden = !result.protectedRaw && result.status !== "missing";
+  $("#new-shop").textContent = result.status === "missing" ? "确认开始新店" : "备份并开始新店";
+  offlineRetry = retry;
+  if (result.status !== "settling" || !result.pending) {
+    acceptLoaded(result, started, reason);
+    return;
+  }
+  if (panel !== "offline") offlineReturnPanel = panel;
+  offlineRetry = retry;
+  saveBlocked = conflictBlocked = true;
+  if (!engine.state.paused) engine.togglePause();
+  const job = { pending: result.pending, controller: new AbortController(), started, lastObserved: started };
+  offlineJob = job;
+  $("#reload").hidden = false;
+  $("#save-status").textContent = "正在结算离线经营，原有进度已保留";
+  $("#offline-working").hidden = false;
+  $("#offline-result").hidden = true;
+  $("#offline-progress").setAttribute("value", "0");
+  $("#offline-progress-text").textContent = "正在计算离线经营进度…";
+  showPanel("offline");
+  if (document.hidden) {
+    resumeOfflineAfterHide = true;
+    cancelOfflineWork();
+    return;
+  }
+  const observeForegroundTurn = () => {
+    if (offlineJob !== job) return false;
+    const now = performance.now();
+    if ((now - job.lastObserved) / 1000 > LONG_FOREGROUND_GAP_SECONDS) {
+      resumeOfflineAfterHide = false;
+      blockConflict(UNCLASSIFIED_TIME_MESSAGE);
+      if (panel === "offline") showPanel("settings");
+      return false;
+    }
+    job.lastObserved = now;
+    return true;
+  };
+  void repository.finishOffline(job.pending, {
+    signal: job.controller.signal,
+    yieldControl: () => new Promise<void>(resolve => {
+      const finish = () => {
+        clearTimeout(timer);
+        job.controller.signal.removeEventListener("abort", finish);
+        // Visibility can change before its event is delivered. Stop before the
+        // next computation slice, while retaining the original unpaid interval.
+        if (document.hidden && offlineJob === job) {
+          resumeOfflineAfterHide = true;
+          cancelOfflineWork();
+        } else observeForegroundTurn();
+        resolve();
+      };
+      const timer = setTimeout(finish, 0);
+      job.controller.signal.addEventListener("abort", finish, { once: true });
+      if (job.controller.signal.aborted) finish();
+    }),
+    onProgress: progress => {
+      if (offlineJob !== job || stopped || !observeForegroundTurn()) return;
+      $("#offline-progress").setAttribute("value", String(progress.fraction));
+      $("#offline-progress-text").textContent = `已计算 ${Math.floor(progress.fraction * 100)}% · ${duration(progress.completedSeconds)} / ${duration(progress.totalSeconds)} 有效经营`;
+    },
+  }).then(result => {
+    if (offlineJob !== job || job.controller.signal.aborted || stopped) return;
+    offlineJob = null;
+    acceptLoaded(result, job.started, reason, job.lastObserved);
+  }).catch(() => {
+    if (offlineJob !== job || stopped) return;
+    cancelOfflineWork("离线结算未完成，原有进度已保留。请在设置中重试。");
+    showPanel("settings");
+  });
+}
+function retryOffline() {
+  const retry = offlineRetry;
+  cancelOfflineWork();
+  const started = performance.now(), now = Date.now();
+  const result = retry?.kind === "hidden"
+    ? repository.settleOffline(retry.state, retry.hiddenAt, now, { deferOffline: true })
+    : repository.load(now, { allowNew: false, deferOffline: true });
+  handleLoad(result, retry ?? { kind: "load" }, started, "save reload");
+}
+on($("#offline-cancel"), "click", closePanel);
+on($("#offline-done"), "click", closePanel);
+on($("#reload"), "click", () => {
+  if (!window.confirm("读取最新存档或重试结算会放弃本窗口未保存的后续修改。可以先导出当前副本。继续吗？")) return;
+  retryOffline();
 });
 on($("#new-shop"), "click", () => {
   if (
@@ -449,11 +611,15 @@ on($("#new-shop"), "click", () => {
     )
   )
     return;
+  cancelOfflineWork();
   const result = repository.reset({ confirmProtected: true });
   if (!result.ok) {
     toast(result.message);
     return;
   }
+  offlineRetry = null;
+  resumeOfflineAfterHide = false;
+  verifiedForegroundSeconds = 0;
   routeDiagnostics?.reset("new shop");
   performancePanel?.reset("new shop");
   engine = createEngine(undefined, routeDiagnostics?.observe);
@@ -566,6 +732,10 @@ function updateUI() {
       "disabled",
       q.capped || s.wallet < q.cost || conflictBlocked,
     );
+  } else if (panel === "offline") {
+    $("#dialog-eyebrow").textContent = "WELCOME BACK";
+    $("#dialog-title").textContent = offlineJob ? "正在结算离线经营" : "离线经营记录";
+    $("#dialog-description").textContent = offlineJob ? "原有进度已保留，完成后一次到账" : "只有经理送回金库的现金可以使用";
   } else if (panel === "settings") {
     $("#dialog-eyebrow").textContent = "MELLOW BEAN";
     $("#dialog-title").textContent = "小店设置";
@@ -578,7 +748,8 @@ function tick(now: number) {
   const elapsed = renderBudget.take(now);
   frame = requestAnimationFrame(tick);
   if (elapsed === null) return;
-  const dt = Math.min(elapsed, 7200);
+  const dt = elapsed;
+  if (!allowVisibleTime(dt)) return;
   const view = presentation.advance(engine, Math.max(0, dt));
   scene?.update(view, dt);
   if (performancePanel?.active) performancePanel.update(now, !!scene && !qaContextLost, document.hasFocus());
@@ -596,46 +767,64 @@ function tick(now: number) {
   if (Date.now() - lastSave > 8000) save();
 }
 function resumeVisible() {
-  if (stopped || document.hidden) return;
+  if (stopped || document.hidden || offlineJob) return;
   cancelAnimationFrame(frame);
-  if (hiddenAt !== null) {
-    const start = hiddenAt;
-    hiddenAt = null;
-    const secs = Math.max(0, (Date.now() - start) / 1000);
-    if (!saveBlocked && secs >= 30) {
-      const result = engine.applyOffline(secs, `hidden-${start}`);
-      if (result.accepted && result.amount > 0)
-        toast(`欢迎回来！离线经营存入 ${money(result.amount)}`);
-    } else if (!saveBlocked) engine.advance(secs);
-    save();
-  } else settleVisibleTail();
+  if (resumeOfflineAfterHide && offlineRetry) {
+    retryOffline();
+    return;
+  }
+  if (hiddenAt !== null && !saveBlocked) {
+    const start = hiddenAt, started = performance.now();
+    const original = engine.snapshot();
+    const result = repository.settleOffline(original, start, Date.now(), { deferOffline: true });
+    handleLoad(result, { kind: "hidden", state: original, hiddenAt: start }, started, "visibility / offline discontinuity");
+    scene?.resize();
+    return;
+  }
+  settleVisibleTail();
   renderBudget.reset(performance.now());
-  // Hidden/offline/reloaded state is a discontinuity, never blend across its old path.
   presentation.reset(engine.state);
   routeDiagnostics?.reset("visibility / offline discontinuity");
   performancePanel?.reset("visible / offline discontinuity");
   scene?.resize();
   frame = requestAnimationFrame(tick);
 }
-function settleVisibleTail() {
-  if (hiddenAt !== null) return;
-  engine.advance(Math.min(renderBudget.flush(performance.now()), 7200));
+function allowVisibleTime(seconds: number): boolean {
+  if (saveBlocked || offlineJob) return true;
+  if (Math.max(0, seconds - verifiedForegroundSeconds) > LONG_FOREGROUND_GAP_SECONDS + 1e-6) {
+    blockConflict(UNCLASSIFIED_TIME_MESSAGE);
+    return false;
+  }
+  verifiedForegroundSeconds = Math.max(0, verifiedForegroundSeconds - seconds);
+  return true;
+}
+function settleVisibleTail(): boolean {
+  if (hiddenAt !== null || saveBlocked || offlineJob) return true;
+  const seconds = renderBudget.flush(performance.now());
+  if (!allowVisibleTime(seconds)) return false;
+  engine.advance(seconds);
+  return true;
+}
+function suspendVisible() {
+  cancelAnimationFrame(frame);
+  if (offlineJob) {
+    resumeOfflineAfterHide = true;
+    cancelOfflineWork();
+    return;
+  }
+  settleVisibleTail();
+  hiddenAt ??= Date.now();
+  save(false, hiddenAt);
 }
 function onVisibility() {
-  cancelAnimationFrame(frame);
   if (document.hidden) {
     performancePanel?.reset("hidden; sampling stopped");
-    settleVisibleTail();
-    hiddenAt ??= Date.now();
-    save(false, hiddenAt);
+    suspendVisible();
   } else resumeVisible();
 }
 function onPageHide(event: Event) {
   performancePanel?.reset("pagehide; sampling stopped");
-  cancelAnimationFrame(frame);
-  settleVisibleTail();
-  hiddenAt ??= Date.now();
-  save(false, hiddenAt);
+  suspendVisible();
   if (!(event as PageTransitionEvent).persisted) cleanup(false);
 }
 const sizeObserver =
@@ -658,6 +847,7 @@ if (visualViewport)
   });
 function cleanup(persist = true) {
   if (stopped) return;
+  cancelOfflineWork();
   if (persist) { settleVisibleTail(); save(false, hiddenAt ?? Date.now()); }
   stopped = true;
   cancelAnimationFrame(frame);
@@ -701,7 +891,9 @@ updateRenderModeUI();
 updateBackupControls();
 updateUI();
 frame = requestAnimationFrame(tick);
-if (loaded.message && loaded.status !== "new" && loaded.status !== "loaded")
+if (loaded.status === "settling") handleLoad(loaded, { kind: "load" }, loadPerformance, "startup");
+else if (loaded.status === "loaded") showOfflineResult(loaded);
+if (loaded.message && loaded.status !== "new" && loaded.status !== "loaded" && loaded.status !== "settling")
   toast(loaded.message);
 if (saveBlocked) $("#save-status").textContent = loaded.message;
 if (import.meta.hot) import.meta.hot.dispose(() => cleanup());

@@ -60,3 +60,7 @@ REQ-3D-028 → [TC-3D-018](cases/slice/TC-3D-018.md)、[计划](plans/scene-alig
 ## 存档恢复失败保护
 
 REQ-3D-029 → [TC-3D-019](cases/slice/TC-3D-019.md)、[计划](plans/save-recovery-safety.md)。570→0丢档链、仓库写屏障、失败/缺失/坏档分流、明确新店、备份/移除失败与CAS、重复恢复/时钟/后台保护；假DOM执行实际handler，不替代真实浏览器验收。
+
+## 无时长上限、80%离线经营
+
+REQ-3D-030 → [TC-3D-020](cases/slice/TC-3D-020.md)、[计划](plans/offline-unlimited.md)。精确新旧策略/分段/同核心回放、异步原子领取、取消/代际/CAS/异常和真正main handler；7天/30天云端实测与MacUI验收分别记录。

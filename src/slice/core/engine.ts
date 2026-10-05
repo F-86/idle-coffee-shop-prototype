@@ -1,5 +1,5 @@
 import type { RouteObserver, RouteTraceEvent } from './routeTrace';
-import type { Counter, CounterId, CounterQuote, Customer, Recipe, RecipeId, SliceEngine, SliceEvent, SliceState } from './types';
+import type { Counter, CounterId, CounterQuote, Customer, OfflineJob, OfflinePolicyVersion, Recipe, RecipeId, SliceEngine, SliceEvent, SliceState } from './types';
 
 /** Draft balance for this small playable slice, expressed in cents and metres. */
 export const STEP_SECONDS = .05;
@@ -7,8 +7,18 @@ export const MAX_LEVEL = 20;
 export const INITIAL_WALLET = 1200;
 export const QUEUE_CAPACITY = 8;
 export const INVITE_COOLDOWN_SECONDS = 18;
-export const OFFLINE_CAP_SECONDS = 7200;
-export const OFFLINE_EFFICIENCY = .5;
+export const OFFLINE_EFFICIENCY = .8;
+export const LEGACY_OFFLINE_CAP_SECONDS = 7200;
+/** Existing save-schema precision limit, not an offline gameplay cap. */
+export const MAX_ELAPSED_SECONDS = 4e9;
+export function offlineWallSeconds(seconds: number, policy: OfflinePolicyVersion = 3): number {
+  if (!Number.isFinite(seconds) || seconds < 0 || policy === 1 && seconds < 30) return 0;
+  return policy === 3 ? seconds : Math.min(LEGACY_OFFLINE_CAP_SECONDS, seconds);
+}
+/** Uniform 80% for new intervals; old outstanding intervals retain their own rules once. */
+export function offlineEffectiveSeconds(seconds: number, policy: OfflinePolicyVersion = 3): number {
+  return offlineWallSeconds(seconds, policy) * (policy === 3 ? OFFLINE_EFFICIENCY : .5);
+}
 export const MANAGER_ROUTE_VERSION = 2;
 export const CUSTOMER_ROUTE_VERSION = 3;
 export const CUSTOMER_SPEED = 2.5;
@@ -399,15 +409,45 @@ export function createEngine(initial: SliceState = createInitialState(), observe
       snapshot.stepCarry = Math.round((snapshot.stepCarry ?? 0) * 1e12) / 1e12;
       return snapshot;
     },
-    applyOffline(seconds, claimId) {
-      if (typeof claimId !== 'string' || !claimId || claimId.length > 256 || claimId === state.lastOfflineClaimId || state.offlineClaimIds!.includes(claimId) || !Number.isFinite(seconds) || seconds < 0) return { accepted: false, amount: 0, seconds: 0 };
-      const bounded = Math.min(OFFLINE_CAP_SECONDS, seconds), before = state.wallet;
+    beginOffline,
+    applyOffline(seconds, claimId, policy = 3) {
+      const job = beginOffline(seconds, claimId, policy);
+      job.advance(Number.MAX_SAFE_INTEGER);
+      return job.result();
+    }
+  };
+  function beginOffline(seconds: number, claimId: string, policy: OfflinePolicyVersion = 3): OfflineJob {
+    const effective = state.paused ? 0 : offlineEffectiveSeconds(seconds, policy);
+    const valid = typeof claimId === 'string' && !!claimId && claimId.length <= 256 && claimId !== state.lastOfflineClaimId && !state.offlineClaimIds!.includes(claimId) && Number.isFinite(seconds) && seconds >= 0 && [1, 2, 3].includes(policy) && effective + state.elapsed <= MAX_ELAPSED_SECONDS;
+    const total = (state.stepCarry ?? 0) + effective;
+    const steps = valid && !state.paused ? Math.floor((total + 1e-12) / STEP_SECONDS) : 0;
+    const carry = total - steps * STEP_SECONDS;
+    let completed = 0, done = !valid;
+    const beforeWallet = state.wallet, beforeEarned = state.totalEarned;
+    function finish() {
+      if (done) return;
+      if (!state.paused) state.stepCarry = Math.abs(carry) < 1e-12 ? 0 : Math.max(0, carry);
       state.lastOfflineClaimId = claimId;
       state.offlineClaimIds!.push(claimId);
       if (state.offlineClaimIds!.length > 256) state.offlineClaimIds!.shift();
-      silent = true;
-      try { advance(bounded * OFFLINE_EFFICIENCY); } finally { silent = false; }
-      return { accepted: true, amount: state.wallet - before, seconds: bounded };
+      done = true;
     }
-  };
+    if (valid && !steps) finish();
+    return {
+      get accepted() { return valid; }, get done() { return done; },
+      get totalSeconds() { return effective; },
+      get completedSeconds() { return done ? effective : completed * STEP_SECONDS; },
+      advance(maxSteps) {
+        if (done || !Number.isSafeInteger(maxSteps) || maxSteps <= 0) return;
+        const end = Math.min(steps, completed + maxSteps);
+        silent = true;
+        try { while (completed < end) { tick(); completed++; } } finally { silent = false; }
+        if (completed === steps) finish();
+      },
+      result() {
+        if (!valid || !done) return { accepted: false, amount: 0, seconds: 0 };
+        return { accepted: true, amount: state.wallet - beforeWallet, seconds: offlineWallSeconds(seconds, policy), effectiveSeconds: effective, awaySeconds: seconds, policyVersion: policy, generatedAmount: state.totalEarned - beforeEarned, pendingCash: state.counters.reduce((sum, counter) => sum + counter.pendingCash, 0), carrying: state.manager.carrying };
+      }
+    };
+  }
 }

@@ -148,7 +148,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   window.localStorage = storage;
   window.visualViewport = new FakeElement('visualViewport', document);
   window.confirm = () => true;
-  const frames = new Map(), timers = new Map();
+  const frames = new Map(), timers = new Map(), timerDelays = new Map();
   let nextId = 0, renderer, observer, hmrCleanup;
   class FakeScene {
     statsReads = 0; poseReads = 0;
@@ -187,11 +187,30 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   }
   class FakeDate extends Date { constructor(...args) { super(...(args.length ? args : [clock.now])); } static now() { return clock.now; } }
   const source = main.replace(/^import\s[\s\S]*?;\n/gm, '').replace(/if \(import\.meta\.hot\) import\.meta\.hot\.dispose\(\(\) => cleanup\(\)\);/, 'captureCleanup(() => cleanup());');
-  const context = { document, window, location: { search: query }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, RouteDiagnostics, isRouteQA, RouteQAPanel, PerformanceQAPanel, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, createEngine, recipeById, managerSpeed, LocalSaveRepository, SAVE_KEY, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL() {} }, Blob, console, setTimeout: callback => { const id = ++nextId; timers.set(id, callback); return id; }, clearTimeout: id => timers.delete(id), requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
+  const context = { document, window, location: { search: query }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, RouteDiagnostics, isRouteQA, RouteQAPanel, PerformanceQAPanel, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, createEngine, recipeById, managerSpeed, LocalSaveRepository, SAVE_KEY, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL() {} }, Blob, console, setTimeout: (callback, delay = 0) => { const id = ++nextId; timers.set(id, callback); timerDelays.set(id, delay); return id; }, clearTimeout: id => { timers.delete(id); timerDelays.delete(id); }, requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
   runInNewContext(stripTypeScriptTypes(source), context, { timeout: 1500 });
   const debug = window.__coffeeSliceDebug;
   const state = () => structuredClone(debug.readState());
-  return { clock, document, window, root, nodes, renderer, observer, frames, timers, memory, storageControl, downloads, blobs, state, flushCloseEvents() { for (const callback of closeEvents.splice(0)) callback(); }, element: selector => root.querySelector(selector), action: action => renderer.action(action), click(selector, extra = {}) { const target = root.querySelector(selector); assert.ok(target, selector); if (!target.disabled) { const event = { target, detail: 1, ...extra }; target.emit('click', event); root.emit('click', event); } }, tick(seconds = .2) { clock.now += seconds * 1000; clock.performance += seconds * 1000; const pending = [...frames.values()]; frames.clear(); for (const callback of pending) callback(clock.performance); }, dispose() { hmrCleanup?.(); } };
+  async function flushOffline({ dismissResult = true } = {}) {
+    // Actual async repository yields are routed through the app's zero-delay
+    // macrotask boundary. Toast/download timers remain pending as in a browser.
+    for (let n = 0; n < 100000; n++) {
+      const pending = [...timers].filter(([id]) => timerDelays.get(id) === 0);
+      for (const [id, callback] of pending) { timers.delete(id); timerDelays.delete(id); callback(); }
+      await new Promise(resolve => setImmediate(resolve));
+      if (![...timers.keys()].some(id => timerDelays.get(id) === 0)) {
+        if (dismissResult && !root.querySelector('#offline-result').hidden && root.querySelector('#operation-dialog').open) root.querySelector('#offline-done').emit('click');
+        return;
+      }
+    }
+    assert.fail('offline job failed to reach a terminal state');
+  }
+  return { clock, document, window, root, nodes, renderer, observer, frames, timers, memory, storageControl, downloads, blobs, state, flushOffline, async stepOffline() {
+    const pending = [...timers].find(([id]) => timerDelays.get(id) === 0);
+    assert.ok(pending, 'an actual pending offline macrotask exists');
+    const [id, callback] = pending; timers.delete(id); timerDelays.delete(id); callback();
+    await new Promise(resolve => setImmediate(resolve));
+  }, flushCloseEvents() { for (const callback of closeEvents.splice(0)) callback(); }, element: selector => root.querySelector(selector), action: action => renderer.action(action), click(selector, extra = {}) { const target = root.querySelector(selector); assert.ok(target, selector); if (!target.disabled) { const event = { target, detail: 1, ...extra }; target.emit('click', event); root.emit('click', event); } }, tick(seconds = .2) { clock.now += seconds * 1000; clock.performance += seconds * 1000; const pending = [...frames.values()]; frames.clear(); for (const callback of pending) callback(clock.performance); }, dispose() { hmrCleanup?.(); } };
 }
 
 test('TC-3D-008 REQ-3D-015 full-viewport scene has no webpage frame or page scroll (static contract)', () => {
@@ -291,7 +310,7 @@ test('TC-3D-009 REQ-3D-016 only HUD settings remains outside the closed native o
   assert.ok(modalStart >= 0);
   assert.doesNotMatch(openingTags(modal, 'dialog')[0], /\bopen(?:\s|=|>)/);
   const panels = openingTags(modal, 'div').filter(tag => tag.includes('class="operation-panel"'));
-  assert.equal(panels.length, 4);
+  assert.equal(panels.length, 5);
   for (const panel of panels) assert.match(panel, /\bhidden(?:\s|>)/);
   assert.doesNotMatch(outsideModal, /class="operation-panel"|id="counter-panel"|id="settings-panel"/);
   assert.deepEqual(declarations('[hidden]', 'display'), ['none']);
@@ -551,6 +570,7 @@ test('TC-3D-008 REQ-3D-015 modal controls maintain 44px targets, safe-area and d
 
 test('TC-3D-008 REQ-3D-006 HUD settings preserve manual save and export, with corrupt bytes protected (app harness)', async () => {
   const f = fixture();
+  await f.flushOffline();
   try {
     f.click('#settings');
     f.click('#save');
@@ -563,6 +583,7 @@ test('TC-3D-008 REQ-3D-006 HUD settings preserve manual save and export, with co
   } finally { f.dispose(); }
   const raw = '{ definitely not a save';
   const corrupt = fixture({ raw });
+  await corrupt.flushOffline();
   try {
     corrupt.click('#settings');
     assert.equal(corrupt.element('#new-shop').hidden, false);
@@ -577,6 +598,7 @@ test('TC-3D-008 REQ-3D-006 HUD settings preserve manual save and export, with co
 
 test('TC-3D-008 REQ-3D-015 names and save feedback are transient; unreadable startup stays protected without exporting a fake shop (app harness)', async () => {
   const f = fixture({ storageUnavailable: true });
+  await f.flushOffline();
   try {
     assert.match(f.element('#save-status').textContent, /拒绝读取|不可用/);
     f.click('#settings');
@@ -638,11 +660,12 @@ function legacyRouteProgress(routeVersion) {
   return state;
 }
 
-test('TC-3D-010 legacy raw route saves resume once, finish their current sweep and persist the real B-first route (app harness)', () => {
+test('TC-3D-010 legacy raw route saves resume once, finish their current sweep and persist the real B-first route (app harness)', async () => {
   for (const routeVersion of [undefined, 1]) for (const age of [10, 3600]) {
     const initial = legacyRouteProgress(routeVersion);
     const raw = JSON.stringify({ schemaVersion: 1, savedAt: Date.now() - age * 1000, recordChangeTag: `legacy-route-${routeVersion}-${age}`, state: initial });
     const f = fixture({ raw });
+    await f.flushOffline();
     try {
       const expected = structuredClone(initial);
       expected.managerRouteVersion = 2;
@@ -673,13 +696,14 @@ test('TC-3D-010 legacy raw route saves resume once, finish their current sweep a
       assert.deepEqual(saved, f.state());
       assert.equal(saved.managerRouteVersion, 2);
       const reopened = fixture({ raw: f.memory.getItem(SAVE_KEY) });
+      await reopened.flushOffline();
       try { assert.deepEqual(reopened.state(), saved, 'a route-v2 save is not remapped or deposited again on immediate reboot'); }
       finally { reopened.dispose(); }
     } finally { f.dispose(); }
   }
 });
 
-test('TC-3D-010 failed legacy-route offline settlement preserves bytes and freezes migrated assets until successful reload (app harness)', () => {
+test('TC-3D-010 failed legacy-route offline settlement preserves bytes and freezes migrated assets until successful reload (app harness)', async () => {
   for (const mode of ['writeUnavailable', 'conflictDuringClaim']) {
     const initial = legacyRouteProgress(1);
     initial.paused = false;
@@ -688,6 +712,7 @@ test('TC-3D-010 failed legacy-route offline settlement preserves bytes and freez
     initial.counters.forEach(counter => counter.pendingCash = 0);
     const raw = JSON.stringify({ schemaVersion: 1, savedAt: Date.now() - 3600000, recordChangeTag: `legacy-failed-${mode}`, state: initial });
     const f = fixture({ raw, [mode]: true });
+    await f.flushOffline();
     try {
       const protectedRaw = f.memory.getItem(SAVE_KEY), frozen = f.state();
       assert.equal(frozen.paused, true);
@@ -704,23 +729,24 @@ test('TC-3D-010 failed legacy-route offline settlement preserves bytes and freez
       f.click('#settings'); f.click('#save');
       assert.equal(f.memory.getItem(SAVE_KEY), protectedRaw, 'blocked manual/autosave keeps original or concurrent legacy bytes');
       f.storageControl.writeUnavailable = false;
-      f.click('#reload');
+      f.click('#reload'); await f.flushOffline();
       assert.equal(f.state().paused, false);
       assert.ok(f.state().elapsed >= 1800 && f.state().elapsed <= 1810, 'successful reload settles the single previously unpaid offline interval');
       assert.equal(f.state().managerRouteVersion, 2);
       const once = f.state(), onceRaw = f.memory.getItem(SAVE_KEY);
       assert.ok(once.wallet > 1200);
-      f.click('#reload');
+      f.click('#reload'); await f.flushOffline();
       assert.deepEqual(f.state(), once, 'repeated reload cannot repeat migration or the credited offline interval');
       assert.equal(f.memory.getItem(SAVE_KEY), onceRaw);
     } finally { f.dispose(); }
   }
 });
 
-test('TC-3D-010 migration persists before a hidden first frame and BFCache/repeated saves cannot remap or claim twice (app harness)', () => {
+test('TC-3D-010 migration persists before a hidden first frame and BFCache/repeated saves cannot remap or claim twice (app harness)', async () => {
   const initial = legacyRouteProgress(undefined);
   const raw = JSON.stringify({ schemaVersion: 1, savedAt: Date.now() - 10000, recordChangeTag: 'legacy-hidden-before-raf', state: initial });
   const f = fixture({ raw });
+  await f.flushOffline();
   try {
     const first = f.state();
     assert.equal(first.manager.x, 4.4);
@@ -731,13 +757,13 @@ test('TC-3D-010 migration persists before a hidden first frame and BFCache/repea
     assert.equal(f.frames.size, 0);
     assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, first, 'hiding before the initial RAF persists the canonical route and unchanged assets');
     f.clock.now += 45000; f.clock.performance += 45000;
-    f.document.hidden = false; f.document.emit('visibilitychange');
+    f.document.hidden = false; f.document.emit('visibilitychange'); await f.flushOffline();
     const resumed = f.state();
-    assert.equal(resumed.elapsed, 22.5, 'only the hidden45s interval is advanced at offline efficiency');
+    assert.equal(resumed.elapsed, 36, 'only the hidden45s interval is advanced at 80% offline efficiency');
     assert.equal(resumed.managerRouteVersion, 2);
     assert.equal(resumed.manager.finishLegacySweep, undefined, 'the in-flight old sweep completes once and thereafter follows the real route');
     assert.equal(f.frames.size, 1);
-    f.window.emit('pageshow', { persisted: true });
+    f.window.emit('pageshow', { persisted: true }); await f.flushOffline();
     assert.deepEqual(f.state(), resumed, 'visibility and BFCache do not both claim the same interval');
     assert.equal(f.frames.size, 1);
     f.click('#settings'); f.click('#save'); f.click('#save');
@@ -746,14 +772,16 @@ test('TC-3D-010 migration persists before a hidden first frame and BFCache/repea
     assert.deepEqual(saved.state, resumed);
     assert.equal(saved.savedAt, f.clock.now);
     const reopened = fixture({ raw: f.memory.getItem(SAVE_KEY) });
+    await reopened.flushOffline();
     try { assert.deepEqual(reopened.state(), resumed, 'reopening already anchored hidden progress never repeats the migrated sweep or offline earnings'); }
     finally { reopened.dispose(); }
   } finally { f.dispose(); }
 });
 
-test('TC-3D-009 REQ-3D-016 valid previous paused saves resume current play without paused-interval income on boot (app harness)', () => {
+test('TC-3D-009 REQ-3D-016 valid previous paused saves resume current play without paused-interval income on boot (app harness)', async () => {
   for (const savedAtAgoSeconds of [10, 3600]) {
     const initial = pausedProgress(), f = fixture({ initial, savedAtAgoSeconds });
+    await f.flushOffline();
     try {
       assert.equal(f.state().paused, false, `valid ${savedAtAgoSeconds}s old pause must not strand the no-pause UI`);
       assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(initial), 'repository first settles the old pause with zero elapsed, income, movement or asset changes');
@@ -765,21 +793,23 @@ test('TC-3D-009 REQ-3D-016 valid previous paused saves resume current play witho
       f.click('#settings'); f.click('#save');
       assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).state.paused, false);
       const reloaded = fixture({ raw: f.memory.getItem(SAVE_KEY) });
+      await reloaded.flushOffline();
       try { assert.deepEqual(reloaded.state(), f.state(), 'immediate new boot cannot reclaim the already settled paused interval'); }
       finally { reloaded.dispose(); }
     } finally { f.dispose(); }
   }
 });
 
-test('TC-3D-009 REQ-3D-016 reading a valid external paused save resumes only current play after conflict recovery (app harness)', () => {
+test('TC-3D-009 REQ-3D-016 reading a valid external paused save resumes only current play after conflict recovery (app harness)', async () => {
   const f = fixture();
+  await f.flushOffline();
   try {
     const paused = pausedProgress();
     const latest = { schemaVersion: 1, savedAt: f.clock.now - 3600000, recordChangeTag: 'valid-paused-other-window', state: paused };
     const raw = JSON.stringify(latest); f.memory.setItem(SAVE_KEY, raw);
     f.window.emit('storage', { key: SAVE_KEY, newValue: raw });
     assert.equal(f.state().paused, true);
-    f.click('#settings'); f.click('#reload');
+    f.click('#settings'); f.click('#reload'); await f.flushOffline();
     assert.equal(f.state().paused, false);
     assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(paused), 'reload claims no income or movement from the paused hour');
     assert.equal(f.element('#reload').hidden, true);
@@ -792,9 +822,10 @@ test('TC-3D-009 REQ-3D-016 reading a valid external paused save resumes only cur
   } finally { f.dispose(); }
 });
 
-test('TC-3D-009 REQ-3D-006 failed offline writes or a concurrent claim keep paused valid saves conflict-protected (app harness)', () => {
+test('TC-3D-009 REQ-3D-006 failed offline writes or a concurrent claim keep paused valid saves conflict-protected (app harness)', async () => {
   for (const mode of ['writeUnavailable', 'conflictDuringClaim']) {
     const initial = pausedProgress(), f = fixture({ initial, savedAtAgoSeconds: 3600, [mode]: true });
+    await f.flushOffline();
     try {
       const raw = f.memory.getItem(SAVE_KEY), before = f.state();
       assert.equal(before.paused, true, `${mode} must not be unlocked by valid-pause automatic resume`);
@@ -811,10 +842,10 @@ test('TC-3D-009 REQ-3D-006 failed offline writes or a concurrent claim keep paus
       f.click('#dialog-close'); f.click('#settings'); f.click('#save');
       assert.equal(f.memory.getItem(SAVE_KEY), raw);
       if (mode === 'writeUnavailable') {
-        f.click('#reload');
+        f.click('#reload'); await f.flushOffline();
         assert.equal(f.state().paused, true, 'repeated failed reload still cannot resume protected play');
         f.storageControl.writeUnavailable = false;
-        f.click('#reload');
+        f.click('#reload'); await f.flushOffline();
         assert.equal(f.state().paused, false, 'explicit successful latest-save recovery can resume current play');
         assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(initial));
       }
@@ -838,6 +869,7 @@ test('TC-3D-009 REQ-3D-006 bad, future and foreign saves preserve source bytes t
   ];
   for (const raw of cases) {
     const f = fixture({ raw });
+    await f.flushOffline();
     try {
       f.click('#settings');
       assert.equal(f.element('#new-shop').hidden, false);
@@ -847,7 +879,7 @@ test('TC-3D-009 REQ-3D-006 bad, future and foreign saves preserve source bytes t
       assert.equal(await f.blobs[0].text(), raw, 'backup must preserve the source instead of a resumed invented state');
       f.window.emit('storage', { key: SAVE_KEY, newValue: 'changed elsewhere' });
       assert.equal(f.state().paused, true);
-      f.click('#reload');
+      f.click('#reload'); await f.flushOffline();
       f.click('#save'); f.tick(10);
       assert.equal(f.memory.getItem(SAVE_KEY), raw, 'failed compatible reload does not release source-byte protection');
       assert.equal(f.element('#new-shop').hidden, false);
@@ -855,25 +887,26 @@ test('TC-3D-009 REQ-3D-006 bad, future and foreign saves preserve source bytes t
   }
 });
 
-test('TC-3D-008 REQ-3D-004 hidden/BFCache resume applies elapsed time only once and retains one RAF owner (app harness)', () => {
+test('TC-3D-008 REQ-3D-004 hidden/BFCache resume applies elapsed time only once and retains one RAF owner (app harness)', async () => {
   const f = fixture();
+  await f.flushOffline();
   try {
     f.tick(.5);
     f.document.hidden = true; f.document.emit('visibilitychange');
     assert.equal(f.frames.size, 0);
     const hidden = f.state();
     f.clock.now += 45000; f.clock.performance += 45000;
-    f.document.hidden = false; f.document.emit('visibilitychange');
+    f.document.hidden = false; f.document.emit('visibilitychange'); await f.flushOffline();
     const resumed = f.state();
     assert.ok(resumed.elapsed > hidden.elapsed);
     assert.equal(f.frames.size, 1);
-    f.window.emit('pageshow', { persisted: true });
+    f.window.emit('pageshow', { persisted: true }); await f.flushOffline();
     assert.deepEqual(f.state(), resumed, 'visibility and BFCache callbacks cannot double-claim the same interval');
     assert.equal(f.frames.size, 1);
     f.window.emit('pagehide', { persisted: true });
     assert.equal(f.renderer.disposed, false, 'BFCache suspension must not destroy its scene');
     f.clock.now += 2000; f.clock.performance += 2000;
-    f.window.emit('pageshow', { persisted: true });
+    f.window.emit('pageshow', { persisted: true }); await f.flushOffline();
     assert.equal(f.frames.size, 1);
     assert.ok(f.state().elapsed > resumed.elapsed);
   } finally { f.dispose(); }
@@ -894,8 +927,9 @@ test('TC-3D-008 REQ-3D-004 final disposal removes UI listeners, observer and RAF
   f.dispose();
 });
 
-test('TC-3D-011 explicit low-power app submits budgeted renders and keeps authoritative elapsed time', () => {
+test('TC-3D-011 explicit low-power app submits budgeted renders and keeps authoritative elapsed time', async () => {
   const f = fixture({ renderMode: 'low-power' });
+  await f.flushOffline();
   try {
     for (let i = 0; i < 1200; i++) f.tick(1 / 120);
     assert.equal(f.renderer.updates.length, 300);
@@ -905,7 +939,7 @@ test('TC-3D-011 explicit low-power app submits budgeted renders and keeps author
     f.document.hidden = true; f.document.emit('visibilitychange');
     f.tick(5);
     assert.equal(f.renderer.updates.length, rendered);
-    f.document.hidden = false; f.document.emit('visibilitychange');
+    f.document.hidden = false; f.document.emit('visibilitychange'); await f.flushOffline();
     f.tick(1 / 120);
     assert.equal(f.renderer.updates.length, rendered, 'reset does not immediately render a stale catch-up frame');
     f.tick(1 / 40);
@@ -914,35 +948,37 @@ test('TC-3D-011 explicit low-power app submits budgeted renders and keeps author
   } finally { f.dispose(); }
 });
 
-test('TC-3D-011 sub-frame visibility and BFCache saves settle visible time once without extra renders', () => {
+test('TC-3D-011 sub-frame visibility and BFCache saves settle visible time once without extra renders', async () => {
   const f = fixture({ renderMode: 'low-power' });
+  await f.flushOffline();
   try {
     for (let cycle = 0; cycle < 10; cycle++) {
       f.tick(.025);
       f.document.hidden = true; f.document.emit('visibilitychange');
       f.window.emit('pagehide', { persisted: true });
       f.tick(.010);
-      f.document.hidden = false; f.document.emit('visibilitychange');
-      f.window.emit('pageshow', { persisted: true });
+      f.document.hidden = false; f.document.emit('visibilitychange'); await f.flushOffline();
+      f.window.emit('pageshow', { persisted: true }); await f.flushOffline();
     }
-    assert.ok(Math.abs(f.state().elapsed + f.state().stepCarry - .35) < 1e-8, 'visible skipped frames and hidden intervals are each applied once');
+    assert.ok(Math.abs(f.state().elapsed + f.state().stepCarry - .33) < 1e-8, 'visible skipped frames and hidden intervals are each applied once');
     assert.equal(f.renderer.updates.length, 0, 'lifecycle settlement never schedules a catch-up render');
     assert.equal(f.frames.size, 1);
   } finally { f.dispose(); }
 });
 
 
-test('TC-3D-011 delayed duplicate pageshow preserves the newly visible tail', () => {
+test('TC-3D-011 delayed duplicate pageshow preserves the newly visible tail', async () => {
   const f = fixture();
+  await f.flushOffline();
   try {
     f.tick(.025);
     f.document.hidden = true; f.document.emit('visibilitychange');
     f.tick(.010);
     f.window.emit('pagehide', { persisted: true });
-    f.document.hidden = false; f.document.emit('visibilitychange');
+    f.document.hidden = false; f.document.emit('visibilitychange'); await f.flushOffline();
     f.tick(.015);
-    f.window.emit('pageshow', { persisted: true });
-    assert.ok(Math.abs(f.state().elapsed + f.state().stepCarry - .05) < 1e-8);
+    f.window.emit('pageshow', { persisted: true }); await f.flushOffline();
+    assert.ok(Math.abs(f.state().elapsed + f.state().stepCarry - .048) < 1e-8);
     assert.equal(f.frames.size, 1);
   } finally { f.dispose(); }
 });
@@ -990,7 +1026,7 @@ test('TC-3D-012 quality selection changes renderer/budget, persists separately, 
   } finally { blocked.dispose(); }
 });
 
-test('TC-3D-014 QA panel/debug are absent by default and explicit opt-in leaves saves and one-RAF timing unchanged', () => {
+test('TC-3D-014 QA panel/debug are absent by default and explicit opt-in leaves saves and one-RAF timing unchanged', async () => {
   for (const query of ['', '?qa', '?qa=0', '?qa=false']) {
     const f = fixture({ query });
     try {
@@ -1022,7 +1058,7 @@ test('TC-3D-014 QA panel/debug are absent by default and explicit opt-in leaves 
     assert.ok(raw); assert.doesNotMatch(f.memory.getItem(SAVE_KEY), /trackedRecords|routeTrace|diagnostic/);
     f.document.hidden = true; f.document.emit('visibilitychange');
     f.clock.now += 60000; f.clock.performance += 60000;
-    f.document.hidden = false; f.document.emit('visibilitychange'); f.tick(.001);
+    f.document.hidden = false; f.document.emit('visibilitychange'); await f.flushOffline(); f.tick(.001);
     const resumed = f.window.__coffeeSliceDebug.readRoutes();
     assert.equal(resumed.session, 2); assert.equal(resumed.terminal, null);
     assert.match(resumed.reason, /discontinuity/);
@@ -1030,17 +1066,19 @@ test('TC-3D-014 QA panel/debug are absent by default and explicit opt-in leaves 
   assert.equal(f.window.__coffeeSliceDebug, undefined); assert.equal(f.element('.route-qa'), null); assert.equal(f.element('.route-qa-marker'), null);
 });
 
-test('TC-3D-014 QA sessions reset on reload/new shop and report missing renderer honestly (app harness)', () => {
+test('TC-3D-014 QA sessions reset on reload/new shop and report missing renderer honestly (app harness)', async () => {
   const f = fixture();
+  await f.flushOffline();
   try {
     f.tick(3); const session = f.window.__coffeeSliceDebug.readRoutes().session;
-    f.click('#settings'); f.click('#reload');
+    f.click('#settings'); f.click('#reload'); await f.flushOffline();
     const reloaded = f.window.__coffeeSliceDebug.readRoutes();
     assert.equal(reloaded.session, session + 1); assert.equal(reloaded.reason, 'save reload');
     assert.equal(reloaded.records.length, 0); assert.equal(reloaded.selectedId, null);
     f.tick(.2); assert.equal(f.window.__coffeeSliceDebug.readRoutes().sample.time, f.state().elapsed);
   } finally { f.dispose(); }
   const fresh = fixture({ raw: '{bad save' });
+  await fresh.flushOffline();
   try {
     fresh.tick(3); fresh.click('#settings'); fresh.click('#new-shop');
     const reset = fresh.window.__coffeeSliceDebug.readRoutes();
@@ -1049,6 +1087,7 @@ test('TC-3D-014 QA sessions reset on reload/new shop and report missing renderer
     assert.equal(fresh.window.__coffeeSliceDebug.readRoutes().selectedId, 1, 'new customer 1 is explicitly a different session');
   } finally { fresh.dispose(); }
   const unavailable = fixture({ renderUnavailable: true });
+  await unavailable.flushOffline();
   try {
     unavailable.tick(3);
     const read = unavailable.window.__coffeeSliceDebug.readRoutes();
@@ -1109,8 +1148,9 @@ test('TC-3D-015 performance panel is idle while closed, 1Hz when open, and leave
   assert.equal(f.element('.performance-qa'), null);
 });
 
-test('TC-3D-015 counts rendered frames only, with no hidden/BFCache/mode/resize/reload cross-segment gap', () => {
+test('TC-3D-015 counts rendered frames only, with no hidden/BFCache/mode/resize/reload cross-segment gap', async () => {
   const f = fixture({ renderMode: 'low-power' });
+  await f.flushOffline();
   try {
     openPerformance(f);
     for (let i = 0; i < 120; i++) f.tick(1 / 120);
@@ -1120,7 +1160,7 @@ test('TC-3D-015 counts rendered frames only, with no hidden/BFCache/mode/resize/
     f.document.hidden = true; f.document.emit('visibilitychange');
     assert.equal(f.frames.size, 0); assert.equal(f.window.__coffeeSliceDebug.readPerformance().totalIntervals, 0);
     f.clock.now += 60_000; f.clock.performance += 60_000;
-    f.document.hidden = false; f.document.emit('visibilitychange');
+    f.document.hidden = false; f.document.emit('visibilitychange'); await f.flushOffline();
     for (let i = 0; i < 8; i++) f.tick(1 / 120);
     assert.equal(f.window.__coffeeSliceDebug.readPerformance().totalOver50, 0);
     const resets = [
@@ -1130,7 +1170,7 @@ test('TC-3D-015 counts rendered frames only, with no hidden/BFCache/mode/resize/
       () => { f.click('#settings'); f.click('#reload'); },
     ];
     for (const reset of resets) {
-      reset(); assert.equal(f.window.__coffeeSliceDebug.readPerformance().totalIntervals, 0);
+      reset(); await f.flushOffline(); assert.equal(f.window.__coffeeSliceDebug.readPerformance().totalIntervals, 0);
       f.tick(.01); f.tick(.01);
       assert.equal(f.window.__coffeeSliceDebug.readPerformance().p95Ms, 10);
       assert.equal(f.frames.size, 1);
@@ -1241,7 +1281,7 @@ test('TC-3D-016 four native quality buttons expose selection, clear labels and a
   assert.ok(declarations('.render-mode-picker button', 'min-height').every(value => parseFloat(value) >= 44));
 });
 
-test('TC-3D-016 clear-60 renders 60 of 120Hz with continuous poses and identical saved progression', () => {
+test('TC-3D-016 clear-60 renders 60 of 120Hz with continuous poses and identical saved progression', async () => {
   const f = fixture({ renderMode: 'clear-60' });
   const reference = createEngine(); reference.advance(10);
   try {
@@ -1258,7 +1298,7 @@ test('TC-3D-016 clear-60 renders 60 of 120Hz with continuous poses and identical
     const rendered = f.renderer.updates.length;
     f.document.hidden = true; f.document.emit('visibilitychange'); f.tick(5);
     assert.equal(f.renderer.updates.length, rendered);
-    f.document.hidden = false; f.document.emit('visibilitychange'); f.tick(1 / 120);
+    f.document.hidden = false; f.document.emit('visibilitychange'); await f.flushOffline(); f.tick(1 / 120);
     assert.equal(f.renderer.updates.length, rendered);
     f.tick(1 / 120);
     assert.equal(f.renderer.updates.length, rendered + 1);
@@ -1325,16 +1365,17 @@ test('TC-3D-016 clear-60 QA records the new target and isolates mode changes int
 });
 
 
-test('TC-3D-019 failed latest-save reads retain the 570-earned frozen shop and cannot overwrite it after storage recovers', () => {
+test('TC-3D-019 failed latest-save reads retain the 570-earned frozen shop and cannot overwrite it after storage recovers', async () => {
   const initial = createInitialState(); initial.manager.carrying = 570; initial.totalEarned = 570;
   Object.assign(initial.manager, { phase: 'depositing', target: 2, timer: .55 });
   const f = fixture({ initial, now: 130000, savedAtAgoSeconds: 30, writeUnavailable: true });
+  await f.flushOffline();
   try {
     const durable = f.memory.getItem(SAVE_KEY), frozen = f.state();
     assert.equal(frozen.paused, true); assert.equal(frozen.totalEarned, 570);
     const session = f.window.__coffeeSliceDebug.readRoutes().session;
     f.storageControl.writeUnavailable = false; f.storageControl.readUnavailable = true;
-    f.click('#settings'); f.click('#reload'); f.click('#reload');
+    f.click('#settings'); f.click('#reload'); await f.flushOffline(); f.click('#reload'); await f.flushOffline();
     assert.deepEqual(f.state(), frozen, 'failed reload must never publish the initial-shop fallback');
     assert.equal(f.window.__coffeeSliceDebug.readRoutes().session, session, 'failed recovery is not a state replacement');
     assert.equal(f.element('#reload').hidden, false);
@@ -1343,14 +1384,14 @@ test('TC-3D-019 failed latest-save reads retain the 570-earned frozen shop and c
     f.storageControl.readUnavailable = false;
     f.click('#save'); f.tick(10); f.action({ type: 'invite' });
     f.document.hidden = true; f.document.emit('visibilitychange'); f.tick(35);
-    f.document.hidden = false; f.document.emit('visibilitychange'); f.window.emit('pageshow', { persisted: true });
+    f.document.hidden = false; f.document.emit('visibilitychange'); await f.flushOffline(); f.window.emit('pageshow', { persisted: true }); await f.flushOffline();
     assert.deepEqual(f.state(), frozen, 'save, RAF and visibility cannot release failed recovery');
     assert.equal(f.memory.getItem(SAVE_KEY), durable, 'recovering storage alone cannot authorize an overwrite');
-    f.click('#reload');
+    f.click('#reload'); await f.flushOffline();
     assert.equal(f.state().paused, false); assert.ok(f.state().totalEarned >= 570);
     assert.equal(f.element('#reload').hidden, true);
     const once = f.state(), claimed = f.memory.getItem(SAVE_KEY);
-    f.click('#reload'); assert.deepEqual(f.state(), once); assert.equal(f.memory.getItem(SAVE_KEY), claimed);
+    f.click('#reload'); await f.flushOffline(); assert.deepEqual(f.state(), once); assert.equal(f.memory.getItem(SAVE_KEY), claimed);
     f.tick(.1); assert.ok(f.state().elapsed > once.elapsed);
     f.click('#save'); assert.ok(JSON.parse(f.memory.getItem(SAVE_KEY)).state.totalEarned >= 570);
   } finally { f.dispose(); }
@@ -1360,11 +1401,12 @@ test('TC-3D-019 corrupt, future and missing reloads preserve current progress; o
   const progressed = createEngine(); progressed.advance(120);
   for (const replacement of ['{ corrupt latest archive', JSON.stringify({ schemaVersion: 2 }), null]) {
     const f = fixture({ initial: progressed.snapshot(), now: 130000 });
+    await f.flushOffline();
     try {
       if (replacement === null) f.memory.removeItem(SAVE_KEY); else f.memory.setItem(SAVE_KEY, replacement);
       f.window.emit('storage', { key: SAVE_KEY, newValue: replacement });
       const frozen = f.state();
-      f.click('#settings'); f.click('#reload');
+      f.click('#settings'); f.click('#reload'); await f.flushOffline();
       assert.deepEqual(f.state(), frozen);
       assert.equal(f.element('#reload').hidden, false); assert.equal(f.element('#new-shop').hidden, false);
       assert.match(f.element('#save-status').textContent, replacement === null ? /未找到|缺失/ : /存档/);
@@ -1389,19 +1431,22 @@ test('TC-3D-019 corrupt, future and missing reloads preserve current progress; o
   }
 });
 
-test('TC-3D-019 startup read failure stays protected until a successful read, while a verified empty first launch starts normally', () => {
+test('TC-3D-019 startup read failure stays protected until a successful read, while a verified empty first launch starts normally', async () => {
   const progressed = createEngine(); progressed.advance(120);
   const f = fixture({ initial: progressed.snapshot(), readUnavailable: true, now: 130000 });
+  await f.flushOffline();
   try {
     const durable = f.memory.getItem(SAVE_KEY), blocked = f.state();
     assert.equal(blocked.paused, true); assert.equal(f.element('#reload').hidden, false);
     f.storageControl.readUnavailable = false;
     f.tick(10); f.click('#save'); assert.equal(f.memory.getItem(SAVE_KEY), durable);
     assert.deepEqual(f.state(), blocked);
-    f.click('#reload'); assert.equal(f.state().paused, false);
-    assert.deepEqual(f.state(), progressed.snapshot());
+    f.click('#reload'); await f.flushOffline(); assert.equal(f.state().paused, false);
+    const recovered = createEngine(progressed.snapshot()); recovered.advance(8);
+    assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(recovered.snapshot()), 'the previously unpaid ten-second gap is recovered at 80%');
   } finally { f.dispose(); }
   const fresh = fixture({ initial: null, now: 130000 });
+  await fresh.flushOffline();
   try {
     assert.equal(fresh.state().paused, false); assert.equal(fresh.element('#reload').hidden, true);
     fresh.tick(.1); fresh.click('#save'); assert.equal(JSON.parse(fresh.memory.getItem(SAVE_KEY)).state.elapsed, .1);
@@ -1409,15 +1454,16 @@ test('TC-3D-019 startup read failure stays protected until a successful read, wh
 });
 
 
-test('TC-3D-019 cancelled reload, failed reset and a new concurrent save never release recovery protection', () => {
+test('TC-3D-019 cancelled reload, failed reset and a new concurrent save never release recovery protection', async () => {
   const progressed = createEngine(); progressed.advance(120);
   const f = fixture({ initial: progressed.snapshot(), now: 130000 });
+  await f.flushOffline();
   try {
     const original = f.memory.getItem(SAVE_KEY), replacement = '{ unreadable replacement';
     f.memory.setItem(SAVE_KEY, replacement); f.window.emit('storage', { key: SAVE_KEY, newValue: replacement });
     const frozen = f.state();
-    f.window.confirm = () => false; f.click('#reload'); assert.deepEqual(f.state(), frozen);
-    f.window.confirm = () => true; f.click('#reload');
+    f.window.confirm = () => false; f.click('#reload'); await f.flushOffline(); assert.deepEqual(f.state(), frozen);
+    f.window.confirm = () => true; f.click('#reload'); await f.flushOffline();
     for (const failure of ['writeUnavailable', 'removeUnavailable']) {
       f.storageControl[failure] = true; f.click('#new-shop'); f.storageControl[failure] = false;
       assert.deepEqual(f.state(), frozen); assert.equal(f.memory.getItem(SAVE_KEY), replacement);
@@ -1428,7 +1474,7 @@ test('TC-3D-019 cancelled reload, failed reset and a new concurrent save never r
     f.click('#new-shop');
     assert.equal(f.memory.getItem(SAVE_KEY), original, 'reset cannot erase a newly replaced CAS base');
     assert.deepEqual(f.state(), frozen);
-    f.click('#reload'); assert.equal(f.state().paused, false);
+    f.click('#reload'); await f.flushOffline(); assert.equal(f.state().paused, false);
     assert.deepEqual(f.state(), progressed.snapshot());
   } finally { f.dispose(); }
 });
@@ -1447,13 +1493,13 @@ test('TC-3D-019 startup outage followed by missing data needs explicit new-shop,
   } finally { f.dispose(); }
 });
 
-test('TC-3D-019 shutdown after failed recovery never writes prior or fallback state', () => {
+test('TC-3D-019 shutdown after failed recovery never writes prior or fallback state', async () => {
   for (const path of ['dispose', 'pagehide']) {
     const progressed = createEngine(); progressed.advance(120);
     const f = fixture({ initial: progressed.snapshot(), now: 130000, savedAtAgoSeconds: 30, writeUnavailable: true });
     const durable = f.memory.getItem(SAVE_KEY);
     f.storageControl.writeUnavailable = false; f.storageControl.readUnavailable = true;
-    f.click('#reload'); f.storageControl.readUnavailable = false;
+    f.click('#reload'); await f.flushOffline(); f.storageControl.readUnavailable = false;
     if (path === 'dispose') f.dispose(); else f.window.emit('pagehide', { persisted: false });
     assert.equal(f.memory.getItem(SAVE_KEY), durable);
     assert.equal(f.frames.size, 0);
@@ -1464,16 +1510,330 @@ test('TC-3D-019 shutdown after failed recovery never writes prior or fallback st
 test('TC-3D-019 protected raw export survives a later read outage and clears after recovery', async () => {
   const progressed = createEngine(); progressed.advance(120);
   const f = fixture({ initial: progressed.snapshot(), now: 130000 });
+  await f.flushOffline();
   try {
     const good = f.memory.getItem(SAVE_KEY), broken = '{ damaged';
     f.memory.setItem(SAVE_KEY, broken); f.window.emit('storage', { key: SAVE_KEY, newValue: broken });
-    f.click('#reload'); const frozen = f.state();
-    f.storageControl.readUnavailable = true; f.click('#reload');
+    f.click('#reload'); await f.flushOffline(); const frozen = f.state();
+    f.storageControl.readUnavailable = true; f.click('#reload'); await f.flushOffline();
     f.click('#export'); assert.equal(await f.blobs.at(-1).text(), broken);
     f.click('#export-current'); assert.deepEqual(JSON.parse(await f.blobs.at(-1).text()).state, frozen);
-    f.storageControl.readUnavailable = false; f.memory.setItem(SAVE_KEY, good); f.click('#reload');
+    f.storageControl.readUnavailable = false; f.memory.setItem(SAVE_KEY, good); f.click('#reload'); await f.flushOffline();
     assert.equal(f.element('#export-current').hidden, true);
     assert.equal(f.element('#export').disabled, false);
     f.click('#export'); assert.deepEqual(JSON.parse(await f.blobs.at(-1).text()).state, progressed.snapshot());
+  } finally { f.dispose(); }
+});
+
+// Exact asynchronous UI/lifecycle contracts. These use the real engine and
+// repository, deterministic visible/hidden clocks, and explicit macrotask yields.
+test('TC-3D-020 unlimited 80% loading stays responsive, exposes only committed assets, and accounts visible work time', async () => {
+  const initial = createInitialState();
+  const f = fixture({ initial, now: 20_000_000, savedAtAgoSeconds: 10800 });
+  try {
+    const raw = f.memory.getItem(SAVE_KEY), frozen = f.state();
+    assert.equal(f.element('#offline-panel').hidden, false);
+    assert.equal(f.element('#offline-working').hidden, false);
+    assert.equal(f.element('#offline-result').hidden, true);
+    assert.equal(frozen.paused, true);
+    assert.equal(frozen.wallet, initial.wallet);
+    assert.equal(frozen.lastOfflineClaimId, null);
+    assert.match(f.element('#offline-progress-text').textContent, /0%/);
+    assert.doesNotMatch(f.element('#toast').textContent, /已存入金库/);
+    await f.stepOffline();
+    const progress = Number(f.element('#offline-progress').getAttribute('value'));
+    assert.ok(progress > 0 && progress < 1, 'a partial exact chunk reports progress before final commit');
+    assert.equal(f.memory.getItem(SAVE_KEY), raw); assert.deepEqual(f.state(), frozen);
+    f.tick(2.5); f.click('#save'); f.click('#manager-upgrade');
+    assert.deepEqual(f.state(), frozen, 'rendering and business controls cannot publish speculative progress');
+    assert.equal(f.memory.getItem(SAVE_KEY), raw, 'yielding and loading never write an intermediate claim');
+    f.window.emit('pageshow', { persisted: true });
+    assert.equal(f.frames.size, 1, 'duplicate resume does not create another clock owner');
+    await f.flushOffline({ dismissResult: false });
+    const committed = JSON.parse(f.memory.getItem(SAVE_KEY));
+    const expected = createEngine(initial), report = expected.applyOffline(10800, f.state().lastOfflineClaimId);
+    assert.equal(committed.state.elapsed, 8640, 'three hours are all credited at 80%, without the old two-hour cap');
+    assert.equal(committed.savedAt, 20_000_000, 'the commit anchors its endpoint, not the end of computation');
+    assert.deepEqual(f.state(), expected.snapshot());
+    assert.equal(f.element('#offline-result').hidden, false);
+    assert.equal(f.element('#offline-legacy').hidden, true);
+    assert.equal(f.element('#offline-deposited').textContent, `离开期间已存入金库 ¥${(report.amount / 100).toFixed(2)}`);
+    assert.match(f.element('#offline-duration').textContent, /离开 3 小时 · 有效经营 2 小时 24 分钟/);
+    assert.equal(f.element('#offline-generated').textContent, `期间售出咖啡产生 ¥${(report.generatedAmount / 100).toFixed(2)}`);
+    assert.match(f.element('#offline-pending').textContent, /台面待收.*经理运送.*送回金库/);
+    f.click('#offline-done'); f.click('#save');
+    expected.advance(2.5);
+    assert.deepEqual(f.state(), expected.snapshot(), 'foreground computation time is ordinary 100% online time, including save before the next RAF');
+    assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).savedAt, f.clock.now);
+    const once = f.state(), onceRaw = f.memory.getItem(SAVE_KEY);
+    f.window.emit('pageshow', { persisted: true }); f.click('#reload'); await f.flushOffline();
+    assert.deepEqual(f.state(), once); assert.equal(f.memory.getItem(SAVE_KEY), onceRaw);
+    assert.equal(f.frames.size, 1);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-020 cancel, native close and retry retain original raw and never stamp a partial claim', async () => {
+  for (const cancel of ['#offline-cancel', '#dialog-close', 'native-close']) {
+    const f = fixture({ now: 5_000_000, savedAtAgoSeconds: 3600 });
+    try {
+      const original = f.memory.getItem(SAVE_KEY), frozen = f.state();
+      if (cancel === 'native-close') f.element('#operation-dialog').close(); else f.click(cancel);
+      await f.flushOffline();
+      assert.deepEqual(f.state(), frozen);
+      assert.equal(f.memory.getItem(SAVE_KEY), original);
+      assert.equal(f.element('#reload').hidden, false);
+      assert.equal(f.element('#operation-dialog').open, false);
+      assert.match(f.element('#save-status').textContent, /取消.*保留/);
+      f.tick(3); f.click('#save');
+      assert.equal(f.memory.getItem(SAVE_KEY), original);
+      f.click('#settings'); f.click('#reload'); await f.flushOffline();
+      assert.equal(f.state().paused, false);
+      assert.equal(f.state().elapsed, 2882.4);
+      assert.equal(f.state().offlineClaimIds.length, 1, 'canceled work creates no claim id');
+      assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).savedAt, f.clock.now);
+      assert.equal(f.frames.size, 1);
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-020 hiding pending work cancels and restarts its unpaid interval once, including BFCache duplicates', async () => {
+  const f = fixture({ now: 5_000_000, savedAtAgoSeconds: 3600 });
+  try {
+    const original = f.memory.getItem(SAVE_KEY), frozen = f.state();
+    f.tick(2);
+    f.document.hidden = true; f.document.emit('visibilitychange');
+    f.window.emit('pagehide', { persisted: true });
+    assert.equal(f.frames.size, 0);
+    await f.flushOffline();
+    assert.equal(f.memory.getItem(SAVE_KEY), original); assert.deepEqual(f.state(), frozen);
+    f.clock.now += 60000; f.clock.performance += 60000;
+    f.document.hidden = false; f.document.emit('visibilitychange');
+    f.window.emit('pageshow', { persisted: true });
+    await f.flushOffline();
+    assert.equal(f.state().elapsed, 2929.6);
+    assert.equal(f.state().offlineClaimIds.length, 1);
+    const once = f.state(), raw = f.memory.getItem(SAVE_KEY);
+    f.window.emit('pageshow', { persisted: true }); f.document.emit('visibilitychange');
+    assert.deepEqual(f.state(), once); assert.equal(f.memory.getItem(SAVE_KEY), raw);
+    assert.equal(f.frames.size, 1);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-020 pending storage conflict, newer read and disposal invalidate all late completion callbacks', async () => {
+  for (const kind of ['storage', 'reload', 'dispose']) {
+    const f = fixture({ now: 5_000_000, savedAtAgoSeconds: 3600 });
+    try {
+      const frozen = f.state();
+      const foreignState = createEngine(); foreignState.advance(11);
+      const foreign = JSON.stringify({ schemaVersion: 1, offlinePolicyVersion: 3, savedAt: f.clock.now, recordChangeTag: `new-${kind}`, state: foreignState.snapshot() });
+      if (kind === 'dispose') f.dispose();
+      else {
+        f.memory.setItem(SAVE_KEY, foreign);
+        if (kind === 'storage') f.window.emit('storage', { key: SAVE_KEY, newValue: foreign });
+        else f.click('#reload');
+      }
+      const durable = f.memory.getItem(SAVE_KEY);
+      await f.flushOffline();
+      assert.equal(f.memory.getItem(SAVE_KEY), durable);
+      assert.deepEqual(f.state(), kind === 'reload' ? foreignState.snapshot() : frozen);
+      assert.doesNotMatch(f.element('#toast').textContent, /离开期间已存入金库/);
+      if (kind === 'dispose') { assert.equal(f.frames.size, 0); assert.equal(f.timers.size, 0); }
+      else assert.equal(f.frames.size, 1);
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-020 hidden retry retains unsaved source after write failure and cancellation, including sub-tick gaps', async () => {
+  for (const gap of [.01, 60]) {
+    const f = fixture({ now: 500_000 });
+    try {
+      f.tick(5);
+      const live = f.state(), old = f.memory.getItem(SAVE_KEY);
+      f.storageControl.writeUnavailable = true;
+      f.document.hidden = true; f.document.emit('visibilitychange');
+      assert.equal(f.memory.getItem(SAVE_KEY), old, 'failed departure save leaves older durable bytes');
+      f.clock.now += gap * 1000; f.clock.performance += gap * 1000;
+      f.document.hidden = false; f.document.emit('visibilitychange');
+      if (gap >= 1) f.click('#offline-cancel');
+      await f.flushOffline();
+      assert.equal(f.state().elapsed, live.elapsed);
+      assert.equal(f.memory.getItem(SAVE_KEY), old);
+      f.storageControl.writeUnavailable = false;
+      f.click('#reload'); await f.flushOffline();
+      const expected = createEngine(live); expected.applyOffline(gap, f.state().lastOfflineClaimId);
+      assert.deepEqual(f.state(), expected.snapshot(), 'retry preserves the live five seconds, rather than silently loading older bytes');
+      assert.equal(f.state().offlineClaimIds.length, 1);
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-020 legacy policy is explained only for its one-time settled interval', async () => {
+  const initial = createInitialState();
+  const now = 20_000_000, raw = JSON.stringify({ schemaVersion: 1, savedAt: now - 3 * 3600000, recordChangeTag: 'legacy-policy-details', state: initial });
+  const f = fixture({ raw, now });
+  try {
+    await f.flushOffline({ dismissResult: false });
+    assert.equal(f.state().elapsed, 3600);
+    assert.equal(f.element('#offline-legacy').hidden, false);
+    assert.match(f.element('#offline-legacy').textContent, /旧规则.*50%.*最多2小时.*一次.*80%.*无时长上限/);
+    assert.match(f.element('#offline-duration').textContent, /离开 3 小时 · 有效经营 1 小时/);
+    assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).offlinePolicyVersion, 3);
+    f.click('#offline-done');
+    f.document.hidden = true; f.document.emit('visibilitychange');
+    f.clock.now += 60000; f.clock.performance += 60000;
+    f.document.hidden = false; f.document.emit('visibilitychange'); await f.flushOffline({ dismissResult: false });
+    assert.equal(f.state().elapsed, 3648);
+    assert.equal(f.element('#offline-legacy').hidden, true);
+  } finally { f.dispose(); }
+});
+
+
+test('TC-3D-020 settlement details retain fractional away and effective duration', async () => {
+  const f = fixture({ now: 500_000, savedAtAgoSeconds: 30.1 });
+  try {
+    await f.flushOffline({ dismissResult: false });
+    assert.equal(f.element('#offline-duration').textContent, '离开 30.1 秒 · 有效经营 24.08 秒');
+  } finally { f.dispose(); }
+});
+
+
+test('TC-3D-020 visibility observed before its event cannot discard a completed hidden interval', async () => {
+  for (const transition of ['before-yield', 'during-commit']) {
+    const f = fixture({ now: 500_000 });
+    try {
+      f.tick(5);
+      f.document.hidden = true; f.document.emit('visibilitychange');
+      const original = f.memory.getItem(SAVE_KEY);
+      f.clock.now += 60000; f.clock.performance += 60000;
+      f.document.hidden = false; f.document.emit('visibilitychange');
+      assert.equal(f.state().elapsed, 5);
+      if (transition === 'before-yield') f.document.hidden = true;
+      else {
+        const setItem = f.memory.setItem;
+        f.memory.setItem = (key, value) => {
+          setItem(key, value);
+          // A real document can become hidden before its queued event. This
+          // hook forces that observation after final computation, at its write.
+          if (key === SAVE_KEY) f.document.hidden = true;
+        };
+      }
+      await f.flushOffline();
+      if (transition === 'before-yield') {
+        assert.equal(f.memory.getItem(SAVE_KEY), original, 'hidden detection aborts before the next compute/commit slice');
+        assert.equal(f.state().elapsed, 5);
+      } else {
+        assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).state.elapsed, 53);
+        assert.equal(f.state().elapsed, 53, 'a durable committed state must be installed even when its UI callback sees hidden');
+      }
+      f.document.emit('visibilitychange');
+      f.clock.now += 10000; f.clock.performance += 10000;
+      // Stop the artificial hook from forcing the following resume hidden.
+      if (transition === 'during-commit') {
+        const bytes = f.memory.getItem(SAVE_KEY);
+        const replacement = createMemoryStorage(); replacement.setItem(SAVE_KEY, bytes);
+        f.memory.setItem = replacement.setItem; f.memory.getItem = replacement.getItem;
+      }
+      f.document.hidden = false; f.document.emit('visibilitychange');
+      await f.flushOffline();
+      assert.equal(f.state().elapsed, 61, 'five online seconds plus seventy hidden seconds at80% survive the event race');
+      assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).state.elapsed, 61);
+      assert.equal(f.frames.size, 1);
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-020 unexplained long foreground RAF gaps freeze without partial simulation or save, until explicit recovery', async () => {
+  const f = fixture({ now: 500_000 });
+  try {
+    f.tick(5); f.click('#save');
+    const source = f.state(), raw = f.memory.getItem(SAVE_KEY);
+    f.tick(61);
+    assert.equal(f.state().paused, true);
+    assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(source));
+    assert.equal(f.memory.getItem(SAVE_KEY), raw);
+    assert.match(f.element('#save-status').textContent, /页面长时间未更新.*无法确认.*已保护当前进度/);
+    f.click('#save');
+    f.document.hidden = true; f.document.emit('visibilitychange');
+    f.clock.now += 10000; f.clock.performance += 10000;
+    f.document.hidden = false; f.document.emit('visibilitychange'); await f.flushOffline();
+    assert.equal(f.memory.getItem(SAVE_KEY), raw);
+    assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(source), 'visibility alone cannot unlock a protected unexplained interval');
+    f.click('#reload'); await f.flushOffline();
+    const expected = createEngine(source); expected.applyOffline(71, f.state().lastOfflineClaimId);
+    assert.deepEqual(f.state(), expected.snapshot(), 'only explicit latest-save recovery selects the durable interval for offline settlement');
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-020 save and every business action guard unclassified foreground time before the next RAF', () => {
+  for (const action of ['save', 'invite', 'recipe', 'counter', 'manager']) {
+    const initial = createEngine(); initial.advance(22);
+    const f = fixture({ initial: initial.snapshot(), now: 500_000 });
+    try {
+      const source = f.state(), raw = f.memory.getItem(SAVE_KEY);
+      f.clock.now += 61000; f.clock.performance += 61000;
+      if (action === 'save') f.click('#save');
+      if (action === 'invite') f.action({ type: 'invite' });
+      if (action === 'recipe') {
+        f.action({ type: 'counter', id: 'counter-a' });
+        f.root.emit('click', { target: f.nodes.find(node => node.dataset.selectRecipe === 'latte') });
+      }
+      if (action === 'counter') { f.action({ type: 'counter', id: 'counter-a' }); f.click('#counter-upgrade'); }
+      if (action === 'manager') { f.action({ type: 'vault' }); f.click('#manager-upgrade'); }
+      assert.equal(f.state().paused, true, action);
+      assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(source), `${action} cannot change business before an unclassified long gap`);
+      assert.equal(f.memory.getItem(SAVE_KEY), raw, `${action} cannot stamp an unaccounted time anchor`);
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-020 verified 300-second foreground computation tail advances before purchases, recipe changes and invites', async () => {
+  for (const action of ['save', 'invite', 'recipe', 'counter', 'manager']) {
+    const initial = createEngine(); initial.advance(22);
+    assert.ok(initial.state.counters.some(counter => counter.brew), 'fixture includes existing brew snapshots');
+    const f = fixture({ initial: initial.snapshot(), now: 5_000_000, savedAtAgoSeconds: 3600 });
+    try {
+      for (let turn = 0; turn < 10; turn++) { f.tick(30); await f.stepOffline(); }
+      await f.flushOffline();
+      const committed = JSON.parse(f.memory.getItem(SAVE_KEY)).state;
+      assert.equal(committed.elapsed, 2902);
+      assert.equal(f.state().paused, false, 'known computation is excluded from the long unclassified-gap guard');
+      const expected = createEngine(committed); expected.advance(300);
+      if (action === 'save') f.click('#save');
+      if (action === 'invite') { expected.invite(); f.action({ type: 'invite' }); }
+      if (action === 'recipe') {
+        expected.setRecipe('counter-a', 'latte');
+        f.action({ type: 'counter', id: 'counter-a' });
+        f.root.emit('click', { target: f.nodes.find(node => node.dataset.selectRecipe === 'latte') });
+      }
+      if (action === 'counter') { expected.upgrade('counter-a'); f.action({ type: 'counter', id: 'counter-a' }); f.click('#counter-upgrade'); }
+      if (action === 'manager') { expected.upgradeManager(); f.action({ type: 'vault' }); f.click('#manager-upgrade'); }
+      assert.deepEqual(f.state(), expected.snapshot(), `${action} occurs strictly after the100% foreground tail, preserving existing brew snapshots`);
+      f.click('#save');
+      assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).savedAt, f.clock.now);
+      const once = f.state(), raw = f.memory.getItem(SAVE_KEY);
+      f.clock.now += 61000; f.clock.performance += 61000;
+      f.click('#save');
+      assert.equal(f.state().paused, true, 'the known-time allowance is consumed once and cannot hide a later unexplained gap');
+      assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(once));
+      assert.equal(f.memory.getItem(SAVE_KEY), raw);
+    } finally { f.dispose(); }
+  }
+});
+
+
+test('TC-3D-020 system suspension during a pending visible job cannot become verified foreground time', async () => {
+  const f = fixture({ now: 5_000_000, savedAtAgoSeconds: 3600 });
+  try {
+    const original = f.memory.getItem(SAVE_KEY), source = f.state();
+    f.clock.now += 86400000; f.clock.performance += 86400000;
+    assert.equal(f.document.hidden, false);
+    await f.flushOffline();
+    assert.equal(f.memory.getItem(SAVE_KEY), original, 'an unexplained one-day turn gap cancels before the final claim');
+    assert.deepEqual(f.state(), source, 'neither offline candidate nor unbounded synchronous foreground debt is installed');
+    assert.match(f.element('#save-status').textContent, /页面长时间未更新.*无法确认.*已保护当前进度/);
+    assert.equal(f.element('#settings-panel').hidden, false);
+    assert.equal(f.element('#reload').hidden, false);
+    f.click('#save'); f.tick(.1);
+    assert.equal(f.memory.getItem(SAVE_KEY), original);
   } finally { f.dispose(); }
 });

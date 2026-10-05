@@ -221,7 +221,10 @@ test('TC-3D-004 authentic legacy archives migrate offline only once and retain r
   const source = legacyState({ target: 1, x: 3, carrying: 600 }); source.stepCarry = .027; source.eventSequence = 42;
   const raw = rawEnvelope(source), memory = createMemoryStorage(); memory.setItem(SAVE_KEY, raw);
   const immediate = new LocalSaveRepository(memory).load(1000);
-  assert.equal(immediate.status, 'loaded'); assert.equal(immediate.state.managerRouteVersion, 2); assert.equal(memory.getItem(SAVE_KEY), raw);
+  assert.equal(immediate.status, 'loaded'); assert.equal(immediate.state.managerRouteVersion, 2);
+  assert.equal(JSON.parse(memory.getItem(SAVE_KEY)).offlinePolicyVersion, 3);
+  assert.deepEqual(JSON.parse(memory.getItem(SAVE_KEY)).state, immediate.state);
+  memory.setItem(SAVE_KEY, raw); // Exercise failure/retry from authentic pre-policy bytes.
   const expected = createEngine(immediate.state); expected.advance(60);
   const unavailable = { ...memory, setItem() { throw Error('quota'); } };
   const failed = new LocalSaveRepository(unavailable).load(121000);
@@ -368,12 +371,12 @@ test('TC-3D-004 strict validation catches enums, non-finite values, bounds and b
   assert.equal(validateState(createInitialState()).ok, true);
 });
 
-test('TC-3D-004 offline close-loop income is bounded and claimed only once', () => {
+test('TC-3D-004 offline close-loop income has no gameplay cap and is claimed only once', () => {
   const engine = createEngine();
-  const result = engine.applyOffline(100_000, 'claim-1');
-  assert.equal(result.accepted, true); assert.equal(result.seconds, 7200); assert.ok(result.amount > 0);
+  const result = engine.applyOffline(7201, 'claim-1');
+  assert.equal(result.accepted, true); assert.equal(result.seconds, 7201); assert.ok(result.amount > 0);
   const snapshot = engine.snapshot();
-  assert.equal(engine.applyOffline(100_000, 'claim-1').accepted, false);
+  assert.equal(engine.applyOffline(7201, 'claim-1').accepted, false);
   assert.deepEqual(engine.snapshot(), snapshot);
   engine.applyOffline(60, 'claim-2');
   const afterSecond = engine.snapshot();
@@ -406,13 +409,13 @@ test('TC-3D-004 overlapping reload endpoints and backwards clocks never reclaim 
   const storage = createMemoryStorage(), repo = new LocalSaveRepository(storage);
   repo.save(createInitialState(), 1000);
   const first = new LocalSaveRepository(storage).load(121000);
-  assert.equal(first.state.elapsed, 60);
+  assert.equal(first.state.elapsed, 96);
   const older = new LocalSaveRepository(storage);
   const backwards = older.load(91000);
-  assert.equal(backwards.state.elapsed, 60);
+  assert.equal(backwards.state.elapsed, 96);
   older.save(backwards.state, 91000);
   const second = new LocalSaveRepository(storage).load(151000);
-  assert.equal(second.state.elapsed, 75);
+  assert.equal(second.state.elapsed, 120);
   assert.equal(second.offline.seconds, 30);
 });
 
