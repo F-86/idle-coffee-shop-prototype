@@ -80,7 +80,7 @@ test('TC-3D-012 invite identities spawn on their own route, and phase/cup change
 test('TC-3D-012 quality modes and irregular frame subdivision produce the same authoritative save', () => {
   const reference = createEngine(); reference.advance(30);
   const expectedEvents = reference.drainEvents();
-  for (const mode of ['smooth', 'balanced', 'low-power']) {
+  for (const mode of ['smooth', 'clear-60', 'balanced', 'low-power']) {
     const engine = createEngine(), frames = new FrameInterpolator(engine.state), budget = new RenderBudget(0, mode);
     for (let n = 1; n <= 4320; n++) {
       const dt = budget.take(n * 1000 / 144);

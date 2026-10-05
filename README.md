@@ -36,8 +36,10 @@ iCloud/CloudKit 只预留 AuthProvider / SaveRepository 边界，真实容器/�
 
 最新房间/路线按REQ-3D-019–021执行：[计划](docs/testing/plans/room-route-refinement.md)。删除吊灯与排队装饰圈，墙地规则纹路、金库牌在图标上方；真实core与画面统一B→A→金库，当前两柜台档进行一次性路线转换，剩余旧轮安全收完后改顺序。
 
-清晰度/连续运动按REQ-3D-024执行：[计划](docs/testing/plans/smooth-clarity.md)。默认清晰流畅随屏幕刷新、DPR≤2/800万像素，20Hz核心通过相邻步插值连续呈现；设置可选平衡或省电。保留缓存家具阴影与按值更新字牌；默认比上一版低画质30fps需要更多绘制，实际帧时/温度仍待设备验收。
+清晰度/连续运动按REQ-3D-024执行：[计划](docs/testing/plans/smooth-clarity.md)。默认清晰流畅随屏幕刷新、DPR≤2/800万像素，20Hz核心通过相邻步插值连续呈现；设置可选同等清晰度的“清晰 60 帧”、平衡或省电。保留缓存家具阴影与按值更新字牌；默认比上一版低画质30fps需要更多绘制，实际帧时/温度仍待设备验收。
 
 离店边界按REQ-3D-025执行：[计划](docs/testing/plans/customer-boundary-exit.md)。持杯顾客走侧道，再沿独立平行返程横道走到入口侧边界外才消失；有限交叉口让行，不共用进店道路、不穿过人群。地毯端和旧出口箭头已删除；v2在途档原位延长，新旧档资金/冲突保护继续回归。
 
 可用 `?qa=1` 展开Performance QA记录前台帧提交节奏，详见[真机测量计划](docs/testing/plans/performance-measurement.md)。默认不采样；须用独立测试存储。FPS/帧间隔不代表GPU完成时间、上屏帧或温度。
+
+新增独立清晰60帧选项见REQ-3D-026：[计划](docs/testing/plans/clear-60.md)。保留默认与已有选择；同等清晰度只限渲染提交率，不改变经营/存档。新选项真机对比结果独立记录，不推断温度收益。

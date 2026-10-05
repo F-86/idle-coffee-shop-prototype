@@ -32,10 +32,12 @@
 
 逐段写：精确commit/资源、真实开始结束时刻、模式、窗口CSS/设备DPR/buffer/有效DPR、前台/焦点、场景等级/配方/客流/mesh上下文、累计秒数/间隔/FPS/长间隔总数，以及最后10秒p50/p95/max/长间隔。分列 PASS（有效完成采样）、FAIL（发现明确问题）、BLOCKED（工具/浏览器条件）和NOT_RUN。
 
-期望预算：smooth随显示RAF；balanced最高60fps；low-power最高30fps。这是上限而非保证。1280×900@2的理论buffer分别2560×1800、1920×1350、1280×900；必须对照实际显示的buffer，不能用理论值当实测。持续p95明显高于该模式正常间隔或反复>50/100ms，才有具体调度/绘制卡顿线索；还不能定位GPU或证明优化收益。
+期望预算：smooth随显示RAF；clear-60和balanced最高60fps；low-power最高30fps。这是上限而非保证。1280×900@2的理论buffer：smooth和clear-60均2560×1800，balanced为1920×1350，low-power为1280×900；必须对照实际显示的buffer，不能用理论值当实测。持续p95明显高于该模式正常间隔或反复>50/100ms，才有具体调度/绘制卡顿线索；还不能定位GPU或证明优化收益。
 
 若授权Mac工具能提供进程CPU、Energy Impact或设备温度，可在同条件下单独记录工具名、单位、真实时间和持续窗口。Energy Impact不是摄氏度；CPU占用也不是GPU功耗。无温度传感读数则温度NOT_RUN。短时帧率正常也不能排除持续运行发热。
 
 ## 2026-10-05 实测后的留证要求
 
 每段必须一次保留完整冻结文本，包括“最近10s”到滚动FPS/分位/长间隔，以及单独“本段…间隔/FPS/>50/>100”一行，再记录上下文。遗漏字段按未知处理，不能依据同一面板中的另一个范围补写。参考[Mac证据复核](../runs/2026-10-05-mac-performance-review/report.md)。后台项先确保记录到游戏页真实的visibility/focus事件与段generation；若工具无法证明触发目标条件，一次判INCONCLUSIVE/BLOCKED，不反复空等。
+
+新增clear-60独立对比使用[清晰60帧计划](clear-60.md)的smooth→clear-60→smooth三段序列；上方原三模式四段仍是既有基准，不拿旧balanced的低分辨率60fps数据替代新模式。

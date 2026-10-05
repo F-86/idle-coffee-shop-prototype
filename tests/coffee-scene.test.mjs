@@ -1106,7 +1106,7 @@ test('TC-3D-012 renderer pairs Babylon frame boundaries and changes quality with
     f.renderer.update(createInitialState(), 1 / 60);
     assert.equal(f.engine.frameId, frameId + 1);
     assert.equal(f.renderer.readRenderStats().renderedFrames, frames + 1);
-    for (const [mode, target] of [['balanced', 60], ['low-power', 30], ['smooth', null]]) {
+    for (const [mode, target] of [['clear-60', 60], ['balanced', 60], ['low-power', 30], ['smooth', null]]) {
       f.renderer.setRenderMode(mode);
       assert.equal(f.renderer.readRenderStats().renderMode, mode);
       assert.equal(f.renderer.readRenderStats().targetFps, target);

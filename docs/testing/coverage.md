@@ -48,3 +48,7 @@ REQ-3D-020/025 辅助 → [TC-3D-014](cases/slice/TC-3D-014.md)、[计划](plans
 ## 真实浏览器帧节奏测量辅助
 
 REQ-3D-024 辅助 → [TC-3D-015](cases/slice/TC-3D-015.md)、[计划](plans/performance-measurement.md)。有界单调RAF间隔、滚动分位/长间隔、1Hz UI、前台/焦点/上下文丢失/尺寸/模式分段、冻结、默认零采样与经济/保存不变。真机采样和温度结论另记，不以自动时钟测试代替。
+
+## 独立清晰60帧选项
+
+REQ-3D-026 → [TC-3D-016](cases/slice/TC-3D-016.md)、[计划](plans/clear-60.md)。30–240Hz调度、同smooth像素预算、原生按钮/选择、旧偏好保留、新偏好读回、存档字节不变、插值/经营一致性和QA新分段；Mac实际buffer/节奏/字牌观感独立验收。

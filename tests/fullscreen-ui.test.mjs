@@ -95,8 +95,8 @@ class FakeElement {
   focus() { this.focused++; this.ownerDocument.activeElement = this; }
   getBoundingClientRect() { return { left: 100, right: 500, top: 100, bottom: 650, width: 400, height: 550 }; }
 }
-function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, storageUnavailable = false, writeUnavailable = false, conflictDuringClaim = false, deferDialogClose = false, renderMode, query = '?qa=1', renderUnavailable = false } = {}) {
-  const clock = { now: Date.now(), performance: 0 };
+function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, storageUnavailable = false, writeUnavailable = false, conflictDuringClaim = false, deferDialogClose = false, renderMode, query = '?qa=1', renderUnavailable = false, now = Date.now() } = {}) {
+  const clock = { now, performance: 0 };
   const nodes = [], closeEvents = [];
   const document = new FakeElement('document', null);
   document.ownerDocument = document;
@@ -155,7 +155,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
     constructor(canvas, action, options) { if (renderUnavailable) throw Error('WebGL unavailable in test fixture'); this.canvas = canvas; this.action = action; this.renderMode = options.renderMode; renderer = this; }
     setRenderMode(mode) { this.renderMode = mode; this.resize(); }
     update(state, dt) { this.updates.push({ state: structuredClone(state), dt }); }
-    readRenderStats() { this.statsReads++; return { targetFps: this.renderMode === 'smooth' ? null : this.renderMode === 'balanced' ? 60 : 30, renderWidth: 800, renderHeight: 1100, meshCount: 200, renderedFrames: this.updates.length }; }
+    readRenderStats() { this.statsReads++; return { targetFps: this.renderMode === 'smooth' ? null : this.renderMode === 'low-power' ? 30 : 60, renderWidth: 800, renderHeight: 1100, meshCount: 200, renderedFrames: this.updates.length }; }
     readCustomerPose(id) { this.poseReads++; const customer = this.updates.at(-1)?.state.customers.find(customer => customer.id === id); return customer ? { x: customer.x, z: customer.z, screenX: 200, screenY: 250, inViewport: true } : null; }
     selectedCounter(id) { this.selection.push(id); }
     resize() { this.resizeCalls++; }
@@ -1224,5 +1224,101 @@ test('TC-3D-015 unavailable renderer never reports fake FPS; collapsed route pan
     panel.open = true; panel.emit('toggle'); f.tick(.1);
     assert.equal(f.renderer.poseReads, oldReads + 1); assert.notEqual(text.textContent, oldText);
     assert.ok(f.window.__coffeeSliceDebug.readRoutes().records.length);
+  } finally { f.dispose(); }
+});
+
+
+test('TC-3D-016 four native quality buttons expose selection, clear labels and a roomy two-column layout', () => {
+  const picker = html.match(/<div class="render-mode-picker"[^>]*>[\s\S]*?<\/div>/)?.[0];
+  assert.ok(picker);
+  assert.match(picker, /role="group"/);
+  assert.match(picker, /aria-labelledby="render-mode-label"/);
+  assert.match(picker, /aria-describedby="render-mode-note"/);
+  assert.deepEqual(openingTags(picker, 'button').map(tag => tag.match(/data-render-mode="([^"]+)"/)[1]), ['smooth', 'clear-60', 'balanced', 'low-power']);
+  assert.match(picker, /data-render-mode="clear-60">清晰 60 帧<small>同等清晰度<\/small>/);
+  assert.deepEqual(declarations('.render-mode-picker', 'grid-template-columns'), ['repeat(2, minmax(0, 1fr))']);
+  assert.ok(declarations('.render-mode-picker button', 'min-height').every(value => parseFloat(value) >= 44));
+});
+
+test('TC-3D-016 clear-60 renders 60 of 120Hz with continuous poses and identical saved progression', () => {
+  const f = fixture({ renderMode: 'clear-60' });
+  const reference = createEngine(); reference.advance(10);
+  try {
+    assert.equal(f.renderer.renderMode, 'clear-60');
+    for (let i = 0; i < 1200; i++) f.tick(1 / 120);
+    assert.equal(f.renderer.updates.length, 600);
+    assert.deepEqual(f.state(), reference.snapshot());
+    const poses = f.renderer.updates.slice(6, 50).map(update => update.state.manager.x);
+    for (let i = 1; i < poses.length; i++) assert.ok(Math.abs(poses[i - 1] - poses[i] - 2.6 / 60) < 1e-8);
+    f.click('#settings'); f.click('#save');
+    assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, reference.snapshot());
+    assert.doesNotMatch(f.memory.getItem(SAVE_KEY), /clear-60|renderMode/);
+    assert.equal(f.frames.size, 1);
+    const rendered = f.renderer.updates.length;
+    f.document.hidden = true; f.document.emit('visibilitychange'); f.tick(5);
+    assert.equal(f.renderer.updates.length, rendered);
+    f.document.hidden = false; f.document.emit('visibilitychange'); f.tick(1 / 120);
+    assert.equal(f.renderer.updates.length, rendered);
+    f.tick(1 / 120);
+    assert.equal(f.renderer.updates.length, rendered + 1);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-016 existing preferences and two-counter saves survive clear-60 selection and reload', () => {
+  const progressed = createEngine(); progressed.advance(120);
+  for (const oldMode of [undefined, 'smooth', 'balanced', 'low-power']) {
+    const f = fixture({ initial: progressed.snapshot(), renderMode: oldMode });
+    let reloaded;
+    try {
+      assert.equal(f.renderer.renderMode, oldMode ?? 'smooth', 'no existing or absent preference is silently migrated');
+      const before = f.state(), saved = f.memory.getItem(SAVE_KEY);
+      f.click('#settings');
+      const clear = f.nodes.find(node => node.dataset.renderMode === 'clear-60');
+      assert.ok(clear);
+      f.root.emit('click', { target: clear });
+      f.root.emit('click', { target: clear });
+      assert.equal(f.renderer.renderMode, 'clear-60');
+      assert.equal(f.renderer.resizeCalls, 1, 'repeat selection does not rebuild or resize again');
+      assert.equal(f.memory.getItem(RENDER_MODE_KEY), 'clear-60');
+      assert.equal(f.memory.getItem(SAVE_KEY), saved, 'selection does not write the existing save bytes');
+      assert.deepEqual(f.state(), before);
+      for (const button of f.nodes.filter(node => node.dataset.renderMode)) assert.equal(button.getAttribute('aria-pressed'), String(button === clear));
+      assert.match(f.element('#render-mode-note').textContent, /相同.*清晰度.*60.*经营速度不变/);
+      f.click('#dialog-close'); f.click('#settings');
+      assert.equal(clear.getAttribute('aria-pressed'), 'true');
+      reloaded = fixture({ raw: saved, renderMode: f.memory.getItem(RENDER_MODE_KEY), now: JSON.parse(saved).savedAt });
+      assert.equal(reloaded.renderer.renderMode, 'clear-60');
+      assert.deepEqual(reloaded.state(), before);
+      assert.equal(f.frames.size, 1);
+    } finally { f.dispose(); reloaded?.dispose(); }
+  }
+  const blocked = fixture({ writeUnavailable: true });
+  try {
+    const saved = blocked.memory.getItem(SAVE_KEY);
+    blocked.click('#settings');
+    const clear = blocked.nodes.find(node => node.dataset.renderMode === 'clear-60');
+    blocked.root.emit('click', { target: clear });
+    assert.equal(blocked.renderer.renderMode, 'clear-60');
+    assert.match(blocked.element('#toast').textContent, /已生效.*未允许保存/);
+    assert.equal(blocked.memory.getItem(SAVE_KEY), saved);
+  } finally { blocked.dispose(); }
+});
+
+test('TC-3D-016 clear-60 QA records the new target and isolates mode changes into fresh segments', () => {
+  const f = fixture();
+  try {
+    const p = openPerformance(f);
+    f.tick(.01); f.tick(.01);
+    assert.equal(f.window.__coffeeSliceDebug.readPerformance().totalIntervals, 1);
+    f.click('#settings');
+    const clear = f.nodes.find(node => node.dataset.renderMode === 'clear-60');
+    f.root.emit('click', { target: clear });
+    assert.equal(f.window.__coffeeSliceDebug.readPerformance().totalIntervals, 0);
+    f.click('#dialog-close');
+    for (let i = 0; i < 240; i++) f.tick(1 / 120);
+    assert.match(p.text.textContent, /mode clear-60 · target 60/);
+    assert.match(p.text.textContent, /buffer 800×1100/);
+    assert.ok(Math.abs(f.window.__coffeeSliceDebug.readPerformance().fps - 60) < 1e-8);
+    assert.equal(f.frames.size, 1);
   } finally { f.dispose(); }
 });
