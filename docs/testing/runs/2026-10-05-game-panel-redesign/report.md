@@ -29,7 +29,7 @@ Linux云端，Node v24.19.0，TypeScript7.0.2，Vite8.3.0，BabylonJS9.29.0；�
 | git diff --check | PASS | 无空白错误 |
 | 独立代码审查 | PASS（限定范围） | 修复2个P2 UI可用性问题；另过18项文件安全、21项恢复/离线/焦点路由检查 |
 | 云端浏览器像素 | BLOCKED | 独立4193服务已启动；支持的云浏览器返回 net::ERR_BLOCKED_BY_CLIENT，未换地址/隧道/浏览器绕过 |
-| Mac Chrome/Safari和原生文件面板 | NOT_RUN | 由父任务按本版QA计划另行安排 |
+| Mac Chrome/Safari和原生文件面板 | NOT_RUN | 按本版QA计划进行后续独立验收 |
 | 手机/窄屏/横屏像素与原生键盘 | NOT_RUN | CSS滚动/尺寸及标签可静态检查，不能证明实屏布局和焦点行为 |
 | iCloud跨设备到达 | NOT_RUN | 本轮是UI，不声称云同步或已收到文件 |
 
