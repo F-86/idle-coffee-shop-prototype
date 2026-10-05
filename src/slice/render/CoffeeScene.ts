@@ -20,7 +20,7 @@ import { CreatePlane } from '@babylonjs/core/Meshes/Builders/planeBuilder.js';
 // Registers the scene ray-picking extension used by physical shop controls.
 import '@babylonjs/core/Culling/ray.js';
 import type { Counter, CounterId, Customer, RecipeId, SliceState } from '../core/types';
-import { recipeById, WORLD } from '../core/engine';
+import { coffeeBrewSeconds, coffeePrice, WORLD } from '../core/engine';
 import { DEFAULT_RENDER_MODE, RENDER_MODES, renderPixelRatio, type RenderMode } from './RenderBudget';
 
 export type CoffeeSceneAction =
@@ -42,6 +42,7 @@ export interface CoffeeSceneOptions { engine?: AbstractEngine; shadows?: boolean
 type Shape = 'box' | 'cylinder' | 'sphere' | 'ring';
 type PointerGesture = { id: number; x: number; y: number; lastX: number; lastY: number; time: number; dragged: boolean; target: Mesh | null; targetPoint: Vector3 | null; invalidated: boolean; action?: CoffeeSceneAction };
 type Label = { mesh: Mesh; texture: DynamicTexture | null; key: string };
+type Menu = { label: Label; level: number };
 type Person = {
   root: TransformNode;
   leftArm: TransformNode;
@@ -117,6 +118,7 @@ export class CoffeeScene {
   private readonly shapes = new Map<Shape, Mesh>();
   private readonly customers = new Map<number, Person>();
   private readonly stations = new Map<CounterId, Station>();
+  private readonly menus = new Map<RecipeId, Menu>();
   private readonly labels: Label[] = [];
   private readonly manager: Person;
   private readonly vaultLabel: Label;
@@ -213,6 +215,7 @@ export class CoffeeScene {
       const station = this.stations.get(counter.id);
       if (station) this.updateStation(station, counter, state.paused);
     }
+    for (const [recipe, menu] of this.menus) this.updateMenu(recipe, menu, state.coffeeLevels[recipe]);
     const live = new Set<number>();
     for (const customer of state.customers) {
       live.add(customer.id);
@@ -387,6 +390,7 @@ export class CoffeeScene {
     if (this.ownsEngine) this.engine.dispose();
     this.customers.clear();
     this.stations.clear();
+    this.menus.clear();
     this.materials.clear();
     this.shapes.clear();
     this.labels.length = 0;
@@ -656,12 +660,15 @@ export class CoffeeScene {
   private makeStation(id: CounterId, x: number, accent: string, deep: string, letter: string): Station {
     const root = new TransformNode(`${id}-station`, this.scene);
     root.position.x = x;
+    // Blank wood remains a pickable occluding solid, without an upgrade action.
     this.box(`${id}-body`, 3.4, 1.04, 1.34, 0, 0.55, 0, COLORS.wood, root);
     this.box(`${id}-toe`, 3.25, 0.15, 1.25, 0, 0.08, 0, COLORS.woodDark, root);
     for (let i = 0; i < 7; i++) this.box(`${id}-wood-slat-${i}`, 0.36, 0.86, 0.03, -1.42 + i * 0.475, 0.57, 0.68, i % 2 ? COLORS.woodLight : '#bc8458', root, false);
     this.box(`${id}-countertop`, 3.65, 0.16, 1.58, 0, 1.13, 0, COLORS.metal, root);
     this.box(`${id}-top-inset`, 3.38, 0.025, 1.33, 0, 1.222, 0, '#d5d6c9', root, false);
     this.box(`${id}-front-accent`, 3.48, 0.08, 0.08, 0, 0.94, 0.716, deep, root, false);
+    // The fixed camera projects positive world X to screen-left: coffee stays left,
+    // upgrade stays right. Each mounted plaque owns only its own physical action.
     const plaque = this.makeLabel(`${id}-upgrade-plaque`, 1.32, 1.04, new Vector3(-1.01, 0.55, 0.765), root, { type: 'counter', id }, 512, 448, 0);
     plaque.mesh.metadata = { ...plaque.mesh.metadata, coffeeSurface: 'counter-front' };
     this.registerAnchor(`${id}-upgrade`, plaque.mesh);
@@ -752,8 +759,6 @@ export class CoffeeScene {
     const progressFill = this.box(`${id}-progress-fill`, 1, .072, .018, -.45, 0, .018, accent, progressRoot, false);
     progressRoot.metadata = { coffeeDisplay: 'brew-progress' };
     progressRoot.setEnabled(false);
-    const body = this.scene.getMeshByName(`${id}-body`)!;
-    body.metadata = { coffeeAction: { type: 'counter', id } };
     const station: Station = { root, barista, progressRoot, progressFill, plaque, selector, cashLabel, cashRoot, cash, machineExtras: extras, readyCup, selection, level: -1, recipe: '', pendingCash: -1 };
     // Build the initial labels even before the first simulation frame arrives.
     this.updateStation(station, { id, x, level: 1, recipe: letter === 'A' ? 'espresso' : 'latte', pendingCash: 0, brewed: 0, brew: null }, false);
@@ -767,8 +772,18 @@ export class CoffeeScene {
     for (const dx of [-1.15, 1.15]) this.box(`menu-${recipe}-hanger-${dx}`, .045, .36, .06, x + dx, 3.84, -3.39, COLORS.gold, undefined, false);
     const board = this.makeLabel(`menu-${recipe}`, 3.3, 1.90, new Vector3(x, 2.70, -3.33), undefined, action, 768, 448);
     this.registerAnchor(`menu-${recipe}`, board.mesh);
-    const coffee = recipeById[recipe], espresso = recipe === 'espresso';
-    this.paintLabel(board, recipe, (ctx, w, h) => {
+    const menu: Menu = { label: board, level: -1 };
+    this.menus.set(recipe, menu);
+    this.updateMenu(recipe, menu, 1);
+  }
+
+  private updateMenu(recipe: RecipeId, menu: Menu, level: number): void {
+    if (menu.level === level) return;
+    const espresso = recipe === 'espresso';
+    const price = coffeePrice(recipe, level), brewSeconds = coffeeBrewSeconds(recipe, level);
+    // This is shared coffee progression, before any counter-specific modifier.
+    menu.label.mesh.metadata = { ...menu.label.mesh.metadata, coffeeMenu: { recipe, level, price, brewSeconds } };
+    this.paintLabel(menu.label, `${recipe}-${level}`, (ctx, w, h) => {
       this.roundRect(ctx, 1, 1, w - 2, h - 2, 15, '#2e4843');
       this.text(ctx, '咖啡菜单', w / 2, 55, 44, '#ead4a1');
       ctx.strokeStyle = '#648275'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(62, 87); ctx.lineTo(w - 62, 87); ctx.stroke();
@@ -777,9 +792,10 @@ export class CoffeeScene {
       ctx.fillStyle = '#f7ebd7'; ctx.fillRect(w / 2 - 63, 109, 126, 18);
       ctx.fillStyle = '#523c2f'; ctx.fillRect(w / 2 - 50, 133, 100, 18);
       this.text(ctx, espresso ? '浓缩咖啡' : '拿铁咖啡', w / 2, 263, 78, '#faf1db');
-      this.text(ctx, `${cashText(coffee.price)}  ·  ${coffee.brewSeconds.toFixed(1)}s`, w / 2, 328, 52, '#ead4a1');
-      this.text(ctx, '已解锁 · 查看 +', w / 2, 400, 50, '#ead4a1');
+      this.text(ctx, `${cashText(price)}  ·  ${brewSeconds.toFixed(2)}s`, w / 2, 328, 52, '#ead4a1');
+      this.text(ctx, `Lv. ${level} · 查看 +`, w / 2, 400, 50, '#ead4a1');
     });
+    menu.level = level;
   }
 
   private updateStation(station: Station, counter: Counter, paused: boolean): void {

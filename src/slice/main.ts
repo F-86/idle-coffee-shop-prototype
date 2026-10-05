@@ -1,4 +1,4 @@
-import { createEngine, recipeById, managerSpeed } from "./core/engine";
+import { createEngine, recipeById, counterPrice, counterBrewSeconds, managerSpeed } from "./core/engine";
 import { LocalSaveRepository, SAVE_KEY, type LoadResult, type OfflineSettlement } from "./core/persistence";
 import type {
   CounterId,
@@ -29,21 +29,29 @@ root.innerHTML = `
   <dialog id="operation-dialog" class="operation-dialog" aria-labelledby="dialog-title">
     <button id="dialog-close" class="dialog-close" aria-label="关闭操作窗口">×</button>
     <div class="dialog-heading"><span class="dialog-eyebrow" id="dialog-eyebrow">MELLOW BEAN</span><h1 id="dialog-title"></h1><p id="dialog-description"></p></div>
-    <div id="counter-panel" class="operation-panel" hidden>
-      <div class="recipe-picker" aria-label="柜台咖啡配方">
-        <button data-select-recipe="espresso"><span class="cup-art espresso-cup" aria-hidden="true"></span><strong>浓缩咖啡</strong><small>出杯快</small></button>
-        <button data-select-recipe="latte"><span class="cup-art latte-cup" aria-hidden="true"></span><strong>拿铁</strong><small>杯价高</small></button>
+    <div id="recipe-panel" class="operation-panel" hidden>
+      <div class="recipe-picker" role="group" aria-label="柜台咖啡">
+        <button data-select-recipe="espresso"><span class="cup-art espresso-cup" aria-hidden="true"></span><strong>浓缩咖啡</strong><small id="recipe-espresso-stats"></small></button>
+        <button data-select-recipe="latte"><span class="cup-art latte-cup" aria-hidden="true"></span><strong>拿铁</strong><small id="recipe-latte-stats"></small></button>
       </div>
       <p id="counter-affinity" class="affinity-badge"></p>
+      <p class="detail-note">下一杯生效</p>
+    </div>
+    <div id="counter-panel" class="operation-panel" hidden>
       <div class="upgrade-card">
-        <div class="section-heading"><h2>柜台升级</h2><span id="counter-level" class="level-badge"></span></div>
-        <div class="detail-grid upgrade-stats"><span>每杯售价<strong id="counter-price"></strong><small id="counter-next-price"></small></span><span>出杯时间<strong id="counter-seconds"></strong><small id="counter-next-seconds"></small></span></div>
-        <p id="counter-preview" class="upgrade-preview"></p>
+        <div class="section-heading"><h2 id="counter-coffee"></h2><span id="counter-level" class="level-badge"></span></div>
+        <div class="detail-grid upgrade-stats"><span>每杯售价<strong id="counter-price"></strong><small id="counter-next-price"></small></span><span>制作时长<strong id="counter-seconds"></strong><small id="counter-next-seconds"></small></span></div>
         <button id="counter-upgrade" class="primary-button"></button><p id="counter-funds" class="action-note"></p>
       </div>
-      <details class="quiet-details"><summary>经营小贴士</summary><p>换配方从下一杯开始生效，正在制作的咖啡不受影响。</p><p id="counter-payback"></p></details>
     </div>
-    <div id="coffee-panel" class="operation-panel" hidden><div class="coffee-medallion" id="coffee-symbol" aria-hidden="true">☕</div><p id="coffee-detail"></p><p class="detail-note">选择柜台，下一杯开始制作。</p><div class="assign-buttons"><button data-assign="counter-a">供给柜台 A</button><button data-assign="counter-b">供给柜台 B</button></div></div>
+    <div id="coffee-panel" class="operation-panel" hidden>
+      <div class="coffee-medallion" id="coffee-symbol" aria-hidden="true">☕</div>
+      <div class="upgrade-card">
+        <div class="section-heading"><h2>咖啡升级</h2><span id="coffee-level" class="level-badge"></span></div>
+        <div class="detail-grid upgrade-stats"><span>基础杯价<strong id="coffee-price"></strong><small id="coffee-next-price"></small></span><span>制作时长<strong id="coffee-seconds"></strong><small id="coffee-next-seconds"></small></span></div>
+        <button id="coffee-upgrade" class="primary-button"></button><p id="coffee-funds" class="action-note"></p>
+      </div>
+    </div>
     <div id="vault-panel" class="operation-panel" hidden>
       <div class="vault-total"><span>可用金币</span><strong id="vault-total"></strong><small id="served"></small></div>
       <div class="upgrade-card">
@@ -59,7 +67,7 @@ root.innerHTML = `
       <section class="settings-section"><div class="section-heading"><h2 id="render-mode-label">画面</h2><span class="section-kicker">选你喜欢的节奏</span></div><div class="render-mode-picker" role="group" aria-labelledby="render-mode-label" aria-describedby="render-mode-note"><button data-render-mode="smooth">清晰流畅<small>跟随屏幕刷新</small></button><button data-render-mode="clear-60">清晰 60 帧<small>同等清晰度</small></button><button data-render-mode="balanced">平衡<small>适中清晰度 · 最高 60 帧</small></button><button data-render-mode="low-power">省电<small>较低清晰度 · 最高 30 帧</small></button></div><p class="detail-note" id="render-mode-note"></p></section>
       <details id="save-recovery" class="quiet-details"><summary>备份与恢复</summary><p>自动保存仅在本浏览器。换设备请使用“小店存档”；这里的恢复副本不一定能直接导入。</p><div class="settings-grid"><button id="export">导出备份</button><button id="export-current" hidden>导出当前副本</button><button id="reload" hidden>读取最新档</button><button id="new-shop" hidden>备份并开始新店</button></div></details>
       <details class="quiet-details"><summary>逛逛小店</summary><div class="jump-grid"><button data-focus="counter-a-recipe">柜台 A</button><button data-focus="counter-b-recipe">柜台 B</button><button data-focus="menu-espresso">咖啡墙</button><button data-focus="vault">金库</button><button data-focus="invite">入口</button></div></details>
-      <details class="quiet-details"><summary>怎么玩</summary><p>客人自动进店买咖啡。升级柜台，让出杯更快、更值钱；升级经理，让金币更快到账。</p><p>点柜台配方牌换咖啡，入口可招呼客人。离线以 80% 经营速度持续营业，无时长上限。</p></details>
+      <details class="quiet-details"><summary>怎么玩</summary><p>客人自动进店买咖啡。升级咖啡和柜台，让出杯更快、更值钱；升级经理，让金币更快到账。</p><p>点柜台配方牌换咖啡，入口可招呼客人。离线以 80% 经营速度持续营业，无时长上限。</p></details>
     </div>
     <div id="files-panel" class="operation-panel" hidden>
       <section class="file-card export-card"><div class="section-heading"><h2><span class="step-badge" aria-hidden="true">↑</span>带走这间小店</h2><span class="section-kicker">导出</span></div><p class="detail-note">生成文件，把此刻的进度装进口袋。</p><button id="file-prepare" class="primary-button">生成存档</button><div id="file-output" hidden><p id="file-export-summary" class="file-summary"></p><div class="settings-grid"><button id="file-download" disabled>下载文件</button><button id="file-share" disabled>分享文件</button></div></div></section>
@@ -153,7 +161,7 @@ else if (!conflictBlocked && engine.state.paused) engine.togglePause();
 $("#reload").hidden = !saveBlocked;
 $("#new-shop").hidden = !loaded.protectedRaw && loaded.status !== "missing";
 let selected: CounterId = "counter-a";
-let panel: "counter" | "coffee" | "vault" | "settings" | "files" | "offline" | null =
+let panel: "recipe" | "counter" | "coffee" | "vault" | "settings" | "files" | "offline" | null =
     null,
   viewedRecipe: RecipeId = "espresso";
 let scene: CoffeeScene | null = null;
@@ -164,7 +172,7 @@ type OfflineRetry = { kind: "load" } | { kind: "hidden"; state: SliceState; hidd
 let offlineJob: { pending: OfflineSettlement; controller: AbortController; started: number; lastObserved: number } | null = null;
 let offlineRetry: OfflineRetry | null = null;
 let resumeOfflineAfterHide = false;
-let offlineReturnPanel: "counter" | "coffee" | "vault" | "settings" | "files" | null = null;
+let offlineReturnPanel: "recipe" | "counter" | "coffee" | "vault" | "settings" | "files" | null = null;
 // Only a completed visible computation proves a long unrendered interval was
 // foreground work. Other long clock gaps need explicit recovery, not guessing.
 let verifiedForegroundSeconds = 0;
@@ -260,8 +268,8 @@ function showPanel(
 function sceneAction(action: CoffeeSceneAction) {
   if (stopped || dialog.open || offlineJob || fileReview) return;
   if (action.type === "invite") invite();
-  else if (action.type === "counter" || action.type === "recipe")
-    showPanel("counter", action.id);
+  else if (action.type === "counter") showPanel("counter", action.id);
+  else if (action.type === "recipe") showPanel("recipe", action.id);
   else if (action.type === "menu")
     showPanel("coffee", undefined, action.recipe);
   else if (action.type === "vault") showPanel("vault");
@@ -345,15 +353,9 @@ on(root, "click", (event) => {
     catch { toast("本次画面设置已生效，但浏览器未允许保存偏好"); }
     updateRenderModeUI();
     updateUI();
-  } else if (button.dataset.selectRecipe)
+  } else if (button.dataset.selectRecipe && panel === "recipe" && dialog.open)
     changeRecipe(selected, button.dataset.selectRecipe as RecipeId);
-  else if (button.dataset.assign) {
-    const id = button.dataset.assign as CounterId;
-    changeRecipe(id, viewedRecipe);
-    closePanel();
-    scene?.focusAnchor(`${id}-recipe`);
-    scene?.selectedCounter(id);
-  } else if (button.dataset.focus) {
+  else if (button.dataset.focus) {
     closePanel();
     scene?.focusAnchor(button.dataset.focus as CoffeeSceneAnchor);
   }
@@ -417,7 +419,21 @@ on(dialog, "click", (event) => {
       closePanel();
   }
 });
-on($("#counter-upgrade"), "click", () => upgrade(selected));
+on($("#counter-upgrade"), "click", () => {
+  if (panel === "counter" && dialog.open) upgrade(selected);
+});
+on($("#coffee-upgrade"), "click", () => {
+  if (panel !== "coffee" || !dialog.open || fileReview || !settleVisibleTail()) return;
+  if (conflictBlocked) {
+    toast("先读取最新存档，再购买升级");
+    return;
+  }
+  if (engine.upgradeCoffee(viewedRecipe)) {
+    toast(`${recipeById[viewedRecipe].name}已升级`);
+    save();
+  }
+  updateUI();
+});
 on($("#manager-upgrade"), "click", () => {
   if (fileReview || !settleVisibleTail()) return;
   if (conflictBlocked) {
@@ -437,13 +453,16 @@ on($("#manager-upgrade"), "click", () => {
 });
 on($("#save"), "click", () => save(true));
 function fileMessage(message: string) { $("#file-status").textContent = message; }
+function coffeeLevelsSummary(state: SliceState): string {
+  return `浓缩 Lv. ${state.coffeeLevels?.espresso ?? 1} · 拿铁 Lv. ${state.coffeeLevels?.latte ?? 1}`;
+}
 function summaryDetails(state: SliceState, savedAt?: number): string {
   const o = overviewOf(state);
-  return `${savedAt === undefined ? "当前未存盘进度" : `时间 ${new Date(savedAt).toLocaleString()}`}\n金库 ${money(o.wallet)} · 营业额 ${money(o.totalEarned)} · 已售 ${o.totalServed} 杯\n柜台 A/B ${o.counterLevels.join(" / ")} 级 · 经理 ${o.managerLevel} 级\n待收 ${money(o.pendingCash)} · 运送 ${money(o.carrying)} · 经营 ${duration(o.elapsed)}`;
+  return `${savedAt === undefined ? "当前未存盘进度" : `时间 ${new Date(savedAt).toLocaleString()}`}\n金库 ${money(o.wallet)} · 营业额 ${money(o.totalEarned)} · 已售 ${o.totalServed} 杯\n柜台 A/B ${o.counterLevels.join(" / ")} 级 · 经理 ${o.managerLevel} 级\n${coffeeLevelsSummary(state)}\n待收 ${money(o.pendingCash)} · 运送 ${money(o.carrying)} · 经营 ${duration(o.elapsed)}`;
 }
 function summary(state: SliceState, savedAt?: number): string {
   const o = overviewOf(state);
-  return `金库 ${money(o.wallet)}\n已售 ${o.totalServed} 杯\n柜台 ${o.counterLevels.join(" / ")} 级 · 经理 ${o.managerLevel} 级${savedAt === undefined ? "" : `\n${new Date(savedAt).toLocaleString()}`}`;
+  return `金库 ${money(o.wallet)}\n已售 ${o.totalServed} 杯\n柜台 ${o.counterLevels.join(" / ")} 级 · 经理 ${o.managerLevel} 级\n${coffeeLevelsSummary(state)}${savedAt === undefined ? "" : `\n${new Date(savedAt).toLocaleString()}`}`;
 }
 function updateFileControls() {
   const review = fileReview !== null;
@@ -547,7 +566,7 @@ on($("#file-prepare"), "click", () => {
   if (!written?.ok || saveBlocked || !durable || JSON.stringify(durable.state) !== JSON.stringify(engine.snapshot()) || !durable.saveId || !durable.revision) { fileMessage("当前进度尚未安全保存。请重试保存，或返回设置导出当前恢复副本。"); return; }
   const generation = ++fileGeneration;
   fileBusy = true; preparedFile = null; updateFileControls();
-  void createPortableSave({ gameSchemaVersion: 1, economyVersion: 1, offlinePolicyVersion: 3, saveId: durable.saveId, revision: durable.revision, savedAt: durable.savedAt, exportedAt: Date.now(), overview: overviewOf(durable.state), state: durable.state }).then(file => {
+  void createPortableSave({ gameSchemaVersion: 1, economyVersion: durable.state.economyVersion, offlinePolicyVersion: 3, saveId: durable.saveId, revision: durable.revision, savedAt: durable.savedAt, exportedAt: Date.now(), overview: overviewOf(durable.state), state: durable.state }).then(file => {
     if (generation !== fileGeneration || stopped || document.hidden || panel !== "files" || !dialog.open) return;
     preparedFile = file; fileBusy = false;
     $("#file-export-summary").textContent = summary(file.payload.state, file.payload.savedAt);
@@ -576,7 +595,7 @@ on($("#backup-live"), "click", () => {
   if (!backup?.liveState || fileBusy || fileReview) { fileMessage("没有可读取的导入前有效进度；请导出原始档。"); return; }
   const generation = ++fileGeneration;
   fileBusy = true; updateFileControls();
-  void createPortableSave({ gameSchemaVersion: 1, economyVersion: 1, offlinePolicyVersion: 3, saveId: crypto.randomUUID(), revision: 1, savedAt: backup.createdAt, exportedAt: Date.now(), overview: overviewOf(backup.liveState), state: backup.liveState }).then(file => {
+  void createPortableSave({ gameSchemaVersion: 1, economyVersion: backup.liveState.economyVersion, offlinePolicyVersion: 3, saveId: crypto.randomUUID(), revision: 1, savedAt: backup.createdAt, exportedAt: Date.now(), overview: overviewOf(backup.liveState), state: backup.liveState }).then(file => {
     if (generation !== fileGeneration || stopped || document.hidden || panel !== "files") return;
     preparedFile = file; fileBusy = false;
     $("#file-export-summary").textContent = `导入前进度\n${summary(file.payload.state, file.payload.savedAt)}`;
@@ -861,60 +880,47 @@ function updateUI() {
   const s = engine.state;
   const walletText = money(s.wallet);
   if ($("#wallet").textContent !== walletText) $("#wallet").textContent = walletText;
-  if (panel === "counter") {
-    const c = s.counters.find((c) => c.id === selected)!,
-      q = engine.quote(selected);
-    $("#dialog-eyebrow").textContent =
-      `COUNTER ${selected === "counter-a" ? "A" : "B"} · Lv. ${c.level}`;
-    $("#dialog-title").textContent =
-      selected === "counter-a" ? "街角快饮" : "柔奶时光";
-    $("#dialog-description").textContent = c.brew
-      ? "下一杯，换个好味道"
-      : "选好咖啡，让生意更红火";
-    $("#counter-affinity").textContent =
-      selected === "counter-a"
-        ? "拿手好戏 · 浓缩快 25%"
-        : "拿手好戏 · 拿铁售价 +12%";
+  if (panel === "recipe") {
+    const c = s.counters.find((c) => c.id === selected)!;
+    $("#dialog-eyebrow").textContent = `柜台 ${selected === "counter-a" ? "A" : "B"} · Lv. ${c.level}`;
+    $("#dialog-title").textContent = "选择咖啡";
+    $("#dialog-description").textContent = "";
+    $("#counter-affinity").textContent = selected === "counter-a" ? "浓缩时长 −25%" : "拿铁杯价 +12%";
+    root.querySelectorAll<HTMLButtonElement>("[data-select-recipe]").forEach((b) => {
+      const recipe = b.dataset.selectRecipe as RecipeId;
+      b.classList.toggle("active", recipe === c.recipe);
+      b.setAttribute("aria-pressed", String(recipe === c.recipe));
+      b.disabled = conflictBlocked;
+      $(`#recipe-${recipe}-stats`).textContent = `${money(counterPrice(recipe, c.level, c.id, s.coffeeLevels[recipe]))} · ${counterBrewSeconds(recipe, c.level, c.id, s.coffeeLevels[recipe]).toFixed(2)} 秒`;
+    });
+  } else if (panel === "counter") {
+    const c = s.counters.find((c) => c.id === selected)!, q = engine.quote(selected);
+    $("#dialog-eyebrow").textContent = `柜台 ${selected === "counter-a" ? "A" : "B"}`;
+    $("#dialog-title").textContent = "升级柜台";
+    $("#dialog-description").textContent = "";
+    $("#counter-coffee").textContent = recipeById[c.recipe].name;
     $("#counter-level").textContent = `Lv. ${c.level}${q.capped ? " · MAX" : ` → ${c.level + 1}`}`;
     $("#counter-next-price").textContent = q.capped ? "已达上限" : `→ ${money(q.afterPrice)}`;
-    $("#counter-next-seconds").textContent = q.capped ? "已达上限" : `→ ${q.afterSeconds.toFixed(1)} 秒`;
+    $("#counter-next-seconds").textContent = q.capped ? "已达上限" : `→ ${q.afterSeconds.toFixed(2)} 秒`;
     $("#counter-funds").textContent = conflictBlocked ? "请先恢复存档" : q.capped ? "" : s.wallet < q.cost ? `还差 ${money(q.cost - s.wallet)}` : "";
-    $("#counter-price").textContent = `${money(q.beforePrice)}`;
-    $("#counter-seconds").textContent = `${q.beforeSeconds.toFixed(1)} 秒`;
-    $("#counter-preview").textContent = q.capped
-      ? "柜台已满级"
-      : "更值钱，也更快";
-    $("#counter-payback").textContent = q.capped
-      ? "更多经营内容还在路上"
-      : `满负荷增量回本约 ${Math.ceil(q.paybackSeconds)} 秒`;
-    $("#counter-upgrade").textContent = q.capped
-      ? "已满级"
-      : `升级柜台 · ${money(q.cost)}`;
-    $("#counter-upgrade").toggleAttribute(
-      "disabled",
-      q.capped || s.wallet < q.cost || conflictBlocked,
-    );
-    root
-      .querySelectorAll<HTMLButtonElement>("[data-select-recipe]")
-      .forEach((b) => {
-        b.classList.toggle("active", b.dataset.selectRecipe === c.recipe);
-        b.setAttribute(
-          "aria-pressed",
-          String(b.dataset.selectRecipe === c.recipe),
-        );
-        b.disabled = conflictBlocked;
-      });
+    $("#counter-price").textContent = money(q.beforePrice);
+    $("#counter-seconds").textContent = `${q.beforeSeconds.toFixed(2)} 秒`;
+    $("#counter-upgrade").textContent = q.capped ? "已满级" : `升级柜台 · ${money(q.cost)}`;
+    $("#counter-upgrade").toggleAttribute("disabled", q.capped || s.wallet < q.cost || conflictBlocked);
   } else if (panel === "coffee") {
-    const r = recipeById[viewedRecipe];
-    $("#dialog-eyebrow").textContent = "COFFEE WALL · 已解锁";
+    const r = recipeById[viewedRecipe], q = engine.coffeeQuote(viewedRecipe);
+    $("#dialog-eyebrow").textContent = "咖啡";
     $("#dialog-title").textContent = r.name;
-    $("#dialog-description").textContent = "墙上的咖啡菜单";
-    $("#coffee-detail").textContent =
-      `${r.description} 基础杯价 ${money(r.price)}，制作 ${r.brewSeconds.toFixed(1)} 秒。`;
+    $("#dialog-description").textContent = "";
+    $("#coffee-level").textContent = `Lv. ${q.level}${q.capped ? " · MAX" : ` → ${q.nextLevel}`}`;
+    $("#coffee-price").textContent = money(q.beforePrice);
+    $("#coffee-seconds").textContent = `${q.beforeSeconds.toFixed(2)} 秒`;
+    $("#coffee-next-price").textContent = q.capped ? "已达上限" : `→ ${money(q.afterPrice)}`;
+    $("#coffee-next-seconds").textContent = q.capped ? "已达上限" : `→ ${q.afterSeconds.toFixed(2)} 秒`;
+    $("#coffee-upgrade").textContent = q.capped ? "已满级" : `升级咖啡 · ${money(q.cost)}`;
+    $("#coffee-upgrade").toggleAttribute("disabled", q.capped || s.wallet < q.cost || conflictBlocked);
+    $("#coffee-funds").textContent = conflictBlocked ? "请先恢复存档" : q.capped ? "" : s.wallet < q.cost ? `还差 ${money(q.cost - s.wallet)}` : "";
     $("#coffee-symbol").style.background = r.color;
-    root
-      .querySelectorAll<HTMLButtonElement>("[data-assign]")
-      .forEach((b) => (b.disabled = conflictBlocked));
   } else if (panel === "vault") {
     $("#dialog-eyebrow").textContent = "WALL VAULT";
     $("#dialog-title").textContent = "小店金库";

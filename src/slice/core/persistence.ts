@@ -1,4 +1,4 @@
-import { createEngine, createInitialState, CUSTOMER_ROUTE_VERSION, INITIAL_WALLET, INVITE_COOLDOWN_SECONDS, MANAGER_ROUTE_VERSION, MAX_ELAPSED_SECONDS, MAX_LEVEL, migrateCustomerRoutes, migrateManagerRoute, QUEUE_CAPACITY, STEP_SECONDS, WORLD } from './engine';
+import { createEngine, createInitialState, CUSTOMER_ROUTE_VERSION, ECONOMY_VERSION, INITIAL_WALLET, INVITE_COOLDOWN_SECONDS, MANAGER_ROUTE_VERSION, MAX_ELAPSED_SECONDS, MAX_LEVEL, migrateCoffeeEconomy, migrateCustomerRoutes, migrateManagerRoute, QUEUE_CAPACITY, STEP_SECONDS, WORLD } from './engine';
 import type { OfflineJob, OfflinePolicyVersion, OfflineResult, SliceEngine, SliceState } from './types';
 export type { OfflineResult } from './types';
 
@@ -25,7 +25,7 @@ function tag(): string { return globalThis.crypto?.randomUUID?.() ?? `local-${Da
 /** Fail closed: do not silently repair corrupted assets, enums or relationships. */
 export function validateState(value: unknown): { ok: true; state: SliceState } | { ok: false; message: string } {
   const fail = (message: string): { ok: false; message: string } => ({ ok: false, message });
-  if (!object(value) || value.schemaVersion !== 1 || value.economyVersion !== 1) return fail('存档版本不受支持。');
+  if (!object(value) || value.schemaVersion !== 1 || value.economyVersion !== 1 && value.economyVersion !== ECONOMY_VERSION) return fail('存档版本不受支持。');
   if (value.managerRouteVersion !== undefined && value.managerRouteVersion !== 1 && value.managerRouteVersion !== MANAGER_ROUTE_VERSION) return fail('经理路线版本不受支持。');
   if (value.customerRouteVersion !== undefined && value.customerRouteVersion !== 1 && value.customerRouteVersion !== 2 && value.customerRouteVersion !== CUSTOMER_ROUTE_VERSION) return fail('顾客路线版本不受支持。');
   const legacyCustomerRoute = value.customerRouteVersion === undefined || value.customerRouteVersion === 1;
@@ -110,6 +110,7 @@ export function validateState(value: unknown): { ok: true; state: SliceState } |
   if (brewed !== (value.totalServed as number) + receiving) return fail('出杯计数不守恒。');
   if ((value.wallet as number) + (value.spend as number) + manager.carrying + pending !== INITIAL_WALLET + (value.totalEarned as number)) return fail('资金账本不守恒。');
   const state = clone(value) as unknown as SliceState;
+  try { migrateCoffeeEconomy(state); } catch { return fail('咖啡等级或经济版本无效。'); }
   state.stepCarry ??= 0; state.eventSequence ??= 0; state.offlineClaimIds ??= state.lastOfflineClaimId ? [state.lastOfflineClaimId] : [];
   migrateManagerRoute(state);
   migrateCustomerRoutes(state);
@@ -123,7 +124,7 @@ export function validateState(value: unknown): { ok: true; state: SliceState } |
 function decode(raw: string): { ok: true; envelope: Envelope } | { ok: false; status: 'corrupt' | 'future'; message: string } {
   let value: unknown;
   try { value = JSON.parse(raw); } catch { return { ok: false, status: 'corrupt', message: '存档无法读取，原始内容已保留。请先备份或明确重置。' }; }
-  if (object(value) && (number(value.offlinePolicyVersion, OFFLINE_POLICY_VERSION + 1) || number(value.schemaVersion, 2) || object(value.state) && (number(value.state.schemaVersion, 2) || number(value.state.economyVersion, 2) || number(value.state.managerRouteVersion, MANAGER_ROUTE_VERSION + 1) || number(value.state.customerRouteVersion, CUSTOMER_ROUTE_VERSION + 1)))) return { ok: false, status: 'future', message: '这是较新版本的存档，当前版本不会覆盖它。请使用兼容的新版本。' };
+  if (object(value) && (number(value.offlinePolicyVersion, OFFLINE_POLICY_VERSION + 1) || number(value.schemaVersion, 2) || object(value.state) && (number(value.state.schemaVersion, 2) || number(value.state.economyVersion, ECONOMY_VERSION + 1) || number(value.state.managerRouteVersion, MANAGER_ROUTE_VERSION + 1) || number(value.state.customerRouteVersion, CUSTOMER_ROUTE_VERSION + 1)))) return { ok: false, status: 'future', message: '这是较新版本的存档，当前版本不会覆盖它。请使用兼容的新版本。' };
   if (!object(value) || value.schemaVersion !== 1 || value.offlinePolicyVersion !== undefined && value.offlinePolicyVersion !== 1 && value.offlinePolicyVersion !== 2 && value.offlinePolicyVersion !== OFFLINE_POLICY_VERSION || !number(value.savedAt, 0, 8.64e15) || typeof value.recordChangeTag !== 'string' || !value.recordChangeTag || value.recordChangeTag.length > 256) return { ok: false, status: 'corrupt', message: '存档格式或结算时间无效，原始内容已保留。' };
   if ((value.saveId !== undefined || value.revision !== undefined) && (typeof value.saveId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(value.saveId) || !integer(value.revision, 1, Number.MAX_SAFE_INTEGER - 1))) return { ok: false, status: 'corrupt', message: '存档身份或修订号无效，原始内容已保留。' };
   if (value.importedFileHashes !== undefined && (!Array.isArray(value.importedFileHashes) || value.importedFileHashes.length > 32 || value.importedFileHashes.some(h => typeof h !== 'string' || !/^[a-f0-9]{64}$/.test(h)))) return { ok: false, status: 'corrupt', message: '导入记录无效，原始内容已保留。' };
@@ -308,8 +309,12 @@ export class LocalSaveRepository {
       const text = this.storage.getItem(key);
       if (!text) return null;
       const value: unknown = JSON.parse(text);
-      if (!object(value) || value.format !== 'mellow-bean-import-backup' || value.version !== 1 || !number(value.createdAt, 0, 8.64e15) || !(value.originalRaw === null || typeof value.originalRaw === 'string') || typeof value.liveSaveId !== 'string' || !integer(value.liveRevision, 1, Number.MAX_SAFE_INTEGER - 1) || !(value.liveState === null || validateState(value.liveState).ok)) return null;
-      return value as unknown as ImportBackup;
+      if (!object(value) || value.format !== 'mellow-bean-import-backup' || value.version !== 1 || !number(value.createdAt, 0, 8.64e15) || !(value.originalRaw === null || typeof value.originalRaw === 'string') || typeof value.liveSaveId !== 'string' || !integer(value.liveRevision, 1, Number.MAX_SAFE_INTEGER - 1)) return null;
+      const live = value.liveState === null ? null : validateState(value.liveState);
+      if (live && !live.ok) return null;
+      // Recovery export consumes current normalized state, but the original
+      // protected bytes and the backup record itself remain exactly untouched.
+      return { ...value, liveState: live?.ok ? live.state : null } as unknown as ImportBackup;
     } catch { return null; }
   }
   /** Best-effort localStorage compare, NOT an atomic cross-tab transaction. */

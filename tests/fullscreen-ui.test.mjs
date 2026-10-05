@@ -17,7 +17,7 @@ const { FrameInterpolator } = await import('../src/slice/render/FrameInterpolato
 const { RouteDiagnostics, isRouteQA } = await import('../src/slice/qa/RouteDiagnostics.ts');
 const { RouteQAPanel } = await import('../src/slice/qa/RouteQAPanel.ts');
 const { PerformanceQAPanel } = await import('../src/slice/qa/PerformanceQAPanel.ts');
-const { createEngine, createInitialState, recipeById, managerSpeed } = await import('../src/slice/core/engine.ts');
+const { createEngine, createInitialState, recipeById, counterPrice, counterBrewSeconds, coffeePrice, coffeeBrewSeconds, COFFEE_MAX_LEVEL, managerSpeed } = await import('../src/slice/core/engine.ts');
 const { LocalSaveRepository, SAVE_KEY, createMemoryStorage } = await import('../src/slice/core/persistence.ts');
 const { createPortableSave, parsePortableSave, overviewOf, portableFilename, MAX_PORTABLE_BYTES } = await import('../src/slice/core/portableSave.ts');
 
@@ -197,7 +197,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   }
   class FakeDate extends Date { constructor(...args) { super(...(args.length ? args : [clock.now])); } static now() { return clock.now; } }
   const source = main.replace(/^import\s[\s\S]*?;\n/gm, '').replace(/if \(import\.meta\.hot\) import\.meta\.hot\.dispose\(\(\) => cleanup\(\)\);/, 'captureCleanup(() => cleanup());');
-  const context = { document, window, location: { search: query }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, HTMLInputElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, RouteDiagnostics, isRouteQA, RouteQAPanel, PerformanceQAPanel, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, createEngine, recipeById, managerSpeed, LocalSaveRepository, SAVE_KEY, createPortableSave: trackFileTask(portableOverrides.createPortableSave ?? createPortableSave), parsePortableSave: trackFileTask(portableOverrides.parsePortableSave ?? parsePortableSave), overviewOf, portableFilename, MAX_PORTABLE_BYTES, crypto: globalThis.crypto, TextEncoder, File, navigator, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL: url => revokedUrls.push(url) }, Blob, console, setTimeout: (callback, delay = 0) => { const id = ++nextId; timers.set(id, callback); timerDelays.set(id, delay); return id; }, clearTimeout: id => { timers.delete(id); timerDelays.delete(id); }, requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
+  const context = { document, window, location: { search: query }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, HTMLInputElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, RouteDiagnostics, isRouteQA, RouteQAPanel, PerformanceQAPanel, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, createEngine, recipeById, counterPrice, counterBrewSeconds, coffeePrice, coffeeBrewSeconds, COFFEE_MAX_LEVEL, managerSpeed, LocalSaveRepository, SAVE_KEY, createPortableSave: trackFileTask(portableOverrides.createPortableSave ?? createPortableSave), parsePortableSave: trackFileTask(portableOverrides.parsePortableSave ?? parsePortableSave), overviewOf, portableFilename, MAX_PORTABLE_BYTES, crypto: globalThis.crypto, TextEncoder, File, navigator, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL: url => revokedUrls.push(url) }, Blob, console, setTimeout: (callback, delay = 0) => { const id = ++nextId; timers.set(id, callback); timerDelays.set(id, delay); return id; }, clearTimeout: id => { timers.delete(id); timerDelays.delete(id); }, requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
   runInNewContext(stripTypeScriptTypes(source), context, { timeout: 1500 });
   const debug = window.__coffeeSliceDebug;
   const state = () => structuredClone(debug.readState());
@@ -295,11 +295,13 @@ test('TC-3D-008 REQ-3D-013 all rendered amounts use ¥ with two fractional digit
     wallet.emit('pointerdown'); f.root.emit('click', { target: wallet });
     assert.deepEqual(f.state(), beforeWallet);
     assert.equal(f.element('#operation-dialog').open, false, 'amount display has no action route');
-    for (const action of [{ type: 'counter', id: 'counter-a' }, { type: 'menu', recipe: 'latte' }, { type: 'vault' }]) {
+    for (const [action, amountIds] of [[{ type: 'counter', id: 'counter-a' }, ['counter-price', 'counter-next-price', 'counter-upgrade']], [{ type: 'menu', recipe: 'latte' }, ['coffee-price', 'coffee-next-price', 'coffee-upgrade']], [{ type: 'vault' }, ['vault-total', 'pending', 'carrying', 'manager-upgrade']]]) {
       f.action(action);
-      const shown = f.nodes.filter(node => !node.hidden && /\d+\.\d{2}/.test(node.textContent)).map(node => node.textContent);
-      assert.ok(shown.length);
-      for (const text of shown) { assert.doesNotMatch(text, /¤|\d\.\d{2}\s*币/); assert.match(text, /¥\s?\d+\.\d{2}/, text); }
+      for (const id of amountIds) {
+        const text = f.element(`#${id}`).textContent;
+        assert.doesNotMatch(text, /¤|\d\.\d{2}\s*币/);
+        assert.match(text, /¥\s?\d+\.\d{2}(?!\d)/, `${id}: ${text}`);
+      }
       f.click('#dialog-close');
     }
   } finally { f.dispose(); }
@@ -308,7 +310,7 @@ test('TC-3D-008 REQ-3D-013 all rendered amounts use ¥ with two fractional digit
 test('TC-3D-009 REQ-3D-016 scene actions and HUD settings open the correct details without hidden DOM anchors (app harness)', () => {
   const f = fixture();
   try {
-    for (const [action, expected] of [[{ type: 'counter', id: 'counter-b' }, 'counter-panel'], [{ type: 'recipe', id: 'counter-a' }, 'counter-panel'], [{ type: 'menu', recipe: 'latte' }, 'coffee-panel'], [{ type: 'vault' }, 'vault-panel']]) {
+    for (const [action, expected] of [[{ type: 'counter', id: 'counter-b' }, 'counter-panel'], [{ type: 'recipe', id: 'counter-a' }, 'recipe-panel'], [{ type: 'menu', recipe: 'latte' }, 'coffee-panel'], [{ type: 'vault' }, 'vault-panel']]) {
       const before = f.state();
       f.action(action);
       assert.equal(f.element('#operation-dialog').open, true);
@@ -344,7 +346,7 @@ test('TC-3D-009 REQ-3D-016 only HUD settings remains outside the closed native o
   assert.ok(modalStart >= 0);
   assert.doesNotMatch(openingTags(modal, 'dialog')[0], /\bopen(?:\s|=|>)/);
   const panels = openingTags(modal, 'div').filter(tag => tag.includes('class="operation-panel"'));
-  assert.equal(panels.length, 6);
+  assert.equal(panels.length, 7);
   for (const panel of panels) assert.match(panel, /\bhidden(?:\s|>)/);
   assert.doesNotMatch(outsideModal, /class="operation-panel"|id="counter-panel"|id="settings-panel"/);
   assert.deepEqual(declarations('[hidden]', 'display'), ['none']);
@@ -423,7 +425,7 @@ test('TC-3D-008 REQ-3D-014 actual canvas keys select, pan and activate scene obj
     assert.equal(f.renderer.activationCalls, 0, 'held Enter cannot repeat purchase/open action');
     canvas.emit('keydown', { key: 'Enter', repeat: false });
     assert.equal(f.renderer.activationCalls, 1);
-    assert.equal(f.element('#counter-panel').hidden, false);
+    assert.equal(f.element('#recipe-panel').hidden, false);
     canvas.emit('keydown', { key: 'ArrowRight' });
     canvas.emit('keydown', { key: ' ', repeat: false });
     assert.equal(f.renderer.getFocus(), 'counter-a-recipe', 'inert modal background cannot change selected scene object');
@@ -443,10 +445,12 @@ test('TC-3D-008 REQ-3D-014 actual canvas keys select, pan and activate scene obj
 test('TC-3D-008 REQ-3D-015 dialog recipe/upgrade/navigation routes preserve core rules and visible close focus (app harness)', () => {
   const f = fixture();
   try {
-    f.action({ type: 'counter', id: 'counter-a' });
+    f.action({ type: 'recipe', id: 'counter-a' });
     const latte = f.nodes.find(node => node.dataset.selectRecipe === 'latte');
     f.root.emit('click', { target: latte });
     assert.equal(f.state().counters[0].recipe, 'latte');
+    f.click('#dialog-close');
+    f.action({ type: 'counter', id: 'counter-a' });
     const beforeUpgrade = f.state();
     f.click('#counter-upgrade');
     assert.equal(f.state().counters[0].level, beforeUpgrade.counters[0].level + 1);
@@ -458,13 +462,13 @@ test('TC-3D-008 REQ-3D-015 dialog recipe/upgrade/navigation routes preserve core
     assert.match(f.element('#manager-rank').textContent, /^Lv\. 1$/);
     assert.equal(f.document.activeElement, f.element('#dialog-close'));
     f.click('#dialog-close');
+    const beforeCoffee = f.state();
     f.action({ type: 'menu', recipe: 'espresso' });
-    const assign = f.nodes.find(node => node.dataset.assign === 'counter-b');
-    f.root.emit('click', { target: assign });
-    assert.equal(f.state().counters[1].recipe, 'espresso');
+    assert.equal(f.element('#coffee-panel').hidden, false);
+    assert.deepEqual(f.state(), beforeCoffee, 'opening coffee details cannot assign it to a counter');
+    f.click('#dialog-close');
     assert.equal(f.element('#operation-dialog').open, false);
     assert.equal(f.document.activeElement, f.element('#coffee-canvas'));
-    assert.equal(f.renderer.focusCalls.at(-1), 'counter-b-recipe');
     f.click('#settings');
     const entryJump = f.nodes.find(node => node.dataset.focus === 'invite');
     f.root.emit('click', { target: entryJump });
@@ -536,12 +540,19 @@ test('TC-3D-008 REQ-3D-015 post-dialog navigation survives native asynchronous c
     assert.equal(f.element('#operation-dialog').open, false);
     f.flushCloseEvents();
     assert.equal(f.renderer.focusCalls.at(-1), 'vault', 'native close-event delay must not discard the pending scene navigation while input is suspended');
+    const before = f.state();
     f.action({ type: 'menu', recipe: 'espresso' });
-    const assign = f.nodes.find(node => node.dataset.assign === 'counter-b');
-    f.root.emit('click', { target: assign });
+    f.click('#dialog-close');
+    f.action({ type: 'recipe', id: 'counter-b' });
     f.flushCloseEvents();
-    assert.equal(f.state().counters[1].recipe, 'espresso');
-    assert.equal(f.renderer.focusCalls.at(-1), 'counter-b-recipe', 'assignment must reveal the destination physical counter after asynchronous dismissal');
+    assert.equal(f.element('#recipe-panel').hidden, false, 'stale coffee close cannot dismiss the newly opened recipe chooser');
+    assert.equal(f.renderer.interactionEnabled, false);
+    assert.deepEqual(f.state(), before, 'coffee dismissal and reopening recipe choice are read-only');
+    f.click('#dialog-close'); f.flushCloseEvents();
+    f.click('#settings');
+    const counterJump = f.nodes.find(node => node.dataset.focus === 'counter-b-recipe');
+    f.root.emit('click', { target: counterJump }); f.flushCloseEvents();
+    assert.equal(f.renderer.focusCalls.at(-1), 'counter-b-recipe', 'settings navigation still reveals the physical counter after asynchronous dismissal');
     assert.equal(f.document.activeElement, f.element('#coffee-canvas'));
   } finally { f.dispose(); }
 });
@@ -593,7 +604,7 @@ test('TC-3D-009 REQ-3D-016 physical invite remains cooldown/conflict guarded wit
 test('TC-3D-008 REQ-3D-015 modal controls maintain 44px targets, safe-area and dynamic viewport hooks (static contract)', () => {
   assert.match(index, /viewport-fit=cover/);
   for (const property of ['width', 'height']) for (const value of declarations('.dialog-close', property)) assert.ok(Number.parseFloat(value) >= 44, `.dialog-close ${property}: ${value}`);
-  for (const selector of ['.primary-button', '.secondary-button', '.assign-buttons button', '.settings-grid button', '.jump-grid button', '.recipe-picker button', '.quiet-details summary']) assert.ok(declarations(selector, 'min-height').some(value => Number.parseFloat(value) >= 44), selector);
+  for (const selector of ['.primary-button', '.secondary-button', '.settings-grid button', '.jump-grid button', '.recipe-picker button', '.quiet-details summary']) assert.ok(declarations(selector, 'min-height').some(value => Number.parseFloat(value) >= 44), selector);
   for (const [property, inset] of [['left', 'left'], ['top', 'top']]) assert.ok(declarations('.hud', property).every(value => value.includes(`safe-area-inset-${inset}`)));
   assert.ok(declarations('.operation-dialog', 'max-height').every(value => value.includes('dvh') && value.includes('safe-area-inset-bottom')));
   assert.match(main, /sizeObserver\?\.observe\(\$\("#coffee-canvas"\)\)/);
@@ -1807,7 +1818,7 @@ test('TC-3D-020 unexplained long foreground RAF gaps freeze without partial simu
 });
 
 test('TC-3D-020 save and every business action guard unclassified foreground time before the next RAF', () => {
-  for (const action of ['save', 'invite', 'recipe', 'counter', 'manager']) {
+  for (const action of ['save', 'invite', 'recipe', 'counter', 'coffee', 'manager']) {
     const initial = createEngine(); initial.advance(22);
     const f = fixture({ initial: initial.snapshot(), now: 500_000 });
     try {
@@ -1816,10 +1827,11 @@ test('TC-3D-020 save and every business action guard unclassified foreground tim
       if (action === 'save') f.click('#save');
       if (action === 'invite') f.action({ type: 'invite' });
       if (action === 'recipe') {
-        f.action({ type: 'counter', id: 'counter-a' });
+        f.action({ type: 'recipe', id: 'counter-a' });
         f.root.emit('click', { target: f.nodes.find(node => node.dataset.selectRecipe === 'latte') });
       }
       if (action === 'counter') { f.action({ type: 'counter', id: 'counter-a' }); f.click('#counter-upgrade'); }
+      if (action === 'coffee') { f.action({ type: 'menu', recipe: 'espresso' }); f.click('#coffee-upgrade'); }
       if (action === 'manager') { f.action({ type: 'vault' }); f.click('#manager-upgrade'); }
       assert.equal(f.state().paused, true, action);
       assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(source), `${action} cannot change business before an unclassified long gap`);
@@ -1829,7 +1841,7 @@ test('TC-3D-020 save and every business action guard unclassified foreground tim
 });
 
 test('TC-3D-020 verified 300-second foreground computation tail advances before purchases, recipe changes and invites', async () => {
-  for (const action of ['save', 'invite', 'recipe', 'counter', 'manager']) {
+  for (const action of ['save', 'invite', 'recipe', 'counter', 'coffee', 'manager']) {
     const initial = createEngine(); initial.advance(22);
     assert.ok(initial.state.counters.some(counter => counter.brew), 'fixture includes existing brew snapshots');
     const f = fixture({ initial: initial.snapshot(), now: 5_000_000, savedAtAgoSeconds: 3600 });
@@ -1844,10 +1856,11 @@ test('TC-3D-020 verified 300-second foreground computation tail advances before 
       if (action === 'invite') { expected.invite(); f.action({ type: 'invite' }); }
       if (action === 'recipe') {
         expected.setRecipe('counter-a', 'latte');
-        f.action({ type: 'counter', id: 'counter-a' });
+        f.action({ type: 'recipe', id: 'counter-a' });
         f.root.emit('click', { target: f.nodes.find(node => node.dataset.selectRecipe === 'latte') });
       }
       if (action === 'counter') { expected.upgrade('counter-a'); f.action({ type: 'counter', id: 'counter-a' }); f.click('#counter-upgrade'); }
+      if (action === 'coffee') { expected.upgradeCoffee('espresso'); f.action({ type: 'menu', recipe: 'espresso' }); f.click('#coffee-upgrade'); }
       if (action === 'manager') { expected.upgradeManager(); f.action({ type: 'vault' }); f.click('#manager-upgrade'); }
       assert.deepEqual(f.state(), expected.snapshot(), `${action} occurs strictly after the100% foreground tail, preserving existing brew snapshots`);
       f.click('#save');
@@ -1891,7 +1904,7 @@ function deferredFileOperation() {
 async function portableFixture({ seconds = 90, savedAt = 1000, exportedAt = 2000, saveId = 'portable-source', revision = 7, state, ...fields } = {}) {
   const engine = createEngine(); engine.advance(seconds);
   const snapshot = state ?? engine.snapshot();
-  return createPortableSave({ gameSchemaVersion: 1, economyVersion: 1, offlinePolicyVersion: 3, savedAt, exportedAt, saveId, revision, overview: overviewOf(snapshot), state: snapshot, ...fields });
+  return createPortableSave({ gameSchemaVersion: 1, economyVersion: snapshot.economyVersion, offlinePolicyVersion: 3, savedAt, exportedAt, saveId, revision, overview: overviewOf(snapshot), state: snapshot, ...fields });
 }
 function openFilePanel(f) {
   if (!f.element('#operation-dialog').open) f.click('#settings');
@@ -2376,7 +2389,7 @@ test('TC-3D-022 technical metadata and full ledger are closed disclosures while 
     assert.doesNotMatch(tag, /\s(?:open|aria-hidden)(?:[\s=>])/);
     assert.match(block, /^<details\b[^>]*>\s*<summary>[^<]+<\/summary>/, 'every disclosure has a native named summary');
   }
-  for (const id of ['file-current-details', 'file-incoming-details', 'counter-payback', 'pending', 'carrying']) {
+  for (const id of ['file-current-details', 'file-incoming-details', 'pending', 'carrying']) {
     const disclosure = detailsBlocks.find(block => block.includes(`id="${id}"`));
     assert.ok(disclosure, `${id} stays available inside a default-closed disclosure`);
     assert.doesNotMatch(withoutDetails(modal), new RegExp(`id="${id}"`));
@@ -2578,9 +2591,9 @@ test('TC-3D-022 counter upgrades show real cost and before/after benefits while 
       const before = f.state(), expected = createEngine(before), quote = expected.quote(id);
       assert.ok(quote.afterPrice > quote.beforePrice); assert.ok(quote.afterSeconds < quote.beforeSeconds);
       assert.equal(f.element('#counter-price').textContent, centsLabel(quote.beforePrice));
-      assert.equal(f.element('#counter-seconds').textContent, `${quote.beforeSeconds.toFixed(1)} 秒`);
+      assert.equal(f.element('#counter-seconds').textContent, `${quote.beforeSeconds.toFixed(2)} 秒`);
       assert.equal(f.element('#counter-next-price').textContent, `→ ${centsLabel(quote.afterPrice)}`);
-      assert.equal(f.element('#counter-next-seconds').textContent, `→ ${quote.afterSeconds.toFixed(1)} 秒`);
+      assert.equal(f.element('#counter-next-seconds').textContent, `→ ${quote.afterSeconds.toFixed(2)} 秒`);
       assert.equal(f.element('#counter-upgrade').textContent, `升级柜台 · ${centsLabel(quote.cost)}`);
       assert.equal(f.element('#counter-upgrade').disabled, false);
       assert.equal(f.element('#counter-funds').textContent, '');
@@ -2644,4 +2657,301 @@ test('TC-3D-022 manager upgrade shows efficiency, benefit and real cost without 
     g.click('#manager-upgrade'); g.element('#manager-upgrade').emit('click');
     assert.deepEqual(g.state(), before, 'max-level manager cannot charge money or upgrade again');
   } finally { g.dispose(); }
+});
+
+function panelMarkup(id, nextId) { return modal.slice(modal.indexOf(`id="${id}"`), modal.indexOf(`id="${nextId}"`)); }
+function fundedInitial(wallet) {
+  const state = createInitialState();
+  state.totalEarned = Math.max(0, wallet - state.wallet);
+  state.spend = Math.max(0, state.wallet - wallet);
+  state.wallet = wallet;
+  return state;
+}
+
+test('TC-3D-023 REQ-3D-033 recipe choice, counter upgrades and coffee upgrades have distinct controls (static contract)', () => {
+  const recipe = panelMarkup('recipe-panel', 'counter-panel');
+  const counter = panelMarkup('counter-panel', 'coffee-panel');
+  const coffee = panelMarkup('coffee-panel', 'vault-panel');
+  assert.equal(openingTags(recipe, 'button').length, 2);
+  assert.match(recipe, /data-select-recipe="espresso"/); assert.match(recipe, /data-select-recipe="latte"/);
+  assert.match(recipe, /下一杯生效/);
+  assert.doesNotMatch(recipe, /id="(?:counter|coffee)-upgrade"|data-assign/);
+  assert.equal(openingTags(counter, 'button').length, 1);
+  assert.match(counter, /id="counter-upgrade"/);
+  assert.doesNotMatch(counter, /data-select-recipe|data-assign|id="coffee-upgrade"/);
+  assert.equal(openingTags(coffee, 'button').length, 1);
+  for (const id of ['coffee-level', 'coffee-price', 'coffee-next-price', 'coffee-seconds', 'coffee-next-seconds', 'coffee-upgrade', 'coffee-funds']) assert.match(coffee, new RegExp(`id="${id}"`));
+  assert.doesNotMatch(coffee, /data-select-recipe|data-assign|id="counter-upgrade"|柜台\s*[AB]/);
+  assert.doesNotMatch(html, /data-assign|assign-buttons|counter-payback/);
+});
+
+test('TC-3D-023 REQ-3D-033 both counter entrances and both coffee menus open only their own read-only panel', () => {
+  const initial = fundedInitial(50000);
+  initial.counters[0].level = 4; initial.counters[1].level = 7;
+  initial.coffeeLevels = { espresso: 3, latte: 6 };
+  const f = fixture({ initial });
+  try {
+    for (const id of ['counter-a', 'counter-b']) {
+      for (const type of ['recipe', 'counter']) {
+        const before = f.state(), bytes = f.memory.getItem(SAVE_KEY);
+        f.action({ type, id });
+        assert.deepEqual(f.nodes.filter(node => node.classList.contains('operation-panel') && !node.hidden).map(node => node.id), [`${type}-panel`]);
+        assert.match(f.element('#dialog-eyebrow').textContent, new RegExp(`柜台 ${id === 'counter-a' ? 'A' : 'B'}`));
+        assert.deepEqual(f.state(), before); assert.equal(f.memory.getItem(SAVE_KEY), bytes);
+        if (type === 'recipe') {
+          const selected = before.counters.find(counter => counter.id === id);
+          for (const recipe of ['espresso', 'latte']) {
+            const button = f.nodes.find(node => node.dataset.selectRecipe === recipe);
+            assert.equal(button.classList.contains('active'), selected.recipe === recipe);
+            assert.equal(button.getAttribute('aria-pressed'), String(selected.recipe === recipe));
+            assert.equal(f.element(`#recipe-${recipe}-stats`).textContent, `${centsLabel(counterPrice(recipe, selected.level, id, before.coffeeLevels[recipe]))} · ${counterBrewSeconds(recipe, selected.level, id, before.coffeeLevels[recipe]).toFixed(2)} 秒`);
+          }
+        } else {
+          const quote = createEngine(before).quote(id);
+          assert.equal(f.element('#counter-price').textContent, centsLabel(quote.beforePrice));
+          assert.equal(f.element('#counter-seconds').textContent, `${quote.beforeSeconds.toFixed(2)} 秒`);
+          assert.equal(f.element('#counter-next-price').textContent, `→ ${centsLabel(quote.afterPrice)}`);
+          assert.equal(f.element('#counter-next-seconds').textContent, `→ ${quote.afterSeconds.toFixed(2)} 秒`);
+        }
+        f.click('#dialog-close');
+      }
+    }
+    for (const recipe of ['espresso', 'latte']) {
+      const before = f.state(), bytes = f.memory.getItem(SAVE_KEY), quote = createEngine(before).coffeeQuote(recipe);
+      f.action({ type: 'menu', recipe });
+      assert.deepEqual(f.nodes.filter(node => node.classList.contains('operation-panel') && !node.hidden).map(node => node.id), ['coffee-panel']);
+      assert.equal(f.element('#dialog-title').textContent, recipeById[recipe].name);
+      assert.equal(f.element('#coffee-level').textContent, `Lv. ${quote.level} → ${quote.nextLevel}`);
+      assert.equal(f.element('#coffee-price').textContent, centsLabel(coffeePrice(recipe, before.coffeeLevels[recipe])));
+      assert.equal(f.element('#coffee-seconds').textContent, `${coffeeBrewSeconds(recipe, before.coffeeLevels[recipe]).toFixed(2)} 秒`);
+      assert.equal(f.element('#coffee-next-price').textContent, `→ ${centsLabel(quote.afterPrice)}`);
+      assert.equal(f.element('#coffee-next-seconds').textContent, `→ ${quote.afterSeconds.toFixed(2)} 秒`);
+      assert.deepEqual(f.state(), before, 'viewing coffee never changes a counter recipe, level, balance or brew');
+      assert.equal(f.memory.getItem(SAVE_KEY), bytes, 'viewing does not write the save');
+      f.click('#dialog-close');
+    }
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-023 REQ-3D-033 hidden and closed recipe/counter/coffee handlers cannot mutate a different panel', () => {
+  const f = fixture({ initial: fundedInitial(50000) });
+  try {
+    for (const action of [{ type: 'recipe', id: 'counter-b' }, { type: 'counter', id: 'counter-b' }, { type: 'menu', recipe: 'latte' }, { type: 'vault' }]) {
+      f.action(action);
+      const before = f.state(), bytes = f.memory.getItem(SAVE_KEY);
+      if (action.type !== 'recipe') f.root.emit('click', { target: f.nodes.find(node => node.dataset.selectRecipe === 'espresso') });
+      if (action.type !== 'counter') f.element('#counter-upgrade').emit('click');
+      if (action.type !== 'menu') f.element('#coffee-upgrade').emit('click');
+      const removedAssign = new FakeElement('button', f.document); removedAssign.setAttribute('data-assign', 'counter-a');
+      f.root.emit('click', { target: removedAssign });
+      assert.deepEqual(f.state(), before, `${action.type}: only this panel's own action is allowed`);
+      assert.equal(f.memory.getItem(SAVE_KEY), bytes);
+      f.click('#dialog-close');
+      const closed = f.state();
+      f.element('#counter-upgrade').emit('click'); f.element('#coffee-upgrade').emit('click');
+      f.root.emit('click', { target: f.nodes.find(node => node.dataset.selectRecipe === 'espresso') });
+      assert.deepEqual(f.state(), closed, 'stale controls cannot mutate a closed dialog');
+    }
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-023 REQ-3D-033 recipe selection affects only the selected counter and leaves its current brew intact', () => {
+  for (const id of ['counter-a', 'counter-b']) {
+    const engine = createEngine();
+    for (let i = 0; i < 1000 && !engine.state.counters.find(counter => counter.id === id).brew; i++) engine.advance(.1);
+    const initial = engine.snapshot(), original = initial.counters.find(counter => counter.id === id);
+    assert.ok(original.brew, 'fixture starts while this counter is brewing');
+    const recipe = original.recipe === 'espresso' ? 'latte' : 'espresso';
+    const f = fixture({ initial });
+    try {
+      f.action({ type: 'recipe', id });
+      const before = f.state(), expected = createEngine(before);
+      const button = f.nodes.find(node => node.dataset.selectRecipe === recipe);
+      f.root.emit('click', { target: button }); assert.equal(expected.setRecipe(id, recipe), true);
+      assert.deepEqual(f.state(), expected.snapshot());
+      const selected = f.state().counters.find(counter => counter.id === id);
+      assert.deepEqual(selected.brew, original.brew, 'price, recipe, duration and elapsed of the in-flight cup remain snapshotted');
+      assert.deepEqual(f.state().counters.find(counter => counter.id !== id), before.counters.find(counter => counter.id !== id));
+      assert.deepEqual(f.state().coffeeLevels, before.coffeeLevels);
+      assert.equal(f.state().wallet, before.wallet); assert.equal(f.state().spend, before.spend);
+      assert.equal(button.classList.contains('active'), true); assert.equal(button.getAttribute('aria-pressed'), 'true');
+      assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, f.state());
+      const once = f.state(); f.root.emit('click', { target: button });
+      assert.deepEqual(f.state(), once, 'selecting the current recipe again is idempotent');
+      f.click('#dialog-close'); f.action({ type: 'recipe', id });
+      assert.equal(button.getAttribute('aria-pressed'), 'true', 'reopening preserves the selected coffee');
+      for (let n = 0; n < 1000 && f.state().counters.find(counter => counter.id === id).brew?.recipe !== recipe; n++) f.tick(.1);
+      const nextBrew = f.state().counters.find(counter => counter.id === id).brew;
+      assert.equal(nextBrew?.recipe, recipe, 'the next cup uses the newly selected coffee');
+      assert.equal(nextBrew.price, counterPrice(recipe, selected.level, id, before.coffeeLevels[recipe]));
+      assert.equal(nextBrew.duration, counterBrewSeconds(recipe, selected.level, id, before.coffeeLevels[recipe]));
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-023 REQ-3D-033 coffee upgrades charge their own quote and cannot upgrade or reassign either counter', () => {
+  for (const recipe of ['espresso', 'latte']) {
+    const quote = createEngine().coffeeQuote(recipe), initial = fundedInitial(quote.cost);
+    const f = fixture({ initial });
+    try {
+      // Deliberately select B first: the coffee operation must use viewedRecipe,
+      // not a stale selected counter or the recipe served by that counter.
+      f.action({ type: 'counter', id: 'counter-b' }); f.click('#dialog-close');
+      f.action({ type: 'menu', recipe });
+      const before = f.state(), expected = createEngine(before);
+      assert.equal(f.element('#coffee-upgrade').textContent, `升级咖啡 · ${centsLabel(quote.cost)}`);
+      assert.equal(f.element('#coffee-upgrade').disabled, false); assert.equal(f.element('#coffee-funds').textContent, '');
+      f.click('#coffee-upgrade'); assert.equal(expected.upgradeCoffee(recipe), true);
+      assert.deepEqual(f.state(), expected.snapshot());
+      assert.deepEqual(f.state().counters, before.counters); assert.deepEqual(f.state().manager, before.manager);
+      assert.equal(f.state().coffeeLevels[recipe], before.coffeeLevels[recipe] + 1);
+      const other = recipe === 'espresso' ? 'latte' : 'espresso';
+      assert.equal(f.state().coffeeLevels[other], before.coffeeLevels[other]);
+      assert.equal(before.wallet - f.state().wallet, quote.cost); assert.equal(f.state().spend - before.spend, quote.cost);
+      assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, f.state());
+      const next = expected.coffeeQuote(recipe);
+      assert.equal(f.element('#coffee-price').textContent, centsLabel(next.beforePrice));
+      assert.equal(f.element('#coffee-seconds').textContent, `${next.beforeSeconds.toFixed(2)} 秒`);
+      assert.equal(f.element('#coffee-upgrade').disabled, true);
+      assert.equal(f.element('#coffee-funds').textContent, `还差 ${centsLabel(next.cost - f.state().wallet)}`);
+      const once = f.state(), bytes = f.memory.getItem(SAVE_KEY);
+      f.click('#coffee-upgrade'); f.element('#coffee-upgrade').emit('click');
+      assert.deepEqual(f.state(), once, 'disabled UI and real handler reject repeated insufficient-funds purchases');
+      assert.equal(f.memory.getItem(SAVE_KEY), bytes);
+      f.click('#dialog-close'); f.action({ type: 'menu', recipe });
+      assert.equal(f.element('#coffee-level').textContent, `Lv. ${next.level} → ${next.nextLevel}`);
+    } finally { f.dispose(); }
+    const capped = fundedInitial(50000); capped.coffeeLevels[recipe] = COFFEE_MAX_LEVEL;
+    const g = fixture({ initial: capped });
+    try {
+      g.action({ type: 'menu', recipe }); const before = g.state(), bytes = g.memory.getItem(SAVE_KEY);
+      assert.equal(g.element('#coffee-level').textContent, `Lv. ${COFFEE_MAX_LEVEL} · MAX`);
+      assert.equal(g.element('#coffee-next-price').textContent, '已达上限'); assert.equal(g.element('#coffee-next-seconds').textContent, '已达上限');
+      assert.equal(g.element('#coffee-upgrade').textContent, '已满级'); assert.equal(g.element('#coffee-upgrade').disabled, true);
+      assert.equal(g.element('#coffee-funds').textContent, '');
+      g.click('#coffee-upgrade'); g.element('#coffee-upgrade').emit('click');
+      assert.deepEqual(g.state(), before); assert.equal(g.memory.getItem(SAVE_KEY), bytes);
+    } finally { g.dispose(); }
+  }
+});
+
+test('TC-3D-023 REQ-3D-033 counter upgrade after coffee upgrades retains independent selected-counter scope', () => {
+  for (const id of ['counter-a', 'counter-b']) {
+    const initial = fundedInitial(50000); initial.coffeeLevels = { espresso: 5, latte: 3 };
+    const f = fixture({ initial });
+    try {
+      f.action({ type: 'counter', id });
+      const before = f.state(), expected = createEngine(before), quote = expected.quote(id);
+      f.click('#counter-upgrade'); assert.equal(expected.upgrade(id), true);
+      assert.deepEqual(f.state(), expected.snapshot());
+      assert.deepEqual(f.state().coffeeLevels, before.coffeeLevels);
+      assert.deepEqual(f.state().counters.find(counter => counter.id !== id), before.counters.find(counter => counter.id !== id));
+      assert.equal(before.wallet - f.state().wallet, quote.cost);
+      assert.equal(f.state().counters.find(counter => counter.id === id).recipe, before.counters.find(counter => counter.id === id).recipe);
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-023 REQ-3D-033 a short offline interruption restores the exact recipe/counter/coffee panel', async () => {
+  for (const [action, panel] of [[{ type: 'recipe', id: 'counter-b' }, 'recipe'], [{ type: 'counter', id: 'counter-b' }, 'counter'], [{ type: 'menu', recipe: 'latte' }, 'coffee']]) {
+    const f = fixture({ now: 500000, initial: fundedInitial(50000) });
+    try {
+      f.action(action);
+      const title = f.element('#dialog-title').textContent, eyebrow = f.element('#dialog-eyebrow').textContent;
+      f.document.hidden = true; f.document.emit('visibilitychange');
+      f.clock.now += 20000; f.clock.performance += 20000;
+      f.document.hidden = false; f.document.emit('visibilitychange');
+      assert.equal(f.element('#offline-panel').hidden, false);
+      await f.flushOffline({ dismissResult: false });
+      assert.equal(f.element('#operation-dialog').open, true);
+      assert.equal(f.element(`#${panel}-panel`).hidden, false);
+      assert.equal(f.element('#dialog-title').textContent, title); assert.equal(f.element('#dialog-eyebrow').textContent, eyebrow);
+      assert.equal(f.renderer.interactionEnabled, false);
+      f.click('#dialog-close'); assert.equal(f.renderer.interactionEnabled, true);
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-023 REQ-3D-033 save conflict or canceled settlement blocks all split business actions', async () => {
+  for (const cause of ['storage-conflict', 'canceled-offline']) {
+    const f = fixture({ initial: fundedInitial(50000), now: 500000 });
+    try {
+      if (cause === 'storage-conflict') {
+        const foreign = JSON.parse(f.memory.getItem(SAVE_KEY)); foreign.recordChangeTag = 'split-panels-conflict';
+        f.memory.setItem(SAVE_KEY, JSON.stringify(foreign));
+        f.window.emit('storage', { key: SAVE_KEY, newValue: JSON.stringify(foreign) });
+      } else {
+        f.document.hidden = true; f.document.emit('visibilitychange');
+        f.clock.now += 60000; f.clock.performance += 60000;
+        f.document.hidden = false; f.document.emit('visibilitychange');
+        f.click('#offline-cancel'); await f.flushOffline({ dismissResult: false });
+      }
+      const protectedState = f.state(), bytes = f.memory.getItem(SAVE_KEY);
+      assert.equal(protectedState.paused, true);
+      for (const action of [{ type: 'recipe', id: 'counter-b' }, { type: 'counter', id: 'counter-b' }, { type: 'menu', recipe: 'espresso' }]) {
+        f.action(action);
+        if (action.type === 'recipe') {
+          const button = f.nodes.find(node => node.dataset.selectRecipe === 'espresso');
+          assert.equal(button.disabled, true); f.root.emit('click', { target: button });
+        } else {
+          const kind = action.type === 'menu' ? 'coffee' : 'counter';
+          assert.equal(f.element(`#${kind}-upgrade`).disabled, true);
+          assert.equal(f.element(`#${kind}-funds`).textContent, '请先恢复存档');
+          f.element(`#${kind}-upgrade`).emit('click');
+        }
+        assert.deepEqual(f.state(), protectedState, `${cause}: ${action.type} cannot bypass recovery protection`);
+        assert.equal(f.memory.getItem(SAVE_KEY), bytes);
+        f.click('#dialog-close');
+      }
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-023 REQ-3D-033 portable preview, cancellation, replacement and recovery retain independent coffee progress', async () => {
+  const current = fundedInitial(50000); current.coffeeLevels = { espresso: 3, latte: 5 };
+  const source = fundedInitial(30000); source.coffeeLevels = { espresso: 7, latte: 2 };
+  const incoming = await portableFixture({ state: source, savedAt: 1000, exportedAt: 2000, saveId: 'coffee-progress-source' });
+  assert.equal(JSON.parse(incoming.text).formatVersion, 2);
+  const f = fixture({ initial: current, now: 130000 });
+  try {
+    const before = f.state(), bytes = f.memory.getItem(SAVE_KEY);
+    await reviewPortable(f, incoming);
+    for (const suffix of ['summary', 'details']) {
+      assert.match(f.element(`#file-current-${suffix}`).textContent, /浓缩 Lv\. 3 · 拿铁 Lv\. 5/);
+      assert.match(f.element(`#file-incoming-${suffix}`).textContent, /浓缩 Lv\. 7 · 拿铁 Lv\. 2/);
+    }
+    assert.deepEqual(f.state(), before); assert.equal(f.memory.getItem(SAVE_KEY), bytes);
+    f.click('#file-cancel');
+    assert.deepEqual(f.state(), before, 'cancel preserves current coffee levels and the entire shop');
+    assert.equal(f.memory.getItem(SAVE_KEY), bytes);
+    assert.equal(portableWrites(f).length, 0); assert.equal(importBackupWrites(f).length, 0);
+
+    await reviewPortable(f, incoming); confirmPortable(f);
+    assert.deepEqual(f.state(), source, 'confirmed import replaces all coffee progress with the selected snapshot');
+    assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, source);
+    assert.equal(portableWrites(f).length, 1); assert.equal(importBackupWrites(f).length, 1);
+    const envelope = JSON.parse(f.memory.getItem(SAVE_KEY));
+    const backup = JSON.parse(f.memory.getItem(envelope.lastImportBackupKey));
+    assert.deepEqual(backup.liveState.coffeeLevels, current.coffeeLevels);
+    assert.equal(backup.originalRaw, bytes);
+
+    f.click('#backup-live'); await f.flushFiles();
+    assert.match(f.element('#file-export-summary').textContent, /浓缩 Lv\. 3 · 拿铁 Lv\. 5/);
+    assert.equal(f.element('#file-download').disabled, false);
+    f.click('#file-download');
+    const recoveryText = await f.blobs.at(-1).text(), recovery = await parsePortableSave(recoveryText);
+    assert.equal(JSON.parse(recoveryText).formatVersion, 2, 'recovery download uses the coffee-aware portable format');
+    assert.equal(recovery.ok, true);
+    assert.equal(recovery.file.payload.economyVersion, 2);
+    assert.deepEqual(recovery.file.payload.state, before, 'recovery export preserves the entire pre-import live snapshot');
+    assert.deepEqual(recovery.file.payload.overview.coffeeLevels, current.coffeeLevels);
+    assert.deepEqual(f.state(), source, 'exporting the old shop cannot replace current progress');
+
+    await reviewPortable(f, recovery.file);
+    assert.match(f.element('#file-current-summary').textContent, /浓缩 Lv\. 7 · 拿铁 Lv\. 2/);
+    assert.match(f.element('#file-incoming-summary').textContent, /浓缩 Lv\. 3 · 拿铁 Lv\. 5/);
+    confirmPortable(f);
+    assert.deepEqual(f.state(), before, 'the exported recovery file can restore both independent coffee levels through the real handler');
+    assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, before);
+  } finally { f.dispose(); }
 });

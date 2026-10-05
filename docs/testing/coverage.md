@@ -72,3 +72,7 @@ REQ-3D-031 → [TC-3D-021](cases/slice/TC-3D-021.md)、[PORTABLE-QA-1.0](plans/p
 ## 游戏化操作面板
 
 REQ-3D-032 → [TC-3D-022](cases/slice/TC-3D-022.md)、[计划](plans/game-panel-redesign.md)。统一升级/设置/存档层级、原生文件输入、可见确认后果、恢复入口和离线简明结果；原TC-3D-019/020/021资产与失败保护继续回归，真实像素/原生选择器单独验收。
+
+## 咖啡独立升级与柜台双入口
+
+REQ-3D-033 → [TC-3D-023](cases/slice/TC-3D-023.md)、[计划](plans/coffee-upgrades-and-counter-controls.md)。独立实体拾取/面板/购买、配方等级与制作快照、在线离线同核心、经济2和文件2迁移/拒绝未知版本、旧实现拒绝新档；保持恢复/离线/文件安全回归，像素/真机独立验收。

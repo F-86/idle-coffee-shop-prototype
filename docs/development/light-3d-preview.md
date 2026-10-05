@@ -59,3 +59,11 @@ repository将来源快照/原字节/代际/固定端点保存在独立任务；�
 前台等待从请求端点起计作在线时间，main保留performance起点，成功后的普通时间入口结算尾部，保存前先flush；后台中断取消任务并重算原未领取区间。数值边界沿用elapsed≤4e9秒和主要整数≤1e12；超范围明确拒绝而不是截成较短收益。
 
 对没有生命周期证据的异常长前台空档（超过60秒）采用保护冻结，不自动按离线重估、不截断后继续写入。连续回调确认的正常异步计算等待单独计入可推进的在线尾部；操作处理器先结算尾部再修改配方或升级，避免追溯应用新参数。此边界及数值安全边界不等同离线时长上限。
+
+## 咖啡升级与当前版本
+
+REQ-3D-033新增配方级coffeeLevels、coffeeQuote/upgradeCoffee，经济版本由1升级为2；上文路线迁移章节的经济1是历史背景。柜台报价与开始制作快照将配方基础值叠加既有柜台/专长倍率，离线复用同一个tick。咖啡参数集中配置且未校准，本轮不调整柜台/经理。
+
+实体选择器/升级牌保持原投影位置，取消柜体大范围升级Action。recipe动作打开独立recipe-panel，counter动作打开counter-panel，menu动作打开独立咖啡升级面板；不再有coffee→counter分配。
+
+新portable文件为formatVersion2/经济2并含咖啡等级摘要；v1先验证原文与旧摘要再迁移，文本和指纹不变。旧c6/f9实现只接受经济1/文件1，会拒绝新档；不是向旧客户端降级。详见[新规格](../product/specs/coffee-upgrades-and-counter-controls.md)与[QA计划](../testing/plans/coffee-upgrades-and-counter-controls.md)。

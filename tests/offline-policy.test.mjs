@@ -461,3 +461,51 @@ test('TC-3D-020 generated live claim collisions and failed reads never grant exa
   const retry = repo.settleOffline(initial, 100000, 100010); assert.equal(retry.status, 'unavailable'); assert.equal(retry.offline.accepted, false);
   assert.equal(memory.getItem(SAVE_KEY), raw);
 });
+
+test('TC-3D-023 coffee upgrades use the same prices and durations online and offline with exact 80% settlement', async () => {
+  const engine = createEngine(); engine.advance(240);
+  assert.equal(engine.upgradeCoffee('espresso'), true); assert.equal(engine.upgradeCoffee('latte'), true);
+  engine.setRecipe('counter-b', 'espresso'); engine.advance(13.137);
+  const initial = engine.snapshot(), online = createEngine(initial), offline = createEngine(initial), wall = 396.524;
+  online.advance(wall * .8);
+  const job = offline.beginOffline(wall, 'coffee-offline');
+  while (!job.done) job.advance(73);
+  assert.equal(job.result().accepted, true); near(job.result().effectiveSeconds, wall * .8);
+  assert.deepEqual(business(offline.snapshot()), business(online.snapshot())); assertValidMoney(offline.snapshot());
+  assert.deepEqual(offline.state.coffeeLevels, initial.coffeeLevels);
+  const beforeRetry = offline.snapshot(); assert.equal(offline.applyOffline(wall, 'coffee-offline').accepted, false); assert.deepEqual(offline.snapshot(), beforeRetry);
+  const { memory, repo } = fixture(initial), pending = repo.load(100000 + wall * 1000, { deferOffline: true });
+  assert.equal(pending.status, 'settling');
+  const settled = await finish(repo, pending.pending); assert.equal(settled.offline.accepted, true);
+  assert.deepEqual(business(settled.state), business(online.snapshot()));
+  assert.deepEqual(new LocalSaveRepository(memory).load(100000 + wall * 1000).state, settled.state);
+});
+
+test('TC-3D-023 failed or cancelled coffee settlement preserves upgraded source and rejects altered retry progress', async () => {
+  const engine = createEngine(); engine.advance(240); engine.upgradeCoffee('latte');
+  const initial = engine.snapshot(), { memory, repo, raw } = fixture(initial);
+  assert.equal(repo.load(100000).status, 'loaded');
+  const pending = repo.settleOffline(initial, 100000, 120000, { deferOffline: true });
+  assert.equal(pending.status, 'settling'); repo.cancelOffline(pending.pending);
+  rejection(await finish(repo, pending.pending), initial, memory, raw);
+  const changed = structuredClone(initial); changed.coffeeLevels.latte++;
+  const denied = repo.settleOffline(changed, 100000, 120000); assert.equal(denied.offline.accepted, false);
+  assert.equal(memory.getItem(SAVE_KEY), raw);
+  const retried = repo.settleOffline(initial, 100000, 120000, { deferOffline: true }); assert.equal(retried.status, 'settling');
+  const done = await finish(repo, retried.pending); assert.equal(done.offline.accepted, true);
+  assert.deepEqual(business(done.state), business(advanced(initial, 16))); assertValidMoney(done.state);
+  assert.deepEqual(done.state.coffeeLevels, initial.coffeeLevels);
+});
+
+test('TC-3D-023 legacy economy migrates independently of one-time legacy offline policy and preserves snapshots', () => {
+  for (const policy of ['unmarked', 1, 2, 3]) {
+    const modern = checkpoint(), legacy = structuredClone(modern); legacy.economyVersion = 1; delete legacy.coffeeLevels;
+    const { memory, repo } = fixture(legacy, policy);
+    const loaded = repo.load(160000), expected = advanced(modern, policy === 3 ? 48 : 30);
+    assert.equal(loaded.status, 'loaded'); assert.equal(loaded.offline.accepted, true);
+    assert.deepEqual(business(loaded.state), business(expected)); assert.equal(loaded.state.economyVersion, 2);
+    assert.deepEqual(loaded.state.coffeeLevels, { espresso: 1, latte: 1 });
+    const durable = JSON.parse(memory.getItem(SAVE_KEY)); assert.equal(durable.state.economyVersion, 2); assert.equal(durable.offlinePolicyVersion, 3);
+    assert.deepEqual(new LocalSaveRepository(memory).load(160000).state, loaded.state);
+  }
+});

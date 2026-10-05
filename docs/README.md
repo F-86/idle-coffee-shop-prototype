@@ -37,3 +37,5 @@
 手动文件存档 v1：[规格](product/specs/portable-save-files.md)、[版本化QA计划](testing/plans/portable-save-files.md)、[TC-3D-021](testing/cases/slice/TC-3D-021.md)。导出已保存快照，导入先预览/备份/确认；新本地身份，不补发文件交换期间收益。不是自动iCloud同步，localStorage跨窗口冲突检查也不是真正原子事务。
 
 游戏面板重设计：[规格](product/specs/game-panel-redesign.md)、[计划](testing/plans/game-panel-redesign.md)、[TC-3D-022](testing/cases/slice/TC-3D-022.md)。升级/设置/存档采用游戏卡片，技术细节按需展开；离线结果只显示离开时长与实际金库到账，不改变结算或保存协议。
+
+咖啡独立升级与柜台双入口：[规格](product/specs/coffee-upgrades-and-counter-controls.md)、[计划](testing/plans/coffee-upgrades-and-counter-controls.md)、[TC-3D-023](testing/cases/slice/TC-3D-023.md)。咖啡墙升级配方，柜台左选咖啡/右升级分别开面板；经济2与文件2保留等级并兼容旧档读入。数值暂定，平衡延后。
