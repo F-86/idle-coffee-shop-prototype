@@ -5,10 +5,10 @@ registerHooks({ resolve(specifier, context, nextResolve) {
   try { return nextResolve(specifier, context); }
   catch (error) { if (specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier)) return nextResolve(`${specifier}.ts`, context); throw error; }
 } });
-const { createEngine, createInitialState } = await import('../../src/slice/core/engine.ts');
+const { createEngine, createInitialState, ECONOMY_VERSION } = await import('../../src/slice/core/engine.ts');
 const { addFurniture, storeFurniture } = await import('../../src/slice/core/layout.ts');
 const { createPortableSave, overviewOf } = await import('../../src/slice/core/portableSave.ts');
-const { validateState } = await import('../../src/slice/core/persistence.ts');
+const { validateState, OFFLINE_POLICY_VERSION } = await import('../../src/slice/core/persistence.ts');
 const destination = process.argv[2];
 if (!destination) throw Error('Usage: node qa/layout/generate-fixtures.mjs /absolute/temporary/output-directory');
 const out = resolve(destination); await mkdir(out, { recursive: true });
@@ -37,10 +37,14 @@ if (!storedDraft) throw Error('QA storage draft unavailable');
 storeFurniture(storedDraft, 'counter-d');
 if (!storedEngine.commitLayout(storedDraft).ok) throw Error('QA storage commit failed');
 scenarios.push(['stored-counter-upgraded-coffee', storedEngine.snapshot()]);
-engine.togglePause(); engine.advance(180);
+engine.togglePause();
+// Explicit QA purchases keep this advertised in-flight fixture stocked.
+for (const ingredient of ['beans', 'milk']) if (!engine.buyIngredient(ingredient, 'fill')) throw Error(`QA ${ingredient} restock failed`);
+engine.advance(180);
+if (!engine.state.customers.length) throw Error('QA in-flight shop has no active customers.');
 scenarios.push(['expanded-in-flight', engine.snapshot()]);
 for (const [name, state] of scenarios) {
   const checked = validateState(state); if (!checked.ok) throw Error(`${name}: ${checked.message}`);
-  const file = await createPortableSave({ saveId: `qa-layout-${name}`, revision: 1, gameSchemaVersion: 1, economyVersion: 4, offlinePolicyVersion: 3, savedAt: 0, exportedAt: 0, overview: overviewOf(state), state });
+  const file = await createPortableSave({ saveId: `qa-layout-${name}`, revision: 1, gameSchemaVersion: 1, economyVersion: ECONOMY_VERSION, offlinePolicyVersion: OFFLINE_POLICY_VERSION, savedAt: 0, exportedAt: 0, overview: overviewOf(state), state });
   const path = resolve(out, `mellow-bean-QA-${name}.json`); await writeFile(path, file.text); console.log(path);
 }

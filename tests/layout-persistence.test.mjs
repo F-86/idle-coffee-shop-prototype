@@ -13,9 +13,9 @@ const { PORTABLE_VERSION, createPortableSave, parsePortableSave, overviewOf } = 
 const copy = value => structuredClone(value);
 const sha256 = text => createHash('sha256').update(text, 'utf8').digest('hex');
 const business = value => { const state = copy(value); delete state.lastOfflineClaimId; delete state.offlineClaimIds; return state; };
-const rawEnvelope = (state, changes = {}) => JSON.stringify({ schemaVersion: 1, offlinePolicyVersion: 3, savedAt: 100000, recordChangeTag: 'layout-fixture', saveId: 'layout-fixture', revision: 3, state, ...changes });
+const rawEnvelope = (state, changes = {}) => JSON.stringify({ schemaVersion: 1, offlinePolicyVersion: state.economyVersion < 5 ? 3 : 4, savedAt: 100000, recordChangeTag: 'layout-fixture', saveId: 'layout-fixture', revision: 3, state, ...changes });
 const oldOverview = state => ({ wallet: state.wallet, totalEarned: state.totalEarned, totalServed: state.totalServed, elapsed: state.elapsed, counterLevels: state.counters.map(counter => counter.level), ...(state.economyVersion === 1 ? {} : { coffeeLevels: { ...state.coffeeLevels } }), managerLevel: state.manager.level, pendingCash: state.counters.reduce((sum, counter) => sum + counter.pendingCash, 0), carrying: state.manager.carrying });
-const payload = state => ({ saveId: 'layout-exchange', revision: 7, gameSchemaVersion: 1, economyVersion: state.economyVersion, offlinePolicyVersion: 3, savedAt: 100000, exportedAt: 100123, overview: overviewOf(state), state: copy(state) });
+const payload = state => ({ saveId: 'layout-exchange', revision: 7, gameSchemaVersion: 1, economyVersion: state.economyVersion, offlinePolicyVersion: 4, savedAt: 100000, exportedAt: 100123, overview: overviewOf(state), state: copy(state) });
 const independentFile = (value, formatVersion = value.economyVersion) => {
   const payloadText = JSON.stringify(value, null, 2);
   return { payloadText, text: JSON.stringify({ format: 'mellow-bean-portable-save', formatVersion, payloadText, integrity: { algorithm: 'SHA-256', sha256: sha256(payloadText) } }) };
@@ -62,23 +62,25 @@ function assertMoney(state) { assert.equal(state.wallet + state.spend + state.ma
 
 for (const version of [1, 2]) test(`TC-3D-025 economy${version} migration preserves exact old coordinates, snapshots, assets and fractional clock`, () => {
   const old = legacyState(version), before = copy(old), checked = validateState(old); assert.equal(checked.ok, true, checked.message);
-  assert.deepEqual(old, before); assert.equal(checked.state.economyVersion, 4); assert.equal(checked.state.layout.version, 2); assert.equal(checked.state.layout.active, false); assert.ok(checked.state.layout.coffeeSigns.every(sign => sign.stored));
+  assert.deepEqual(old, before); assert.equal(checked.state.economyVersion, 5); assert.equal(checked.state.layout.version, 2); assert.equal(checked.state.layout.active, false); assert.ok(checked.state.layout.coffeeSigns.every(sign => sign.stored));
   assert.equal(checked.state.wallet, old.wallet + 123); assert.equal(checked.state.manager.carrying, 0); assert.deepEqual(checked.state.counters, old.counters.map(counter => ({ ...counter, pendingCash: 0 })));
   for (const key of ['customers', 'totalEarned', 'totalServed', 'spend', 'elapsed', 'stepCarry', 'eventSequence', 'nextCustomerId']) assert.deepEqual(checked.state[key], old[key], key);
   assert.deepEqual(validateState(checked.state).state, checked.state); assert.deepEqual(createEngine(old).snapshot(), checked.state);
   const storage = createMemoryStorage(), raw = rawEnvelope(old); storage.setItem(SAVE_KEY, raw); const repo = new LocalSaveRepository(storage);
-  const loaded = repo.load(100000); assert.equal(loaded.status, 'loaded'); assert.deepEqual(loaded.state, checked.state); assert.equal(storage.getItem(SAVE_KEY), raw);
+  const loaded = repo.load(100000); assert.equal(loaded.status, 'loaded'); assert.deepEqual(loaded.state, checked.state);
+  const migrated = JSON.parse(storage.getItem(SAVE_KEY)); assert.equal(migrated.offlinePolicyVersion, 4); assert.deepEqual(migrated.state, checked.state);
+  const settledRaw = storage.getItem(SAVE_KEY); assert.deepEqual(new LocalSaveRepository(storage).load(100000).state, checked.state); assert.equal(storage.getItem(SAVE_KEY), settledRaw);
   const replay = createEngine(loaded.state), direct = createEngine(checked.state); replay.advance(101.123); direct.advance(101.123); assert.deepEqual(replay.snapshot(), direct.snapshot());
   assertMoney(replay.state); assert.equal(validateState(replay.snapshot()).ok, true);
 });
 
-for (const version of [1, 2]) test(`TC-3D-025 original portable${version} bytes retain their fingerprint while normalizing to portable4`, async () => {
+for (const version of [1, 2]) test(`TC-3D-025 original portable${version} bytes retain their fingerprint while normalizing to portable5`, async () => {
   const old = legacyState(version), source = { saveId: 'old-layout-source', revision: 4, gameSchemaVersion: 1, economyVersion: version, offlinePolicyVersion: 3, savedAt: 100000, exportedAt: 100123, overview: oldOverview(old), state: old };
   const { text, payloadText } = independentFile(source, version), parsed = await parsePortableSave(text);
   assert.equal(parsed.ok, true, parsed.message); assert.equal(parsed.file.text, text); assert.equal(parsed.file.fingerprint, sha256(payloadText));
-  assert.equal(parsed.file.payload.economyVersion, 4); assert.equal(parsed.file.payload.state.layout.version, 2); assert.deepEqual(parsed.file.payload.state.counters, old.counters.map(counter => ({ ...counter, pendingCash: 0 }))); assert.deepEqual(parsed.file.payload.state.customers, old.customers);
-  assert.deepEqual(parsed.file.payload.overview, { ...oldOverview({ ...old, economyVersion: 2, coffeeLevels: { espresso: 1, latte: 1 }, wallet: old.wallet + 123, counters: old.counters.map(counter => ({ ...counter, pendingCash: 0 })) }), placedCounters: 2, placedSeats: 0, expanded: false });
-  const written = await createPortableSave(parsed.file.payload); assert.equal(JSON.parse(written.text).formatVersion, 4); assert.notEqual(written.fingerprint, parsed.file.fingerprint);
+  assert.equal(parsed.file.payload.economyVersion, 5); assert.equal(parsed.file.payload.state.layout.version, 2); assert.deepEqual(parsed.file.payload.state.counters, old.counters.map(counter => ({ ...counter, pendingCash: 0 }))); assert.deepEqual(parsed.file.payload.state.customers, old.customers);
+  assert.deepEqual(parsed.file.payload.overview, { ...oldOverview({ ...old, economyVersion: 2, coffeeLevels: { espresso: 1, latte: 1 }, wallet: old.wallet + 123, counters: old.counters.map(counter => ({ ...counter, pendingCash: 0 })) }), placedCounters: 2, placedSeats: 0, expanded: false, ingredients: { beans: 40, milk: 20 } });
+  const written = await createPortableSave(parsed.file.payload); assert.equal(JSON.parse(written.text).formatVersion, 5); assert.notEqual(written.fingerprint, parsed.file.fingerprint);
   assert.deepEqual((await parsePortableSave(written.text)).file.payload, parsed.file.payload);
   const storage = createMemoryStorage(), repo = new LocalSaveRepository(storage); repo.load(100000);
   const imported = repo.importSnapshot(parsed.file.payload.state, { expectedRaw: null, currentState: createInitialState(), fingerprint: parsed.file.fingerprint, otherTabsClosed: true }, 101000);
@@ -87,8 +89,8 @@ for (const version of [1, 2]) test(`TC-3D-025 original portable${version} bytes 
 });
 
 test('TC-3D-025 new layout/economy/route versions protect original bytes until explicit recovery', () => {
-  assert.equal(ECONOMY_VERSION, 4); assert.equal(PORTABLE_VERSION, 4);
-  for (const mutate of [state => { state.economyVersion = 5; }, state => { state.layout.version = 4; }, state => { state.managerRouteVersion = 3; }, state => { state.customerRouteVersion = 5; }]) {
+  assert.equal(ECONOMY_VERSION, 5); assert.equal(PORTABLE_VERSION, 5);
+  for (const mutate of [state => { state.economyVersion = 6; }, state => { state.layout.version = 4; }, state => { state.managerRouteVersion = 3; }, state => { state.customerRouteVersion = 5; }]) {
     const state = createInitialState(); mutate(state); const raw = rawEnvelope(state), storage = createMemoryStorage(); storage.setItem(SAVE_KEY, raw);
     const repo = new LocalSaveRepository(storage), loaded = repo.load(999999); assert.equal(loaded.status, 'future'); assert.equal(loaded.protectedRaw, true); assert.equal(repo.save(createInitialState(), 999999).ok, false); assert.equal(repo.reset().ok, false); assert.equal(storage.getItem(SAVE_KEY), raw);
     const reset = repo.reset({ confirmProtected: true }); assert.equal(reset.ok, true); assert.equal(storage.getItem(reset.backupKey), raw);
@@ -159,7 +161,7 @@ test('TC-3D-025 active furniture ownership, spending, service snapshots and cup 
     state => { state.counters[3].pendingCash++; },
     state => { state.layout.expanded = false; },
     state => { state.layout.trafficTurn = 'random'; },
-    state => { state.economyVersion = 2; },
+    state => { state.economyVersion = 2; delete state.ingredients; },
   ];
   for (const mutate of changes) { const state = copy(original); mutate(state); assert.equal(validateState(state).ok, false, mutate.toString()); }
 });
@@ -203,13 +205,13 @@ test('TC-3D-027 retired manager tombstone rejects resurrected navigation, cash o
   for (const mutate of cases) { const state = copy(original); mutate(state); assert.equal(validateState(state).ok, false, mutate.toString()); }
 });
 
-test('TC-3D-027 portable4 rejects future layout data and forged placed-furniture previews with valid checksums', async () => {
+test('TC-3D-027 portable5 rejects future layout data and forged placed-furniture previews with valid checksums', async () => {
   const original = payload(activeState({ stored: true }));
-  for (const mutate of [value => { value.state.layout.version = 4; }, value => { value.state.economyVersion = 5; value.economyVersion = 5; }, value => { value.overview.placedCounters++; }, value => { value.overview.placedSeats++; }, value => { value.overview.expanded = false; }, value => { delete value.state.layout; }]) {
-    const value = copy(original); mutate(value); assert.equal((await parsePortableSave(independentFile(value, 4).text)).ok, false, mutate.toString());
+  for (const mutate of [value => { value.state.layout.version = 4; }, value => { value.state.economyVersion = 6; value.economyVersion = 6; }, value => { value.overview.placedCounters++; }, value => { value.overview.placedSeats++; }, value => { value.overview.expanded = false; }, value => { delete value.state.layout; }]) {
+    const value = copy(original); mutate(value); assert.equal((await parsePortableSave(independentFile(value, 5).text)).ok, false, mutate.toString());
   }
-  assert.equal((await parsePortableSave(independentFile(original, 5).text)).ok, false);
-  const disguised = copy(original); disguised.economyVersion = 2; disguised.state.economyVersion = 2; delete disguised.overview.placedCounters; delete disguised.overview.placedSeats; delete disguised.overview.expanded;
+  assert.equal((await parsePortableSave(independentFile(original, 6).text)).ok, false);
+  const disguised = copy(original); disguised.economyVersion = 2; disguised.state.economyVersion = 2; delete disguised.state.ingredients; delete disguised.overview.ingredients; disguised.offlinePolicyVersion = 3; delete disguised.overview.placedCounters; delete disguised.overview.placedSeats; delete disguised.overview.expanded;
   assert.equal((await parsePortableSave(independentFile(disguised, 2).text)).ok, false, 'active furniture cannot masquerade as an old economy2 file');
 });
 
@@ -226,7 +228,7 @@ test('TC-3D-027 economy3 missing layout fails closed instead of restoring starte
 });
 
 function oldEmptyLayout() {
-  const state = createInitialState(); state.economyVersion = 3; state.customerRouteVersion = 3; state.layout.version = 2;
+  const state = createInitialState(); state.economyVersion = 3; delete state.ingredients; state.customerRouteVersion = 3; state.layout.version = 2;
   state.layout.coffeeSigns.forEach(sign => { sign.stored = false; }); state.manager = { x: 9, z: -2, carrying: 0, phase: 'moving', target: 2, timer: 0, level: 4 };
   return state;
 }

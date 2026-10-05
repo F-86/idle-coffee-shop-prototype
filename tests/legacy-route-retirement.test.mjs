@@ -8,7 +8,7 @@ const clone = value => structuredClone(value);
 const guest = (id, counterId, phase, x, z, extra = {}) => ({ id, counterId, phase, x, z, timer: 0, hasCup: phase === 'receiving' || phase === 'leaving', skin: id % 6, ...extra });
 const rawEnvelope = state => JSON.stringify({ schemaVersion: 1, savedAt: 1000, recordChangeTag: 'old-route-retirement', state });
 function oldInitial(version = 1) {
-  const state = createInitialState(); state.economyVersion = 3; state.layout.version = 2; state.layout.active = false; state.layout.coffeeSigns.forEach(sign => { sign.stored = false; }); state.manager.target = 1;
+  const state = createInitialState(); state.economyVersion = 3; delete state.ingredients; state.layout.version = 2; state.layout.active = false; state.layout.coffeeSigns.forEach(sign => { sign.stored = false; }); state.manager.target = 1;
   if (version === undefined) delete state.customerRouteVersion; else state.customerRouteVersion = version;
   return state;
 }

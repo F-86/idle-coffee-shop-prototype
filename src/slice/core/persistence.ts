@@ -1,10 +1,11 @@
 import { createEngine, createInitialState, CUSTOMER_ROUTE_VERSION, ECONOMY_VERSION, INITIAL_WALLET, INVITE_COOLDOWN_SECONDS, MANAGER_ROUTE_VERSION, MAX_ELAPSED_SECONDS, MAX_LEVEL, migrateCoffeeEconomy, migrateCustomerRoutes, QUEUE_CAPACITY, STEP_SECONDS, WORLD } from './engine';
 import { initialLayout, LAYOUT_VERSION, normalizeLayout, validateLayoutState, migrateLayoutDoors } from './layout';
+import { validateIngredients } from './ingredients';
 import type { OfflineJob, OfflinePolicyVersion, OfflineResult, SliceEngine, SliceState } from './types';
 export type { OfflineResult } from './types';
 
 export const SAVE_KEY = 'mellow-bean-3d-v1';
-export const OFFLINE_POLICY_VERSION = 3;
+export const OFFLINE_POLICY_VERSION = 4;
 export const OFFLINE_SLICE_BUDGET_MS = 8;
 export const OFFLINE_STEP_BATCH = 32;
 export interface StorageLike { getItem(key: string): string | null; setItem(key: string, value: string): void; removeItem(key: string): void }
@@ -27,15 +28,19 @@ function tag(): string { return globalThis.crypto?.randomUUID?.() ?? `local-${Da
 /** Fail closed: do not silently repair corrupted assets, enums or relationships. */
 export function validateState(value: unknown): { ok: true; state: SliceState } | { ok: false; message: string } {
   const fail = (message: string): { ok: false; message: string } => ({ ok: false, message });
-  if (!object(value) || value.schemaVersion !== 1 || value.economyVersion !== 1 && value.economyVersion !== 2 && value.economyVersion !== 3 && value.economyVersion !== ECONOMY_VERSION) return fail('存档版本不受支持。');
+  if (!object(value) || value.schemaVersion !== 1 || value.economyVersion !== 1 && value.economyVersion !== 2 && value.economyVersion !== 3 && value.economyVersion !== 4 && value.economyVersion !== ECONOMY_VERSION) return fail('存档版本不受支持。');
   if (value.managerRouteVersion !== undefined && value.managerRouteVersion !== 1 && value.managerRouteVersion !== MANAGER_ROUTE_VERSION) return fail('经理路线版本不受支持。');
   if (value.customerRouteVersion !== undefined && value.customerRouteVersion !== 1 && value.customerRouteVersion !== 2 && value.customerRouteVersion !== 3 && value.customerRouteVersion !== CUSTOMER_ROUTE_VERSION) return fail('顾客路线版本不受支持。');
   if (value.layout !== undefined && !object(value.layout)) return fail('家具布局格式无效。');
   if ((value.economyVersion as number) >= 3 && !object(value.layout)) return fail('当前存档缺少家具布局。');
   if ((value.economyVersion as number) < 3 && object(value.layout) && value.layout.active === true) return fail('旧经济版本不能包含已装修布局。');
-  const retiredManager = value.economyVersion === ECONOMY_VERSION;
+  const ingredientEconomy = value.economyVersion === ECONOMY_VERSION;
+  if (ingredientEconomy) {
+    if (!validateIngredients(value.ingredients)) return fail('原料库存无效。');
+  } else if (Object.prototype.hasOwnProperty.call(value, 'ingredients')) return fail('旧经济版本不能包含原料库存。');
+  const retiredManager = (value.economyVersion as number) >= 4;
   if (value.doorMigrationNotice !== undefined && (!retiredManager || value.doorMigrationNotice !== true)) return fail('门口迁移提示无效。');
-  if (object(value.layout) && ((value.economyVersion as number) < ECONOMY_VERSION && value.layout.version === LAYOUT_VERSION || value.layout.version === LAYOUT_VERSION && (!value.layout.active || value.customerRouteVersion !== CUSTOMER_ROUTE_VERSION))) return fail('经济、家具与顾客路线版本不匹配。');
+  if (object(value.layout) && ((value.economyVersion as number) < 4 && value.layout.version === LAYOUT_VERSION || value.layout.version === LAYOUT_VERSION && (!value.layout.active || value.customerRouteVersion !== CUSTOMER_ROUTE_VERSION))) return fail('经济、家具与顾客路线版本不匹配。');
   if (retiredManager && object(value.layout) && value.layout.version !== LAYOUT_VERSION && (value.customerRouteVersion !== 3 || !Array.isArray(value.customers) || !value.customers.length)) return fail('旧路线只能用于尚未离店的迁移顾客。');
   if (retiredManager && object(value.layout) && Array.isArray(value.layout.coffeeSigns) && value.layout.coffeeSigns.some(sign => !object(sign) || sign.stored !== true)) return fail('旧咖啡墙牌必须收起。');
   const activeLayout = object(value.layout) && value.layout.active === true;
@@ -75,7 +80,9 @@ export function validateState(value: unknown): { ok: true; state: SliceState } |
   for (const entry of value.customers) {
     if (!object(entry) || !integer(entry.id, 1) || ids.has(entry.id) || !counterId(entry.counterId) || !value.counters.some(counter => object(counter) && counter.id === entry.counterId) || !number(entry.x, activeLayout ? -100 : legacyCustomerRoute ? -9 : WORLD.entryX - QUEUE_CAPACITY * WORLD.queueGap, activeLayout ? 100 : 7) || !number(entry.z, activeLayout ? -100 : 1.3, activeLayout ? 100 : legacyCustomerRoute ? 7 : WORLD.inboundZ) || !(activeLayout ? ['entering', 'queue', 'serving', 'receiving', 'seeking-seat', 'dining', 'leaving'] : ['entering', 'queue', 'serving', 'receiving', 'leaving']).includes(String(entry.phase)) || !number(entry.timer, 0, activeLayout && entry.phase === 'dining' ? 6 : 2) || typeof entry.hasCup !== 'boolean' || !integer(entry.skin, 0, 5)) return fail('顾客状态无效。');
     if (entry.id >= (value.nextCustomerId as number)) return fail('顾客标识顺序无效。');
-    if (entry.hasCup !== (entry.phase === 'receiving' || entry.phase === 'leaving' || activeLayout && (entry.phase === 'seeking-seat' || entry.phase === 'dining'))) return fail('顾客杯子状态无效。');
+    const stockoutDeparture = entry.departureReason === 'stockout';
+    if (entry.departureReason !== undefined && (!ingredientEconomy || !stockoutDeparture || entry.phase !== 'leaving' || entry.hasCup)) return fail('顾客缺货离店标识无效。');
+    if (entry.hasCup !== (entry.phase === 'receiving' || entry.phase === 'leaving' && !stockoutDeparture || activeLayout && (entry.phase === 'seeking-seat' || entry.phase === 'dining'))) return fail('顾客杯子状态无效。');
     if (!activeLayout) {
       if (entry.phase === 'leaving' && !integer(entry.timer, 0, 2) || entry.phase === 'receiving' && !number(entry.timer, 0, .7)) return fail('顾客动作计时无效。');
       if (entry.phase !== 'receiving' && entry.phase !== 'leaving' && entry.timer !== 0) return fail('顾客非交杯计时无效。');
@@ -141,7 +148,7 @@ export function validateState(value: unknown): { ok: true; state: SliceState } |
     if (state.customerRouteVersion !== CUSTOMER_ROUTE_VERSION) migrateLayoutDoors(state);
   } catch { return fail('咖啡等级、家具布局或路线状态无效。'); }
   // A one-time migrated archive must itself be durable in the current format.
-  if (!retiredManager || legacyCustomerRoute || localExitRoute) return validateState(state);
+  if (!ingredientEconomy || legacyCustomerRoute || localExitRoute) return validateState(state);
   return { ok: true, state };
 }
 
@@ -149,10 +156,13 @@ function decode(raw: string): { ok: true; envelope: Envelope } | { ok: false; st
   let value: unknown;
   try { value = JSON.parse(raw); } catch { return { ok: false, status: 'corrupt', message: '存档无法读取，原始内容已保留。请先备份或明确重置。' }; }
   if (object(value) && (number(value.offlinePolicyVersion, OFFLINE_POLICY_VERSION + 1) || number(value.schemaVersion, 2) || object(value.state) && (number(value.state.schemaVersion, 2) || number(value.state.economyVersion, ECONOMY_VERSION + 1) || number(value.state.managerRouteVersion, MANAGER_ROUTE_VERSION + 1) || number(value.state.customerRouteVersion, CUSTOMER_ROUTE_VERSION + 1) || object(value.state.layout) && number(value.state.layout.version, LAYOUT_VERSION + 1)))) return { ok: false, status: 'future', message: '这是较新版本的存档，当前版本不会覆盖它。请使用兼容的新版本。' };
-  if (!object(value) || value.schemaVersion !== 1 || value.offlinePolicyVersion !== undefined && value.offlinePolicyVersion !== 1 && value.offlinePolicyVersion !== 2 && value.offlinePolicyVersion !== OFFLINE_POLICY_VERSION || !number(value.savedAt, 0, 8.64e15) || typeof value.recordChangeTag !== 'string' || !value.recordChangeTag || value.recordChangeTag.length > 256) return { ok: false, status: 'corrupt', message: '存档格式或结算时间无效，原始内容已保留。' };
+  if (!object(value) || value.schemaVersion !== 1 || value.offlinePolicyVersion !== undefined && value.offlinePolicyVersion !== 1 && value.offlinePolicyVersion !== 2 && value.offlinePolicyVersion !== 3 && value.offlinePolicyVersion !== OFFLINE_POLICY_VERSION || !number(value.savedAt, 0, 8.64e15) || typeof value.recordChangeTag !== 'string' || !value.recordChangeTag || value.recordChangeTag.length > 256) return { ok: false, status: 'corrupt', message: '存档格式或结算时间无效，原始内容已保留。' };
   if ((value.saveId !== undefined || value.revision !== undefined) && (typeof value.saveId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(value.saveId) || !integer(value.revision, 1, Number.MAX_SAFE_INTEGER - 1))) return { ok: false, status: 'corrupt', message: '存档身份或修订号无效，原始内容已保留。' };
   if (value.importedFileHashes !== undefined && (!Array.isArray(value.importedFileHashes) || value.importedFileHashes.length > 32 || value.importedFileHashes.some(h => typeof h !== 'string' || !/^[a-f0-9]{64}$/.test(h)))) return { ok: false, status: 'corrupt', message: '导入记录无效，原始内容已保留。' };
   if (value.lastImportBackupKey !== undefined && (typeof value.lastImportBackupKey !== 'string' || !value.lastImportBackupKey.startsWith(`${SAVE_KEY}-import-backup-`) || value.lastImportBackupKey.length > 200)) return { ok: false, status: 'corrupt', message: '导入前备份标识无效，原始内容已保留。' };
+  // Raw schema and policy travel together: only a genuine pre-inventory archive
+  // may claim its final unlimited-stock interval. Validate before migration.
+  if (object(value.state) && (value.state.economyVersion === ECONOMY_VERSION && value.offlinePolicyVersion !== OFFLINE_POLICY_VERSION || integer(value.state.economyVersion, 1, 4) && value.offlinePolicyVersion === OFFLINE_POLICY_VERSION)) return { ok: false, status: 'corrupt', message: '经济版本与离线结算规则不匹配，原始内容已保留。' };
   const checked = validateState(value.state);
   if (!checked.ok) return { ok: false, status: 'corrupt', message: `${checked.message} 原始内容已保留。` };
   return { ok: true, envelope: { schemaVersion: 1, offlinePolicyVersion: value.offlinePolicyVersion as OfflinePolicyVersion | undefined, savedAt: value.savedAt, recordChangeTag: value.recordChangeTag, saveId: value.saveId as string | undefined, revision: value.revision as number | undefined, importedFileHashes: value.importedFileHashes as string[] | undefined, lastImportBackupKey: value.lastImportBackupKey as string | undefined, state: checked.state } };
@@ -315,7 +325,7 @@ export class LocalSaveRepository {
     if (!number(hiddenAt, 0, 8.64e15) || !number(now, 0, 8.64e15)) return this.failedLoad('offline-save-failed', '离线结算时间无效，存档未改变。', state, { accepted: false, amount: 0, seconds: 0 });
     const previous = this.baseRaw === null ? null : decode(this.baseRaw);
     const start = Math.max(hiddenAt, previous?.ok ? previous.envelope.savedAt : 0);
-    // A running page has already passed migration; live intervals use v3.
+    // A running page has already passed migration; live intervals use stock-aware v4.
     return this.settleInterval(state, Math.max(0, (now - start) / 1000), now, OFFLINE_POLICY_VERSION, deferOffline, hiddenAt);
   }
   save(state: SliceState, now = Date.now()): SaveResult { return this.write(state, now); }

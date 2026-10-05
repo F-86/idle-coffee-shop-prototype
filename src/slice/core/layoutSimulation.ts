@@ -8,8 +8,8 @@ interface Rules {
   stepSeconds: number;
   customerSpeed: number;
   emit(type: SliceEvent['type'], payload?: Omit<Partial<SliceEvent>, 'id' | 'type'>): void;
-  price(counter: Counter): number;
-  duration(counter: Counter): number;
+  canStart(counter: Counter): boolean;
+  startBrew(counter: Counter, customer: Customer): boolean;
   traceCustomer(kind: 'spawn' | 'phase' | 'despawn', customer: Customer): void;
 }
 /** All walkers reserve one whole route. Stations remain independently reachable
@@ -57,7 +57,7 @@ export function createLayoutSimulation(state: SliceState, rules: Rules) {
     if (state.customers.length >= 32 || state.customers.some(customer => actorReservations(customer).has('-8,5'))) return false;
     const counters = placedCounters().map(item => state.counters.find(counter => counter.id === item.counterId)!);
     const start = (state.nextCustomerId - 1) % counters.length;
-    const counter = Array.from({ length: counters.length }, (_, index) => counters[(start + index) % counters.length]).find(counter => !state.customers.some(customer => customer.counterId === counter.id && unpaid(customer)));
+    const counter = Array.from({ length: counters.length }, (_, index) => counters[(start + index) % counters.length]).find(counter => rules.canStart(counter) && !state.customers.some(customer => customer.counterId === counter.id && unpaid(customer)));
     if (!counter) return false;
     const id = state.nextCustomerId++;
     const customer: Customer = { id, x: -8, z: 5, phase: 'entering', counterId: counter.id, timer: 0, hasCup: false, skin: (id * 37 + 11) % 6 };
@@ -67,7 +67,8 @@ export function createLayoutSimulation(state: SliceState, rules: Rules) {
     for (const customer of state.customers) {
       const counter = state.counters.find(counter => counter.id === customer.counterId)!;
       if (customer.phase === 'queue' && !counter.brew) {
-        customer.phase = 'serving'; counter.brew = { recipe: counter.recipe, customerId: customer.id, elapsed: 0, duration: rules.duration(counter), price: rules.price(counter) };
+        if (rules.startBrew(counter, customer)) customer.phase = 'serving';
+        else { customer.phase = 'leaving'; customer.departureReason = 'stockout'; }
         rules.traceCustomer('phase', customer);
       } else if (customer.phase === 'receiving') {
         customer.timer = round(customer.timer + STEP);

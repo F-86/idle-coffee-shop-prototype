@@ -18,6 +18,7 @@ const { RouteDiagnostics, isRouteQA } = await import('../src/slice/qa/RouteDiagn
 const { RouteQAPanel } = await import('../src/slice/qa/RouteQAPanel.ts');
 const { PerformanceQAPanel } = await import('../src/slice/qa/PerformanceQAPanel.ts');
 const { createEngine, createInitialState, recipeById, counterPrice, counterBrewSeconds, coffeePrice, coffeeBrewSeconds, COFFEE_MAX_LEVEL } = await import('../src/slice/core/engine.ts');
+const { INGREDIENT_CONFIG } = await import('../src/slice/core/ingredients.ts');
 const { LocalSaveRepository, SAVE_KEY, createMemoryStorage } = await import('../src/slice/core/persistence.ts');
 const { addFurniture, getLayout, GRID, LAYOUT_PRICES, layoutCost, MAX_COUNTERS, MAX_TABLES, moveFurniture, rotateFurniture, storeFurniture, validateLayout } = await import('../src/slice/core/layout.ts');
 const { createPortableSave, parsePortableSave, overviewOf, portableFilename, MAX_PORTABLE_BYTES } = await import('../src/slice/core/portableSave.ts');
@@ -227,7 +228,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   }
   class FakeDate extends Date { constructor(...args) { super(...(args.length ? args : [clock.now])); } static now() { return clock.now; } }
   const source = main.replace(/^import\s[\s\S]*?;\n/gm, '').replace(/if \(import\.meta\.hot\) import\.meta\.hot\.dispose\(\(\) => cleanup\(\)\);/, 'captureCleanup(() => cleanup());');
-  const context = { document, window, location: { search: query }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, HTMLInputElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, RouteDiagnostics, isRouteQA, RouteQAPanel, PerformanceQAPanel, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, createEngine, recipeById, counterPrice, counterBrewSeconds, coffeePrice, coffeeBrewSeconds, COFFEE_MAX_LEVEL, addFurniture, getLayout, GRID, LAYOUT_PRICES, layoutCost, MAX_COUNTERS, MAX_TABLES, moveFurniture, rotateFurniture, storeFurniture, validateLayout, LocalSaveRepository, SAVE_KEY, createPortableSave: trackFileTask(portableOverrides.createPortableSave ?? createPortableSave), parsePortableSave: trackFileTask(portableOverrides.parsePortableSave ?? parsePortableSave), overviewOf, portableFilename, MAX_PORTABLE_BYTES, crypto: globalThis.crypto, TextEncoder, File, navigator, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL: url => revokedUrls.push(url) }, Blob, console, setTimeout: (callback, delay = 0) => { const id = ++nextId; timers.set(id, callback); timerDelays.set(id, delay); return id; }, clearTimeout: id => { timers.delete(id); timerDelays.delete(id); }, requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
+  const context = { document, window, location: { search: query }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, HTMLInputElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, RouteDiagnostics, isRouteQA, RouteQAPanel, PerformanceQAPanel, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, INGREDIENT_CONFIG, createEngine, recipeById, counterPrice, counterBrewSeconds, coffeePrice, coffeeBrewSeconds, COFFEE_MAX_LEVEL, addFurniture, getLayout, GRID, LAYOUT_PRICES, layoutCost, MAX_COUNTERS, MAX_TABLES, moveFurniture, rotateFurniture, storeFurniture, validateLayout, LocalSaveRepository, SAVE_KEY, createPortableSave: trackFileTask(portableOverrides.createPortableSave ?? createPortableSave), parsePortableSave: trackFileTask(portableOverrides.parsePortableSave ?? parsePortableSave), overviewOf, portableFilename, MAX_PORTABLE_BYTES, crypto: globalThis.crypto, TextEncoder, File, navigator, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL: url => revokedUrls.push(url) }, Blob, console, setTimeout: (callback, delay = 0) => { const id = ++nextId; timers.set(id, callback); timerDelays.set(id, delay); return id; }, clearTimeout: id => { timers.delete(id); timerDelays.delete(id); }, requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
   runInNewContext(stripTypeScriptTypes(source), context, { timeout: 1500 });
   const debug = window.__coffeeSliceDebug;
   const state = () => structuredClone(debug.readState());
@@ -322,8 +323,8 @@ test('TC-3D-009 REQ-3D-016 compact HUD exposes money, durable pause and settings
   assert.deepEqual(declarations('.wallet-chip', 'user-select'), ['none']);
   const dock = outsideModal.match(/<nav id="action-dock"[\s\S]*?<\/nav>/)?.[0];
   assert.ok(dock);
-  assert.deepEqual(openingTags(dock, 'button').map(tag => /id="([^"]+)"/.exec(tag)?.[1]), ['dock-coffee', 'dock-background', 'dock-furniture', 'dock-invite']);
-  assert.equal(openingTags(dock, 'img').length, 4);
+  assert.deepEqual(openingTags(dock, 'button').map(tag => /id="([^"]+)"/.exec(tag)?.[1]), ['dock-coffee', 'dock-ingredients', 'dock-background', 'dock-furniture', 'dock-invite']);
+  assert.equal(openingTags(dock, 'img').length, 5);
   for (const tag of openingTags(dock, 'button')) assert.match(tag, /aria-label="[^"]+"/);
   assert.doesNotMatch(main, /positionControls|beginAnchorPointer/);
   assert.equal(rules('.world-button').length, 0);
@@ -395,7 +396,7 @@ test('TC-3D-009 REQ-3D-016 HUD and dock remain outside the closed native operati
   assert.ok(modalStart >= 0);
   assert.doesNotMatch(openingTags(modal, 'dialog')[0], /\bopen(?:\s|=|>)/);
   const panels = openingTags(modal, 'div').filter(tag => tag.includes('class="operation-panel"'));
-  assert.equal(panels.length, 7);
+  assert.equal(panels.length, 8);
   for (const panel of panels) assert.match(panel, /\bhidden(?:\s|>)/);
   assert.doesNotMatch(outsideModal, /class="operation-panel"|id="counter-panel"|id="settings-panel"/);
   assert.deepEqual(declarations('[hidden]', 'display'), ['none']);
@@ -443,7 +444,7 @@ test('TC-3D-008 REQ-3D-014 scene keyboard access is provided on the real canvas 
   assert.match(canvas, /aria-describedby="[^"]+"/);
   assert.match(outsideModal, /键盘|Tab|Enter|方向键|空格/);
   assert.match(main, /keydown/);
-  assert.deepEqual(openingTags(permanentOutsideModal, 'button').map(tag => /id="([^"]+)"/.exec(tag)?.[1]), ['business-toggle', 'settings', 'dock-coffee', 'dock-background', 'dock-furniture', 'dock-invite'], 'all permanent buttons are visible business or dock controls');
+  assert.deepEqual(openingTags(permanentOutsideModal, 'button').map(tag => /id="([^"]+)"/.exec(tag)?.[1]), ['business-toggle', 'settings', 'dock-coffee', 'dock-ingredients', 'dock-background', 'dock-furniture', 'dock-invite'], 'all permanent buttons are visible business or dock controls');
   assert.ok(rules('#coffee-canvas:focus-visible').length, 'keyboard users can locate their scene focus');
   assert.ok(declarations('#coffee-canvas:focus-visible', 'outline-offset').some(value => Number.parseFloat(value) < 0), 'full-viewport focus ring must be inset so overflow:hidden does not clip it');
 });
@@ -735,7 +736,7 @@ function omitOfflineClaims(state) {
 // before the app's loader sees them and would hide boot/reload migration regressions.
 function legacyRouteProgress(routeVersion) {
   const state = createInitialState();
-  state.economyVersion = 2; delete state.layout; state.customerRouteVersion = 2;
+  state.economyVersion = 2; delete state.ingredients; delete state.layout; state.customerRouteVersion = 2;
   if (routeVersion === undefined) delete state.managerRouteVersion;
   else state.managerRouteVersion = routeVersion;
   state.paused = true;
@@ -759,7 +760,7 @@ test('TC-3D-010 legacy raw route saves transfer pending and carried receipts onc
     try {
       const migrated = f.state();
       assert.equal(migrated.paused, true);
-      assert.equal(migrated.economyVersion, 4);
+      assert.equal(migrated.economyVersion, 5);
       assert.equal(migrated.wallet, initial.wallet + 570);
       assert.equal(migrated.totalEarned, initial.totalEarned, 'legacy receipts were already minted');
       assert.equal(migrated.spend, initial.spend); assert.equal(migrated.elapsed, initial.elapsed);
@@ -852,7 +853,7 @@ test('TC-3D-009 REQ-3D-016 recovering an external paused save preserves its paus
   const f = fixture(); await f.flushOffline();
   try {
     const paused = pausedProgress();
-    const raw = JSON.stringify({ schemaVersion: 1, savedAt: f.clock.now - 3600000, recordChangeTag: 'valid-paused-other-window', state: paused });
+    const raw = JSON.stringify({ schemaVersion: 1, offlinePolicyVersion: 4, savedAt: f.clock.now - 3600000, recordChangeTag: 'valid-paused-other-window', state: paused });
     f.memory.setItem(SAVE_KEY, raw); f.window.emit('storage', { key: SAVE_KEY, newValue: raw }); assertProtected(f);
     f.click('#settings'); f.click('#reload'); await f.flushOffline();
     assert.equal(f.state().paused, true); assert.equal(f.element('#business-toggle').disabled, false);
@@ -1144,7 +1145,7 @@ test('TC-3D-014 QA sessions reset on reload/new shop and report missing renderer
 });
 
 test('TC-3D-014 legacy-route actors are visibly marked rather than misreported as early new-route exits', () => {
-  const initial = createInitialState(); initial.economyVersion = 2; delete initial.layout; initial.customerRouteVersion = 1; initial.nextCustomerId = 2;
+  const initial = createInitialState(); initial.economyVersion = 2; delete initial.ingredients; delete initial.layout; initial.customerRouteVersion = 1; initial.nextCustomerId = 2;
   initial.customers = [{ id: 1, counterId: 'counter-a', phase: 'leaving', hasCup: true, skin: 0, timer: 2, x: -7, z: 5 }];
   const f = fixture({ initial });
   try {
@@ -1670,7 +1671,7 @@ test('TC-3D-020 pending storage conflict, newer read and disposal invalidate all
     try {
       const frozen = f.state();
       const foreignState = createEngine(); foreignState.advance(11);
-      const foreign = JSON.stringify({ schemaVersion: 1, offlinePolicyVersion: 3, savedAt: f.clock.now, recordChangeTag: `new-${kind}`, state: foreignState.snapshot() });
+      const foreign = JSON.stringify({ schemaVersion: 1, offlinePolicyVersion: 4, savedAt: f.clock.now, recordChangeTag: `new-${kind}`, state: foreignState.snapshot() });
       if (kind === 'dispose') f.dispose();
       else {
         f.memory.setItem(SAVE_KEY, foreign);
@@ -1713,7 +1714,7 @@ test('TC-3D-020 hidden retry retains unsaved source after write failure and canc
 });
 
 test('TC-3D-020 legacy policy settles its old interval once while the result shows only committed money and away time', async () => {
-  const initial = createInitialState();
+  const initial = createInitialState(); initial.economyVersion = 4; delete initial.ingredients;
   const now = 20_000_000, raw = JSON.stringify({ schemaVersion: 1, savedAt: now - 3 * 3600000, recordChangeTag: 'legacy-policy-details', state: initial });
   const f = fixture({ raw, now });
   try {
@@ -1724,12 +1725,12 @@ test('TC-3D-020 legacy policy settles its old interval once while the result sho
     assert.equal(f.element('#offline-legacy'), null, 'migration diagnostics stay out of the compact result');
     assert.equal(f.element('#offline-deposited').textContent, `¥${(legacy.amount / 100).toFixed(2)}`);
     assert.equal(f.element('#offline-duration').textContent, '离开了 3 小时');
-    assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).offlinePolicyVersion, 3);
+    assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).offlinePolicyVersion, 4);
     f.click('#offline-done');
     f.document.hidden = true; f.document.emit('visibilitychange');
     f.clock.now += 60000; f.clock.performance += 60000;
     f.document.hidden = false; f.document.emit('visibilitychange'); await f.flushOffline({ dismissResult: false });
-    const current = expected.applyOffline(60, f.state().lastOfflineClaimId, 3);
+    const current = expected.applyOffline(60, f.state().lastOfflineClaimId, 4);
     assert.deepEqual(f.state(), expected.snapshot(), 'later intervals use the unchanged 80% policy');
     assert.equal(f.state().elapsed, 3648);
     assert.equal(f.element('#offline-deposited').textContent, `¥${(current.amount / 100).toFixed(2)}`);
@@ -1840,14 +1841,19 @@ test('TC-3D-020 save and every business action guard unclassified foreground tim
   }
 });
 
-test('TC-3D-020 verified 300-second foreground computation tail advances before purchases, recipe changes and invites', async () => {
+test('TC-3D-020 verified 300-second foreground computation tail advances before purchases, recipe changes and invites', async t => {
   for (const action of ['save', 'invite', 'recipe', 'counter', 'coffee', 'pause']) {
     const initial = createEngine(); initial.advance(22);
     for (let i = 0; i < 1000 && !initial.state.counters.some(counter => counter.brew); i++) initial.advance(.05);
     assert.ok(initial.state.counters.some(counter => counter.brew), 'fixture includes existing brew snapshots');
+    // Empty inventory makes replay cheaper. Control only the repository's wall
+    // budget so these ten observed yields never depend on machine speed.
+    let sliceTick = 0;
+    const sliceClock = t.mock.method(performance, 'now', () => (sliceTick += 10));
     const f = fixture({ initial: initial.snapshot(), now: 5_000_000, savedAtAgoSeconds: 3600 });
     try {
       for (let turn = 0; turn < 10; turn++) { f.tick(30); await f.stepOffline(); }
+      sliceClock.mock.restore();
       await f.flushOffline();
       const committed = JSON.parse(f.memory.getItem(SAVE_KEY)).state;
       assert.ok(Math.abs(committed.elapsed - initial.state.elapsed - 2880) < 1e-8);
@@ -1905,7 +1911,7 @@ function deferredFileOperation() {
 async function portableFixture({ seconds = 90, savedAt = 1000, exportedAt = 2000, saveId = 'portable-source', revision = 7, state, ...fields } = {}) {
   const engine = createEngine(); engine.advance(seconds);
   const snapshot = state ?? engine.snapshot();
-  return createPortableSave({ gameSchemaVersion: 1, economyVersion: snapshot.economyVersion, offlinePolicyVersion: 3, savedAt, exportedAt, saveId, revision, overview: overviewOf(snapshot), state: snapshot, ...fields });
+  return createPortableSave({ gameSchemaVersion: 1, economyVersion: snapshot.economyVersion, offlinePolicyVersion: 4, savedAt, exportedAt, saveId, revision, overview: overviewOf(snapshot), state: snapshot, ...fields });
 }
 function openFilePanel(f) {
   if (!f.element('#operation-dialog').open) f.click('#settings');
@@ -2358,7 +2364,7 @@ const withoutDetails = markup => markup.replace(/<details\b[^>]*>[\s\S]*?<\/deta
 const centsLabel = cents => `¥${(cents / 100).toFixed(2)}`;
 
 test('TC-3D-022 panel controls keep unique accessible IDs and an enabled styled native file picker (static contract)', () => {
-  const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
+  const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(match => match[1]);
   assert.equal(new Set(ids).size, ids.length, 'the redesign must not duplicate control, heading or description IDs');
   for (const match of html.matchAll(/\b(?:aria-labelledby|aria-describedby)="([^"]+)"/g)) {
     for (const id of match[1].split(/\s+/)) assert.ok(ids.includes(id), `accessible-name/description target ${id} exists`);
@@ -2400,7 +2406,7 @@ test('TC-3D-022 technical metadata and full ledger are closed disclosures while 
   for (const safety of [/当前小店将被完整替换/, /较早进度会回退/, /金币不合并/, /文件导出至本次导入之间不补离线收益/, /替换前会先校验本地备份/, /备份失败就停止/, /已关闭其他游戏标签页和窗口/, /多窗口同时写入可能造成冲突/]) assert.match(confirmation, safety, 'essential confirmation text cannot be hidden in details');
   for (const id of ['file-current-summary', 'file-incoming-summary', 'file-older-warning', 'file-repeat-warning', 'file-confirm', 'file-cancel']) assert.match(confirmation, new RegExp(`id="${id}"`));
   const offlineMarkup = modal.slice(modal.indexOf('<div id="offline-result"'));
-  assert.match(offlineMarkup, /本次到账/); assert.match(offlineMarkup, /已计入当前金额/); assert.match(offlineMarkup, /回到小店/);
+  assert.match(offlineMarkup, /本次净收入/); assert.match(offlineMarkup, /已计入当前金额/); assert.match(offlineMarkup, /回到小店/);
   assert.doesNotMatch(offlineMarkup, /offline-(?:generated|pending|legacy)|有效经营|期间售出|台面待收|经理运送|50%|SHA-256/);
 });
 
@@ -2664,7 +2670,7 @@ function fundedInitial(wallet) {
 test('TC-3D-023 REQ-3D-033 recipe choice, counter upgrades and coffee upgrades have distinct controls (static contract)', () => {
   const recipe = panelMarkup('recipe-panel', 'counter-panel');
   const counter = panelMarkup('counter-panel', 'coffee-panel');
-  const coffee = panelMarkup('coffee-panel', 'background-panel');
+  const coffee = panelMarkup('coffee-panel', 'ingredients-panel');
   assert.equal(openingTags(recipe, 'button').length, 2);
   assert.match(recipe, /data-select-recipe="espresso"/); assert.match(recipe, /data-select-recipe="latte"/);
   assert.match(recipe, /下一杯生效/);
@@ -2905,7 +2911,7 @@ test('TC-3D-023 REQ-3D-033 portable preview, cancellation, replacement and recov
   const current = fundedInitial(50000); current.coffeeLevels = { espresso: 3, latte: 5 };
   const source = fundedInitial(30000); source.coffeeLevels = { espresso: 7, latte: 2 };
   const incoming = await portableFixture({ state: source, savedAt: 1000, exportedAt: 2000, saveId: 'coffee-progress-source' });
-  assert.equal(JSON.parse(incoming.text).formatVersion, 4);
+  assert.equal(JSON.parse(incoming.text).formatVersion, 5);
   const f = fixture({ initial: current, now: 130000 });
   try {
     const before = f.state(), bytes = f.memory.getItem(SAVE_KEY);
@@ -2934,9 +2940,9 @@ test('TC-3D-023 REQ-3D-033 portable preview, cancellation, replacement and recov
     assert.equal(f.element('#file-download').disabled, false);
     f.click('#file-download');
     const recoveryText = await f.blobs.at(-1).text(), recovery = await parsePortableSave(recoveryText);
-    assert.equal(JSON.parse(recoveryText).formatVersion, 4, 'recovery download uses the coffee-aware portable format');
+    assert.equal(JSON.parse(recoveryText).formatVersion, 5, 'recovery download uses the coffee-aware portable format');
     assert.equal(recovery.ok, true);
-    assert.equal(recovery.file.payload.economyVersion, 4);
+    assert.equal(recovery.file.payload.economyVersion, 5);
     assert.deepEqual(recovery.file.payload.state, before, 'recovery export preserves the entire pre-import live snapshot');
     assert.deepEqual(recovery.file.payload.overview.coffeeLevels, current.coffeeLevels);
     assert.deepEqual(f.state(), source, 'exporting the old shop cannot replace current progress');
@@ -3118,7 +3124,7 @@ test('TC-3D-024 skip, finish and interrupted refresh never automatically repeat 
 test('TC-3D-024 existing pristine, developed, paused and legacy saves are never mistaken for newcomers', async () => {
   const developed = createEngine(); developed.advance(50);
   const paused = createInitialState(); paused.paused = true;
-  const legacy = createInitialState(); delete legacy.coffeeLevels; delete legacy.layout; legacy.customerRouteVersion = 2; legacy.economyVersion = 1;
+  const legacy = createInitialState(); delete legacy.coffeeLevels; delete legacy.layout; legacy.customerRouteVersion = 2; legacy.economyVersion = 1; delete legacy.ingredients;
   for (const initial of [createInitialState(), developed.snapshot(), paused, legacy]) {
     const f = fixture({ initial });
     try {
@@ -3730,5 +3736,249 @@ test('TC-3D-027 coffee tabs switch within one read-only modal and keep independe
     const expected = createEngine(before); expected.upgradeCoffee('latte'); f.click('#coffee-upgrade');
     assert.deepEqual(f.state(), expected.snapshot());
     assert.equal(f.state().coffeeLevels.espresso, before.coffeeLevels.espresso);
+  } finally { f.dispose(); }
+});
+
+// TC-3D-028 manual pantry: actual app handlers and real economic/save core.
+// These cases do not replace native-dialog, mobile pixel or assistive-tech QA.
+test('TC-3D-028 pantry is a pictured fifth dock action with separate accessible quantity and purchase controls', () => {
+  const pantry = panelMarkup('ingredients-panel', 'background-panel');
+  assert.match(pantry, /所有柜台共用原料/); assert.match(pantry, /不会自动补货/); assert.match(pantry, /用水免费/);
+  for (const id of ['beans', 'milk']) {
+    const asset = `catalog-${id}.svg`;
+    assert.match(pantry, new RegExp(asset));
+    assert.match(readFileSync(new URL(`../public/assets/${asset}`, import.meta.url), 'utf8'), /<svg\b/);
+    assert.match(pantry, new RegExp(`id="ingredient-${id}-stock"`));
+    assert.match(pantry, new RegExp(`data-buy-ingredient="${id}"`));
+    for (const mode of ['one', 'batch', 'fill']) assert.match(pantry, new RegExp(`id="ingredient-${id}-${mode}"`));
+  }
+  assert.match(readFileSync(new URL('../public/assets/catalog-ingredients.svg', import.meta.url), 'utf8'), /<svg\b/);
+  assert.ok(declarations('.ingredient-options button', 'min-height').some(value => Number.parseFloat(value) >= 44));
+  assert.ok(rules('.action-dock button').some(rule => rule.parent.type === 'atrule' && rule.parent.params === '(max-width: 380px)' && rule.nodes.some(node => node.prop === 'min-width' && node.value === '44px')));
+  assert.ok(rules('.action-dock').some(rule => rule.parent.type === 'atrule' && rule.parent.params === '(max-width: 380px)' && rule.nodes.some(node => node.prop === 'max-width' && node.value === 'calc(100vw - 20px)')));
+});
+
+test('TC-3D-028 opening and selecting pantry quantities are read-only; explicit purchases show exact cost and save shared stock', () => {
+  const initial = fundedInitial(10000); initial.paused = true;
+  const f = fixture({ initial });
+  try {
+    const before = f.state(), raw = f.memory.getItem(SAVE_KEY);
+    f.element('#dock-ingredients').focus(); f.click('#dock-ingredients');
+    assert.equal(f.element('#ingredients-panel').hidden, false);
+    assert.equal(f.element('#dialog-title').textContent, '原料小仓库');
+    for (const id of ['beans', 'milk']) {
+      const config = INGREDIENT_CONFIG[id];
+      assert.equal(f.element(`#ingredient-${id}-stock`).textContent, `${before.ingredients[id]} / ${config.capacity} 份`);
+      assert.equal(f.element(`#ingredient-${id}-unit`).textContent, `${centsLabel(config.unitCost)} / 份`);
+      for (const mode of ['one', 'batch', 'fill']) {
+        f.click(`#ingredient-${id}-${mode}`);
+        const quote = createEngine(before).ingredientQuote(id, mode);
+        assert.equal(f.element(`#ingredient-${id}-${mode}-quantity`).textContent, `${quote.quantity} 份`);
+        assert.equal(f.element(`#ingredient-${id}-${mode}-cost`).textContent, centsLabel(quote.cost));
+        assert.equal(f.element(`#ingredient-${id}-buy`).textContent, `购买 ${quote.quantity} 份 · ${centsLabel(quote.cost)}`);
+        assert.equal(f.element(`#ingredient-${id}-${mode}`).getAttribute('aria-pressed'), 'true');
+        assert.deepEqual(f.state(), before); assert.equal(f.memory.getItem(SAVE_KEY), raw);
+      }
+    }
+    f.click('#ingredient-beans-batch');
+    const expected = createEngine(before); expected.buyIngredient('beans', 'batch');
+    f.click('#ingredient-beans-buy');
+    assert.deepEqual(f.state(), expected.snapshot());
+    assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state.ingredients, expected.state.ingredients);
+    assert.equal(f.state().paused, true, 'restocking does not reopen a closed shop');
+    assert.match(f.element('#ingredient-beans-note').textContent, /暂停营业.*手动补货/);
+    assert.match(f.element('#toast').textContent, /已购买 20 份咖啡豆 · ¥4.00/);
+    f.click('#dialog-close');
+    assert.equal(f.document.activeElement, f.element('#dock-ingredients'));
+    const closed = f.state(); f.element('#ingredient-beans-buy').emit('click');
+    assert.deepEqual(f.state(), closed, 'stale closed-dialog action is inert');
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-028 a short batch charges only available space; full and repeated clicks do not overfill or charge', () => {
+  const initial = fundedInitial(10000); initial.paused = true; initial.ingredients = { beans: 118, milk: 79 };
+  const f = fixture({ initial });
+  try {
+    f.click('#dock-ingredients');
+    for (const id of ['beans', 'milk']) {
+      const before = f.state(), config = INGREDIENT_CONFIG[id], quantity = config.capacity - before.ingredients[id];
+      assert.equal(f.element(`#ingredient-${id}-batch-quantity`).textContent, `${quantity} 份`);
+      assert.equal(f.element(`#ingredient-${id}-batch-cost`).textContent, centsLabel(quantity * config.unitCost));
+      f.click(`#ingredient-${id}-buy`);
+      assert.equal(f.state().ingredients[id], config.capacity);
+      assert.equal(f.state().wallet, before.wallet - quantity * config.unitCost);
+      assert.equal(f.element(`#ingredient-${id}-buy`).disabled, true);
+      assert.equal(f.element(`#ingredient-${id}-buy`).textContent, '库存已满');
+      const filled = f.state(), bytes = f.memory.getItem(SAVE_KEY);
+      f.element(`#ingredient-${id}-buy`).emit('click'); f.element(`#ingredient-${id}-buy`).emit('click');
+      assert.deepEqual(f.state(), filled); assert.equal(f.memory.getItem(SAVE_KEY), bytes);
+    }
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-028 insufficient funds can choose one portion, and zero-bean insolvency is explicit without a free refill', () => {
+  const initial = fundedInitial(20); initial.paused = true; initial.ingredients = { beans: 0, milk: 0 };
+  const f = fixture({ initial });
+  try {
+    f.click('#dock-ingredients');
+    assert.equal(f.element('#ingredient-beans-buy').disabled, true);
+    assert.match(f.element('#ingredient-beans-note').textContent, /余额不足.*选择更少数量/);
+    const before = f.state(); f.element('#ingredient-beans-buy').emit('click'); assert.deepEqual(f.state(), before);
+    f.click('#ingredient-beans-one'); assert.equal(f.element('#ingredient-beans-buy').disabled, false);
+    f.click('#ingredient-beans-buy'); assert.equal(f.state().wallet, 0); assert.equal(f.state().ingredients.beans, 1);
+    assert.equal(f.element('#ingredient-beans-buy').disabled, true);
+  } finally { f.dispose(); }
+  const poor = fundedInitial(19); poor.ingredients = { beans: 0, milk: 5 };
+  const blocked = fixture({ initial: poor });
+  try {
+    blocked.click('#dock-ingredients');
+    assert.equal(blocked.element('#ingredient-supply-note').textContent, '原料不足，余额也不够购买咖啡豆；没有自动补货。');
+    const before = blocked.state();
+    for (const mode of ['one', 'batch', 'fill']) { blocked.click(`#ingredient-beans-${mode}`); blocked.element('#ingredient-beans-buy').emit('click'); }
+    assert.deepEqual(blocked.state(), before);
+    assert.equal(blocked.element('#dock-ingredients').classList.contains('needs-stock'), true);
+  } finally { blocked.dispose(); }
+});
+
+test('TC-3D-028 milk shortages explain espresso switching, and coffee panels show exact ingredient requirements', () => {
+  const initial = createInitialState(); initial.ingredients.milk = 0;
+  const f = fixture({ initial });
+  try {
+    f.click('#dock-ingredients');
+    assert.match(f.element('#ingredient-supply-note').textContent, /拿铁暂停制作.*切换为浓缩.*无需购买牛奶/);
+    f.click('#dialog-close'); openCoffee(f, 'latte');
+    assert.match(f.element('#coffee-stock-note').textContent, /牛奶用完.*切换为浓缩/);
+    f.click('#dialog-close'); f.action({ type: 'recipe', id: 'counter-b' });
+    assert.match(f.element('#recipe-stock-note').textContent, /牛奶用完/);
+    const before = f.state(), espresso = f.nodes.find(node => node.dataset.selectRecipe === 'espresso');
+    f.root.emit('click', { target: espresso });
+    assert.equal(f.state().counters[1].recipe, 'espresso');
+    assert.deepEqual(f.state().ingredients, before.ingredients);
+    assert.match(f.element('#recipe-stock-note').textContent, /1 份咖啡豆.*用水免费/);
+    f.click('#dialog-close'); f.action({ type: 'counter', id: 'counter-b' });
+    assert.match(f.element('#counter-stock-note').textContent, /1 份咖啡豆.*用水免费/);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-028 recovery, hidden-page and file-preview guards reject forged ingredient purchase events', async () => {
+  for (const raw of ['{broken', JSON.stringify({ schemaVersion: 999 })]) {
+    const f = fixture({ raw });
+    try {
+      f.click('#dock-ingredients'); const before = f.state();
+      assert.equal(f.element('#ingredient-beans-buy').disabled, true);
+      assert.match(f.element('#ingredient-beans-note').textContent, /先到设置恢复存档/);
+      f.element('#ingredient-beans-buy').emit('click'); f.element('#ingredient-milk-buy').emit('click');
+      assert.deepEqual(f.state(), before); assert.equal(f.memory.getItem(SAVE_KEY), raw);
+    } finally { f.dispose(); }
+  }
+  const f = fixture();
+  try {
+    f.click('#dock-ingredients'); const before = f.state();
+    f.document.hidden = true; f.element('#ingredient-beans-buy').emit('click');
+    assert.deepEqual(f.state(), before);
+    f.document.hidden = false; f.click('#dialog-close');
+    const file = await portableFixture(); await reviewPortable(f, file);
+    const preview = f.state(), bytes = f.memory.getItem(SAVE_KEY);
+    f.element('#dock-ingredients').emit('click'); f.element('#ingredient-beans-buy').emit('click');
+    assert.equal(f.element('#files-panel').hidden, false);
+    assert.deepEqual(f.state(), preview); assert.equal(f.memory.getItem(SAVE_KEY), bytes);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-028 file preview and export include separate current and incoming ingredient counts', async () => {
+  const current = createInitialState(); current.ingredients = { beans: 8, milk: 3 };
+  const source = createInitialState(); source.ingredients = { beans: 73, milk: 62 };
+  const file = await portableFixture({ state: source });
+  const f = fixture({ initial: current });
+  try {
+    await reviewPortable(f, file);
+    for (const suffix of ['summary', 'details']) {
+      assert.match(f.element(`#file-current-${suffix}`).textContent, /咖啡豆 8 \/ 120 · 牛奶 3 \/ 80/);
+      assert.match(f.element(`#file-incoming-${suffix}`).textContent, /咖啡豆 73 \/ 120 · 牛奶 62 \/ 80/);
+    }
+    f.click('#file-cancel'); f.click('#file-prepare'); await f.flushFiles();
+    assert.match(f.element('#file-export-summary').textContent, /咖啡豆 8 \/ 120 · 牛奶 3 \/ 80/);
+    f.click('#file-download');
+    const exported = JSON.parse(JSON.parse(await f.blobs.at(-1).text()).payloadText);
+    assert.deepEqual(exported.state.ingredients, current.ingredients);
+    assert.equal(exported.offlinePolicyVersion, 4);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-028 offline exhaustion displays committed net change and never buys stock during settlement', async () => {
+  const initial = createInitialState(); initial.ingredients = { beans: 1, milk: 1 };
+  const f = fixture({ initial, now: 10_000_000, savedAtAgoSeconds: 3600 });
+  try {
+    const before = f.state(), bytes = f.memory.getItem(SAVE_KEY);
+    f.element('#dock-ingredients').emit('click'); f.element('#ingredient-beans-buy').emit('click');
+    assert.deepEqual(f.state(), before); assert.equal(f.memory.getItem(SAVE_KEY), bytes);
+    await f.flushOffline({ dismissResult: false });
+    assert.equal(f.element('#offline-result').hidden, false);
+    assert.equal(f.element('#offline-stockout').hidden, false);
+    assert.equal(f.element('#offline-deposited').textContent, centsLabel(f.state().wallet - initial.wallet));
+    assert.equal(f.state().ingredients.beans, 0);
+    assert.equal(f.state().spend, initial.spend);
+    assert.equal(f.element('#offline-duration').textContent, '离开了 1 小时');
+    f.click('#offline-done'); f.click('#dock-ingredients');
+    assert.equal(f.element('#ingredients-panel').hidden, false);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-028 purchase write failure and conflict report unsaved inventory rather than false success', () => {
+  for (const failure of ['write', 'conflict']) {
+    const initial = createInitialState(); initial.paused = true;
+    const f = fixture({ initial });
+    try {
+      f.click('#dock-ingredients');
+      if (failure === 'write') f.storageControl.writeUnavailable = true;
+      else { const foreign = JSON.parse(f.memory.getItem(SAVE_KEY)); foreign.recordChangeTag = 'foreign-before-pantry-buy'; f.memory.setItem(SAVE_KEY, JSON.stringify(foreign)); }
+      const raw = f.memory.getItem(SAVE_KEY), before = f.state(); f.click('#ingredient-beans-buy');
+      assert.equal(f.state().ingredients.beans, before.ingredients.beans + 20);
+      assert.equal(f.state().wallet, before.wallet - 400);
+      assert.equal(f.memory.getItem(SAVE_KEY), raw);
+      assert.doesNotMatch(f.element('#toast').textContent, /^已购买/);
+      assert.match(f.element('#toast').textContent, failure === 'write' ? /保存失败.*导出备份/ : /存档冲突.*进度已保护/);
+      if (failure === 'conflict') {
+        assert.equal(f.element('#ingredient-beans-buy').disabled, true);
+        const protectedState = f.state(); f.element('#ingredient-beans-buy').emit('click'); assert.deepEqual(f.state(), protectedState);
+      }
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-028 changed fill price is refreshed before buying after an unpainted brew consumes stock', () => {
+  const f = fixture({ initial: fundedInitial(10000) });
+  try {
+    f.click('#dock-ingredients'); f.click('#ingredient-beans-fill');
+    const before = f.state(), raw = f.memory.getItem(SAVE_KEY), oldQuote = createEngine(before).ingredientQuote('beans', 'fill');
+    f.clock.now += 20000; f.clock.performance += 20000;
+    const expected = createEngine(before); expected.advance(20);
+    assert.ok(expected.state.ingredients.beans < before.ingredients.beans);
+    f.click('#ingredient-beans-buy');
+    assert.deepEqual(f.state(), expected.snapshot(), 'the visible tail is settled but a larger fill is not silently purchased');
+    assert.equal(f.memory.getItem(SAVE_KEY), raw);
+    assert.match(f.element('#toast').textContent, /库存刚有变化.*再确认购买/);
+    const refreshed = expected.ingredientQuote('beans', 'fill');
+    assert.ok(refreshed.cost > oldQuote.cost);
+    assert.equal(f.element('#ingredient-beans-buy').textContent, `购买 ${refreshed.quantity} 份 · ${centsLabel(refreshed.cost)}`);
+    expected.buyIngredient('beans', 'fill'); f.click('#ingredient-beans-buy');
+    assert.deepEqual(f.state(), expected.snapshot());
+    assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state.ingredients, expected.state.ingredients);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-028 unchanged pantry and recipe statuses do not repeat live-region announcements every frame', () => {
+  const initial = createInitialState(); initial.paused = true;
+  const f = fixture({ initial });
+  try {
+    f.click('#dock-ingredients');
+    const ids = ['#ingredient-supply-note', '#ingredient-beans-note', '#ingredient-milk-note'];
+    const writes = ids.map(id => f.element(id).textWrites);
+    for (let frame = 0; frame < 30; frame++) f.tick(.2);
+    for (let i = 0; i < ids.length; i++) assert.equal(f.element(ids[i]).textWrites, writes[i]);
+    f.click('#dialog-close'); f.action({ type: 'recipe', id: 'counter-a' });
+    const count = f.element('#recipe-stock-note').textWrites;
+    for (let frame = 0; frame < 30; frame++) f.tick(.2);
+    assert.equal(f.element('#recipe-stock-note').textWrites, count);
   } finally { f.dispose(); }
 });

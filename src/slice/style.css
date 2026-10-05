@@ -547,3 +547,35 @@ input:focus-visible, #file-review:focus-visible { outline: 3px solid #936832; ou
 .counter-shortcut img { width: 48px; height: 44px; object-fit: contain; }
 .counter-shortcut strong { margin-right: auto; font-size: 12px; }
 .counter-shortcut button { min-width: 54px; min-height: 44px; border: 1px solid #d6c7aa; border-radius: 10px; background: #ebe4d0; font-size: 11px; }
+
+/* Shared pantry: quantity selection is separate from the purchase action. */
+.ingredient-rules { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
+.supply-note { margin: 12px 0; padding: 9px 11px; border-radius: 11px; background: #ecefdc; color: #536447; font-size: 11px; line-height: 1.65; }
+.ingredient-card { margin-top: 15px; padding: 15px; border: 1px solid var(--line); border-radius: 19px; background: #f5efdf; }
+.ingredient-heading { display: flex; align-items: center; gap: 8px; }
+.ingredient-heading img { width: 58px; height: 55px; object-fit: contain; }
+.ingredient-heading .detail-note { margin: 2px 0 0; }
+.ingredient-stock { margin-left: auto; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ingredient-meter { width: 100%; height: 9px; display: block; margin-top: 10px; accent-color: #799665; }
+.ingredient-meter::-webkit-meter-bar { border: 0; border-radius: 8px; background: #e1dbc6; }
+.ingredient-meter::-webkit-meter-optimum-value { border-radius: 8px; background: #799665; }
+.ingredient-meter::-moz-meter-bar { border-radius: 8px; background: #799665; }
+.ingredient-use { margin: 6px 0 10px; color: var(--muted); font-size: 10px; }
+.ingredient-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; }
+.ingredient-options button { min-width: 0; min-height: 74px; padding: 7px 3px; border: 1px solid #d7c7a7; border-radius: 12px; background: #fffaf0; line-height: 1.5; }
+.ingredient-options button[aria-pressed="true"] { background: #e7edce; border-color: #789566; box-shadow: 0 2px 0 #adc08d; }
+.ingredient-options span, .ingredient-options strong, .ingredient-options small { display: block; }
+.ingredient-options span { font-size: 10px; }
+.ingredient-options strong { font-size: 14px; font-variant-numeric: tabular-nums; }
+.ingredient-options small { font-size: 11px; color: #78613f; font-variant-numeric: tabular-nums; }
+.ingredient-card .action-note { margin-bottom: 0; min-height: 18px; }
+.action-dock button.needs-stock::after { content: ""; position: absolute; top: 4px; right: 5px; width: 8px; height: 8px; border: 2px solid #fffaf0; border-radius: 50%; background: #bc7144; }
+@media (max-width: 380px) {
+  .action-dock { gap: 3px; padding-inline: 6px; max-width: calc(100vw - 20px); }
+  .action-dock button { width: 49px; flex: 0 1 49px; min-width: 44px; }
+  .action-dock img { width: 45px; }
+  .ingredient-card { padding: 12px; }
+  .ingredient-heading { gap: 5px; }
+  .ingredient-heading img { width: 46px; height: 48px; }
+  .ingredient-stock { font-size: 11px; }
+}

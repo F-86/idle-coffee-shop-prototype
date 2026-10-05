@@ -7,6 +7,16 @@ const { createEngine, createInitialState, STEP_SECONDS, INITIAL_WALLET, managerS
 const { initialLayout, validateLayout, validateLayoutState, layoutCost, addFurniture, moveFurniture, rotateFurniture, storeFurniture, furnitureCells, interactionPoint, findGridPath, gridKey, occupiedCells, GRID, LAYOUT_PRICES } = await import('../src/slice/core/layout.ts');
 const assets = state => state.wallet + state.spend + state.manager.carrying + state.counters.reduce((sum, counter) => sum + counter.pendingCash, 0);
 function funded() { const state = createInitialState(); state.wallet += 100000; state.totalEarned = 100000; state.totalServed = 40; state.counters[0].brewed = 40; return state; }
+
+// Long-running route/throughput fixtures explicitly buy supplies. This is test
+// input through the real purchase API, never automatic production behavior.
+function restockFixture(engine) {
+  for (const id of ['beans', 'milk']) if (engine.state.ingredients[id] <= 10) assert.equal(engine.buyIngredient(id, 'batch'), true, `fixture can afford ${id}`);
+}
+function advanceWithSupplies(engine, seconds) {
+  for (let i = 0; i < seconds; i++) { restockFixture(engine); engine.advance(Math.min(1, seconds - i)); }
+}
+
 const legacy = JSON.parse(readFileSync(new URL('./fixtures/economy3-operations-migration.json', import.meta.url)));
 function beginEdit(engine) { if (!engine.state.paused) engine.togglePause(); return engine.beginLayoutEdit(); }
 function activate(initial = createInitialState(), change = () => {}) { const engine = createEngine(initial); assert.ok(beginEdit(engine)); assert.equal(engine.layoutEditStatus(), 'ready'); const draft = engine.createLayoutDraft(); change(draft); assert.equal(validateLayout(draft).ok, true); assert.equal(engine.commitLayout(draft).ok, true); engine.togglePause(); return engine; }
@@ -70,7 +80,7 @@ test('TC-3D-025 edit ready/cancel preserves a saved paused flag while allowing g
 test('TC-3D-025 paid customers occupy and release real seats, with takeaway fallback and no duplicate payment', () => {
   const engine = activate(funded(), draft => addFurniture(draft, 'table', 3, 5)); let dined = 0, tookAway = 0, payments = 0, previous = new Set();
   for (let i = 0; i < 18000; i++) {
-    engine.advance(STEP_SECONDS);
+    restockFixture(engine); engine.advance(STEP_SECONDS);
     const seats = engine.state.customers.map(customer => customer.seatId).filter(Boolean); assert.equal(new Set(seats).size, seats.length);
     const dining = engine.state.customers.filter(customer => customer.phase === 'dining'); for (const customer of dining) if (!previous.has(customer.id)) dined++;
     previous = new Set(dining.map(customer => customer.id));
@@ -83,7 +93,7 @@ test('TC-3D-025 paid customers occupy and release real seats, with takeaway fall
 test('TC-3D-025 active four-counter expansion stays live, collision-free and financially conserved', () => {
   const engine = activate(funded(), expanded); const counts = new Map(); let minimumGap = Infinity;
   for (let i = 0; i < 24000; i++) {
-    engine.advance(STEP_SECONDS);
+    restockFixture(engine); engine.advance(STEP_SECONDS);
     for (const event of engine.drainEvents()) if (event.type === 'served') counts.set(event.counterId, (counts.get(event.counterId) ?? 0) + 1);
     assert.equal(assets(engine.state), INITIAL_WALLET + engine.state.totalEarned);
     if (i % 20 === 0) assert.equal(validateLayoutState(engine.state), null);
@@ -91,7 +101,7 @@ test('TC-3D-025 active four-counter expansion stays live, collision-free and fin
     for (let a = 0; a < actors.length; a++) for (let b = a + 1; b < actors.length; b++) minimumGap = Math.min(minimumGap, Math.hypot(actors[a].x - actors[b].x, actors[a].z - actors[b].z));
   }
   assert.equal(counts.size, 4); assert.ok([...counts.values()].every(count => count > 5)); assert.ok(engine.state.wallet > 100000 - engine.state.spend); assert.ok(minimumGap >= .72, `${minimumGap}m clearance`);
-  const served = engine.state.totalServed; engine.advance(300); assert.ok(engine.state.totalServed > served + 5);
+  const served = engine.state.totalServed; advanceWithSupplies(engine, 300); assert.ok(engine.state.totalServed > served + 5);
 });
 test('TC-3D-025 moved/rotated/stored counter keeps its levels, recipe and lifetime production', () => {
   const initial = funded(); initial.counters[1].level = 8; initial.counters[1].recipe = 'espresso'; const engine = activate(initial, draft => { storeFurniture(draft, 'counter-b'); moveFurniture(draft, 'counter-a', 0, 3); rotateFurniture(draft, 'counter-a'); });
@@ -110,7 +120,7 @@ test('TC-3D-025 active online, exact 80% offline, split ticks and reload have eq
 test('TC-3D-027 genuine old in-flight routes preserve positions and snapshots, then finish to current layout', () => {
   for (const source of [legacy.inactive, legacy.active]) {
     const restored = createEngine(source), before = restored.snapshot();
-    assert.equal(restored.state.economyVersion, 4); assert.deepEqual(restored.state.customers, source.customers);
+    assert.equal(restored.state.economyVersion, 5); assert.deepEqual(restored.state.customers, source.customers);
     assert.deepEqual(restored.state.counters.map(counter => counter.brew), source.counters.map(counter => counter.brew));
     assert.equal(assets(before), assets(source)); assert.equal(before.totalEarned, source.totalEarned);
     beginEdit(restored); until(restored, () => restored.layoutEditStatus() === 'ready');
@@ -132,7 +142,7 @@ test('TC-3D-027 stored legacy counter cash transfers to wallet without restoring
 test('TC-3D-025 new routes reserve the occupied entrance segment and remain collision-free every tick', () => {
   const engine = activate(funded(), expanded); let minimum = Infinity, concurrent = 0;
   for (let tick = 0; tick < 5000; tick++) {
-    engine.advance(STEP_SECONDS); const actors = [...engine.state.customers, engine.state.manager]; concurrent = Math.max(concurrent, actors.filter(actor => actor.nav).length);
+    restockFixture(engine); engine.advance(STEP_SECONDS); const actors = [...engine.state.customers, engine.state.manager]; concurrent = Math.max(concurrent, actors.filter(actor => actor.nav).length);
     for (let a = 0; a < actors.length; a++) for (let b = a + 1; b < actors.length; b++) minimum = Math.min(minimum, Math.hypot(actors[a].x - actors[b].x, actors[a].z - actors[b].z));
   }
   assert.ok(concurrent >= 2); assert.ok(minimum >= .72, `${minimum}m clearance`);
@@ -145,7 +155,7 @@ test('TC-3D-025 compact purchased counters increase same-recipe capacity; long w
       if (count === 1) storeFurniture(draft, 'counter-b');
       if (count === 4) { draft.expanded = true; addFurniture(draft, 'counter', 12, 0); addFurniture(draft, 'counter', 13, 6); }
     });
-    engine.advance(1200); output.push(engine.state.totalServed - 40);
+    advanceWithSupplies(engine, 1200); output.push(engine.state.totalServed - 40);
     assert.equal(assets(engine.state), INITIAL_WALLET + engine.state.totalEarned); assert.equal(validateLayoutState(engine.state), null);
   }
   assert.ok(output[1] > output[0], output.join('/')); assert.ok(output[2] > output[1], output.join('/'));

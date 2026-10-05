@@ -47,3 +47,5 @@
 底部装修目录与真实拖拽：[规格](product/specs/renovation-drag-catalog.md)、[计划](testing/plans/renovation-drag-catalog.md)、[TC-3D-026](testing/cases/slice/TC-3D-026.md)。柜台/桌椅/咖啡墙牌统一分类底栏，候选拖放与提交分离，移除全部地毯和路线箭头；布局2兼容布局1，经济/文件仍3。
 
 当前双门经营与暂停装修：[规格](product/specs/shop-operations-cutaway.md)、[计划](testing/plans/shop-operations-cutaway.md)、[TC-3D-027](testing/cases/slice/TC-3D-027.md)。剖面店外景、画面右入左出、交杯直接到账；HUD持久暂停/清场后装修，完成或取消不自动营业；咖啡与三背景移到底部有图图标栏，装修浮动窄面板。经济4/布局3/文件4，经理/金库/咖啡墙牌旧交互已被本轮替代。
+
+手动原料闭环：[规格](product/specs/manual-ingredient-stock.md)、[计划](testing/plans/manual-ingredient-stock.md)、[TC-3D-028](testing/cases/slice/TC-3D-028.md)。全店共享豆/奶，制作开始原子扣份，玩家主动购买，库存不足停止新制作；旧杯继续、缺料顾客可离店，离线80%同规则。经济5/文件5/离线策略4，旧窗口一次迁移。数值未平衡，未加入自动救济或强制留款。

@@ -110,7 +110,13 @@ test('TC-3D-027 diagnostics record customer handoffs without any retired-manager
 
 test('TC-3D-014 bounded record, sticky customer identity, isolated readers, and explicit reset prevent stale IDs', () => {
   const diagnostics = new RouteDiagnostics(), engine = createEngine(undefined, diagnostics.observe);
-  engine.invite(); engine.advance(600);
+  engine.invite();
+  // Keep the record-ring test running with deliberate purchases so stockout does
+  // not end its workload before the oldest global traces have been evicted.
+  for (let second = 0; second < 600; second++) {
+    for (const id of ['beans', 'milk']) if (engine.state.ingredients[id] <= 10) assert.equal(engine.buyIngredient(id, 'batch'), true);
+    engine.advance(1);
+  }
   const result = diagnostics.read();
   assert.equal(result.selectedId, 1); assert.equal(result.terminal.kind, 'despawn');
   assert.equal(result.records.length, ROUTE_TRACE_LIMIT); assert.equal(result.trackedRecords.length <= TRACKED_TRACE_LIMIT, true);

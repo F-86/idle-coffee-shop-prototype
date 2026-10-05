@@ -1,3 +1,4 @@
+import { canBrew, consumeIngredients, createInitialIngredients, purchaseIngredient, quoteIngredient, validateIngredients } from './ingredients';
 import { copyLayout, initialLayout, layoutCost, normalizeLayout, validateLayout, migrateLayoutDoors } from './layout';
 import { createLayoutSimulation } from './layoutSimulation';
 import type { RouteObserver, RouteTraceEvent } from './routeTrace';
@@ -6,7 +7,7 @@ import type { Counter, CounterId, CounterQuote, CoffeeQuote, Customer, OfflineJo
 /** Draft balance for this small playable slice, expressed in cents and metres. */
 export const STEP_SECONDS = .05;
 export const MAX_LEVEL = 20;
-export const ECONOMY_VERSION = 4;
+export const ECONOMY_VERSION = 5;
 /** Temporary feature values, not a settled balance design. */
 export const COFFEE_UPGRADE_CONFIG = Object.freeze({
   maxLevel: 10, pricePerLevel: .08, speedPerLevel: .025, costGrowth: 1.55,
@@ -20,13 +21,13 @@ export const OFFLINE_EFFICIENCY = .8;
 export const LEGACY_OFFLINE_CAP_SECONDS = 7200;
 /** Existing save-schema precision limit, not an offline gameplay cap. */
 export const MAX_ELAPSED_SECONDS = 4e9;
-export function offlineWallSeconds(seconds: number, policy: OfflinePolicyVersion = 3): number {
+export function offlineWallSeconds(seconds: number, policy: OfflinePolicyVersion = 4): number {
   if (!Number.isFinite(seconds) || seconds < 0 || policy === 1 && seconds < 30) return 0;
-  return policy === 3 ? seconds : Math.min(LEGACY_OFFLINE_CAP_SECONDS, seconds);
+  return policy >= 3 ? seconds : Math.min(LEGACY_OFFLINE_CAP_SECONDS, seconds);
 }
 /** Uniform 80% for new intervals; old outstanding intervals retain their own rules once. */
-export function offlineEffectiveSeconds(seconds: number, policy: OfflinePolicyVersion = 3): number {
-  return offlineWallSeconds(seconds, policy) * (policy === 3 ? OFFLINE_EFFICIENCY : .5);
+export function offlineEffectiveSeconds(seconds: number, policy: OfflinePolicyVersion = 4): number {
+  return offlineWallSeconds(seconds, policy) * (policy >= 3 ? OFFLINE_EFFICIENCY : .5);
 }
 export const MANAGER_ROUTE_VERSION = 2;
 export const CUSTOMER_ROUTE_VERSION = 4;
@@ -51,11 +52,11 @@ const roundTime = (value: number): number => Math.round(value * 1e9) / 1e9;
 /** Versioned one-time transfer: legacy receipts were already minted in totalEarned. */
 export function migrateCoffeeEconomy(state: SliceState): void {
   const version = (state as { economyVersion: number }).economyVersion;
-  if (![1, 2, 3, ECONOMY_VERSION].includes(version)) throw new Error('Unsupported economy version.');
+  if (![1, 2, 3, 4, ECONOMY_VERSION].includes(version)) throw new Error('Unsupported economy version.');
   if (state.layout !== undefined && (!state.layout || typeof state.layout !== 'object' || Array.isArray(state.layout))) throw new Error('Invalid layout.');
   if (version < 3 && state.layout?.active) throw new Error('Legacy economy cannot contain an active layout.');
   if (version >= 3 && state.layout === undefined) throw new Error('Current economy requires explicit layout.');
-  if (version < ECONOMY_VERSION && state.layout?.version === 3) throw new Error('Legacy economy cannot contain current layout.');
+  if (version < 4 && state.layout?.version === 3) throw new Error('Legacy economy cannot contain current layout.');
   if (version === 1) {
     if (state.coffeeLevels !== undefined) throw new Error('Legacy economy cannot contain coffee levels.');
     state.coffeeLevels = { espresso: 1, latte: 1 };
@@ -64,7 +65,14 @@ export function migrateCoffeeEconomy(state: SliceState): void {
   if (!levels || typeof levels !== 'object' || Array.isArray(levels) || Object.keys(levels).sort().join() !== 'espresso,latte' ||
     recipes.some(recipe => !Number.isInteger(levels[recipe.id]) || levels[recipe.id] < 1 || levels[recipe.id] > COFFEE_MAX_LEVEL)) throw new Error('Invalid coffee levels.');
   if (version === ECONOMY_VERSION) {
+    if (!validateIngredients(state.ingredients)) throw new Error('Invalid ingredient inventory.');
+  } else {
+    if (state.ingredients !== undefined) throw new Error('Legacy economy cannot contain ingredient inventory.');
+    state.ingredients = createInitialIngredients();
+  }
+  if (version >= 4) {
     if (state.manager.carrying || state.counters.some(counter => counter.pendingCash)) throw new Error('Retired cash balances must be zero.');
+    state.economyVersion = ECONOMY_VERSION;
     return;
   }
   if (state.layout === undefined) state.layout = { ...initialLayout(), version: 2, active: false };
@@ -95,7 +103,7 @@ export function migrateCustomerRoutes(state: SliceState): void {
 
 export function createInitialState(): SliceState {
   return {
-    schemaVersion: 1, economyVersion: ECONOMY_VERSION, layout: initialLayout(), coffeeLevels: { espresso: 1, latte: 1 }, managerRouteVersion: MANAGER_ROUTE_VERSION, customerRouteVersion: CUSTOMER_ROUTE_VERSION, elapsed: 0, wallet: INITIAL_WALLET,
+    schemaVersion: 1, economyVersion: ECONOMY_VERSION, ingredients: createInitialIngredients(), layout: initialLayout(), coffeeLevels: { espresso: 1, latte: 1 }, managerRouteVersion: MANAGER_ROUTE_VERSION, customerRouteVersion: CUSTOMER_ROUTE_VERSION, elapsed: 0, wallet: INITIAL_WALLET,
     totalEarned: 0, totalServed: 0, spend: 0, nextCustomerId: 1,
     arrivalTimer: 0, inviteCooldown: 0, paused: false, stepCarry: 0, eventSequence: 0, offlineClaimIds: [],
     counters: [
@@ -118,12 +126,17 @@ export function createEngine(initial: SliceState = createInitialState(), observe
   state.offlineClaimIds ??= state.lastOfflineClaimId ? [state.lastOfflineClaimId] : [];
   let events: SliceEvent[] = [];
   let silent = false;
+  let legacyOfflineIngredients = false;
+  let activeOffline = false;
   let editing: 'idle' | 'draining' | 'ready' = 'idle';
   const activeLayout = () => !!state.layout?.active;
   const counterDrained = (counter: Counter): boolean => !counter.brew;
-  const layoutSimulation = createLayoutSimulation(state, { emit, traceCustomer, stepSeconds: STEP_SECONDS, customerSpeed: CUSTOMER_SPEED,
-    price: counter => counterPrice(counter.recipe, counter.level, counter.id, state.coffeeLevels[counter.recipe]),
-    duration: counter => counterBrewSeconds(counter.recipe, counter.level, counter.id, state.coffeeLevels[counter.recipe]) });
+  const layoutSimulation = createLayoutSimulation(state, { emit, traceCustomer, canStart: counter => legacyOfflineIngredients || canBrew(state, counter.recipe), startBrew, stepSeconds: STEP_SECONDS, customerSpeed: CUSTOMER_SPEED });
+  function startBrew(counter: Counter, customer: Customer): boolean {
+    if (counter.brew || !legacyOfflineIngredients && !consumeIngredients(state, counter.recipe)) return false;
+    counter.brew = { recipe: counter.recipe, customerId: customer.id, elapsed: 0, duration: counterBrewSeconds(counter.recipe, counter.level, counter.id, state.coffeeLevels[counter.recipe]), price: counterPrice(counter.recipe, counter.level, counter.id, state.coffeeLevels[counter.recipe]) };
+    return true;
+  }
   function trace(event: Omit<RouteTraceEvent, 'time'>): void {
     if (!observeRoute || silent) return;
     // The observer receives detached scalar data and cannot break the simulation.
@@ -249,9 +262,10 @@ export function createEngine(initial: SliceState = createInitialState(), observe
             traceCustomer('phase', customer);
           }
           if (i === 0 && customer.phase === 'queue' && reached && customer.z === WORLD.serviceZ && !counter.brew) {
-            customer.phase = 'serving'; customer.timer = 0;
+            customer.timer = 0;
+            if (startBrew(counter, customer)) customer.phase = 'serving';
+            else { customer.phase = 'leaving'; customer.routeLeg = 0; customer.departureReason = 'stockout'; }
             traceCustomer('phase', customer);
-            counter.brew = { recipe: counter.recipe, customerId: customer.id, elapsed: 0, duration: counterBrewSeconds(counter.recipe, counter.level, counter.id, state.coffeeLevels[counter.recipe]), price: counterPrice(counter.recipe, counter.level, counter.id, state.coffeeLevels[counter.recipe]) };
           }
         } else if (customer.phase === 'receiving') {
           customer.timer = roundTime(customer.timer + STEP_SECONDS);
@@ -318,7 +332,7 @@ export function createEngine(initial: SliceState = createInitialState(), observe
     if (editing === 'draining' && !state.customers.length && state.counters.every(counterDrained)) editing = 'ready';
   }
   function advance(seconds: number, beforeLastStep?: (state: Readonly<SliceState>) => void): void {
-    if (editing === 'ready' || state.paused && !state.customers.length && state.counters.every(counterDrained) || !Number.isFinite(seconds) || seconds <= 0) return;
+    if (activeOffline || editing === 'ready' || state.paused && !state.customers.length && state.counters.every(counterDrained) || !Number.isFinite(seconds) || seconds <= 0) return;
     // Keep fractional frames instead of rounding each incoming delta. Rounding
     // 1/60 per call, for example, would drift relative to one whole second.
     const total = (state.stepCarry ?? 0) + seconds;
@@ -358,8 +372,15 @@ export function createEngine(initial: SliceState = createInitialState(), observe
   function managerQuote() { return { cost: 0, speed: 0, nextSpeed: 0, capped: true }; }
   return {
     get state() { return state; }, advance,
+    ingredientQuote(id, mode) { return quoteIngredient(state, id, mode); },
+    buyIngredient(id, mode) {
+      if (activeOffline) return false;
+      const offer = purchaseIngredient(state, id, mode);
+      if (!offer) return false;
+      emit('ingredients-purchased', { ingredientId: id, amount: offer.cost }); return true;
+    },
     beginLayoutEdit() {
-      if (editing !== 'idle' || !state.paused) return false;
+      if (activeOffline || editing !== 'idle' || !state.paused) return false;
       editing = 'draining';
       if (!state.customers.length && state.counters.every(counterDrained)) editing = 'ready';
       return true;
@@ -387,21 +408,21 @@ export function createEngine(initial: SliceState = createInitialState(), observe
       return { ok: true, message: '装修已保存，点击恢复营业后再接待新顾客。', cost: offer.cost };
     },
     invite() {
-      if (editing !== 'idle' || state.paused || state.inviteCooldown > 0) return false;
+      if (activeOffline || editing !== 'idle' || state.paused || state.inviteCooldown > 0) return false;
       let arrivals = 0;
       for (let i = 0; i < 3; i++) if (arrive()) arrivals++;
       if (!arrivals) return false;
       state.inviteCooldown = INVITE_COOLDOWN_SECONDS; emit('invited'); return true;
     },
     upgrade(id) {
-      if (editing !== 'idle') return false;
+      if (activeOffline || editing !== 'idle') return false;
       const counter = findCounter(id), offer = quote(id);
       if (!counter || offer.capped || state.wallet < offer.cost) return false;
       state.wallet -= offer.cost; state.spend += offer.cost; counter.level++;
       emit('upgraded', { counterId: id, amount: offer.cost }); return true;
     },
     upgradeCoffee(recipe) {
-      if (editing !== 'idle') return false;
+      if (activeOffline || editing !== 'idle') return false;
       const offer = coffeeQuote(recipe);
       if (offer.capped || state.wallet < offer.cost) return false;
       state.wallet -= offer.cost; state.spend += offer.cost; state.coffeeLevels[recipe]++;
@@ -409,12 +430,12 @@ export function createEngine(initial: SliceState = createInitialState(), observe
     },
     upgradeManager() { return false; },
     setRecipe(id, recipe) {
-      if (editing !== 'idle') return false;
+      if (activeOffline || editing !== 'idle') return false;
       const counter = findCounter(id);
       if (!counter || !Object.hasOwn(recipeById, recipe) || counter.recipe === recipe) return false;
       counter.recipe = recipe; emit('recipe-changed', { counterId: id }); return true;
     },
-    togglePause() { if (editing === 'idle') state.paused = !state.paused; }, quote, managerQuote, coffeeQuote,
+    togglePause() { if (!activeOffline && editing === 'idle') state.paused = !state.paused; }, quote, managerQuote, coffeeQuote,
     drainEvents() { const result = events; events = []; return result; },
     snapshot() {
       const snapshot = clone(state);
@@ -424,19 +445,20 @@ export function createEngine(initial: SliceState = createInitialState(), observe
       return snapshot;
     },
     beginOffline,
-    applyOffline(seconds, claimId, policy = 3) {
+    applyOffline(seconds, claimId, policy = 4) {
       const job = beginOffline(seconds, claimId, policy);
       job.advance(Number.MAX_SAFE_INTEGER);
       return job.result();
     }
   };
-  function beginOffline(seconds: number, claimId: string, policy: OfflinePolicyVersion = 3): OfflineJob {
+  function beginOffline(seconds: number, claimId: string, policy: OfflinePolicyVersion = 4): OfflineJob {
     const effective = state.paused ? 0 : offlineEffectiveSeconds(seconds, policy);
-    const valid = editing === 'idle' && typeof claimId === 'string' && !!claimId && claimId.length <= 256 && claimId !== state.lastOfflineClaimId && !state.offlineClaimIds!.includes(claimId) && Number.isFinite(seconds) && seconds >= 0 && [1, 2, 3].includes(policy) && effective + state.elapsed <= MAX_ELAPSED_SECONDS;
+    const valid = !activeOffline && editing === 'idle' && typeof claimId === 'string' && !!claimId && claimId.length <= 256 && claimId !== state.lastOfflineClaimId && !state.offlineClaimIds!.includes(claimId) && Number.isFinite(seconds) && seconds >= 0 && [1, 2, 3, 4].includes(policy) && effective + state.elapsed <= MAX_ELAPSED_SECONDS;
     const total = (state.stepCarry ?? 0) + effective;
     const steps = valid && !state.paused ? Math.floor((total + 1e-12) / STEP_SECONDS) : 0;
     const carry = total - steps * STEP_SECONDS;
     let completed = 0, done = !valid;
+    if (valid) activeOffline = true;
     const beforeWallet = state.wallet, beforeEarned = state.totalEarned;
     function finish() {
       if (done) return;
@@ -444,7 +466,7 @@ export function createEngine(initial: SliceState = createInitialState(), observe
       state.lastOfflineClaimId = claimId;
       state.offlineClaimIds!.push(claimId);
       if (state.offlineClaimIds!.length > 256) state.offlineClaimIds!.shift();
-      done = true;
+      done = true; activeOffline = false;
     }
     if (valid && !steps) finish();
     return {
@@ -454,13 +476,13 @@ export function createEngine(initial: SliceState = createInitialState(), observe
       advance(maxSteps) {
         if (done || !Number.isSafeInteger(maxSteps) || maxSteps <= 0) return;
         const end = Math.min(steps, completed + maxSteps);
-        silent = true;
-        try { while (completed < end) { tick(); completed++; } } finally { silent = false; }
+        silent = true; legacyOfflineIngredients = policy < 4;
+        try { while (completed < end) { tick(); completed++; } } finally { silent = false; legacyOfflineIngredients = false; }
         if (completed === steps) finish();
       },
       result() {
         if (!valid || !done) return { accepted: false, amount: 0, seconds: 0 };
-        return { accepted: true, amount: state.wallet - beforeWallet, seconds: offlineWallSeconds(seconds, policy), effectiveSeconds: effective, awaySeconds: seconds, policyVersion: policy, generatedAmount: state.totalEarned - beforeEarned, pendingCash: state.counters.reduce((sum, counter) => sum + counter.pendingCash, 0), carrying: state.manager.carrying };
+        return { accepted: true, amount: state.wallet - beforeWallet, seconds: offlineWallSeconds(seconds, policy), effectiveSeconds: effective, awaySeconds: seconds, policyVersion: policy, generatedAmount: state.totalEarned - beforeEarned, pendingCash: state.counters.reduce((sum, counter) => sum + counter.pendingCash, 0), carrying: state.manager.carrying, stockout: state.layout!.furniture.some(item => item.kind === 'counter' && !item.stored && !canBrew(state, findCounter(item.counterId!)!.recipe)) };
       }
     };
   }

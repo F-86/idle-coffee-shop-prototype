@@ -155,11 +155,11 @@ export function validateLayoutState(value: unknown): string | null {
   const layout = state.layout, checked = validateLayout(layout); if (!checked.ok) return checked.message;
   if (!layout.active) {
     if (state.manager.collectionCursor !== undefined || state.manager.nav !== undefined || state.customers.some(customer => customer.nav !== undefined || customer.seatId !== undefined)) return '旧路线不能带动态移动状态。';
-    const expected = { ...initialLayout(), version: 2, active: false, coffeeSigns: initialCoffeeSigns().map(sign => ({ ...sign, stored: state.economyVersion === 4 })) };
+    const expected = { ...initialLayout(), version: 2, active: false, coffeeSigns: initialCoffeeSigns().map(sign => ({ ...sign, stored: state.economyVersion >= 4 })) };
     if (JSON.stringify({ ...layout, trafficTurn: undefined }) !== JSON.stringify(expected)) return '未启用布局必须保持初始家具。';
     return null;
   }
-  if (![3, 4].includes(state.economyVersion)) return '动态布局需要新版经济存档。';
+  if (![3, 4, 5].includes(state.economyVersion)) return '动态布局需要新版经济存档。';
   const counters = layout.furniture.filter(item => item.kind === 'counter');
   if (!counters.some(item => item.counterId === 'counter-a') || !counters.some(item => item.counterId === 'counter-b')) return '初始柜台资产不能删除。';
   const minimumSpend = (counters.length - 2) * LAYOUT_PRICES.counter + layout.furniture.filter(item => item.kind === 'table').length * LAYOUT_PRICES.table + (layout.expanded ? LAYOUT_PRICES.expansion : 0);
@@ -168,7 +168,7 @@ export function validateLayoutState(value: unknown): string | null {
   if (state.counters.some((counter, index) => index && counter.id <= state.counters[index - 1].id)) return '柜台资产顺序无效。';
   if (counters.some(item => item.stored && (state.counters.find(counter => counter.id === item.counterId)?.brew || state.customers.some(customer => customer.counterId === item.counterId)))) return '收起柜台不能持有在途订单。';
   if (counters.length !== state.counters.length || state.counters.some(counter => !counters.some(item => item.counterId === counter.id && item.x === counter.x))) return '柜台资产与家具不匹配。';
-  const retiredManager = state.economyVersion === 4;
+  const retiredManager = state.economyVersion >= 4;
   const exit = layout.version === 2 ? { x: -8, z: 6 } : layoutExit(layout);
   const occupied = occupiedCells(layout), actors = retiredManager ? [...state.customers] : [...state.customers, state.manager];
   const chairCells = new Map(layout.furniture.filter(item => item.kind === 'table' && !item.stored).map(item => [gridKey(interactionPoint(item, 'seat')), item.id]));

@@ -11,18 +11,33 @@ const { LocalSaveRepository, createMemoryStorage, SAVE_KEY, validateState, OFFLI
 
 const legacyArchives = JSON.parse(await (await import('node:fs/promises')).readFile(new URL('./fixtures/economy3-operations-migration.json', import.meta.url), 'utf8'));
 
-// Online fixed-step advance is the independent oracle. The expected values below
+// Online fixed-step advance is the independent current-policy oracle. The expected values below
 // never call the offline policy helper or derive expected prices from its output.
 const checkpoint = () => { const engine = createEngine(); engine.upgrade('counter-a'); engine.advance(7.437); engine.setRecipe('counter-a', 'latte'); return engine.snapshot(); };
 const business = state => { const copy = structuredClone(state); delete copy.lastOfflineClaimId; delete copy.offlineClaimIds; return copy; };
 const advanced = (state, seconds) => { const engine = createEngine(state); engine.advance(seconds); return engine.snapshot(); };
+// Only the persistence migration tests use an explicit legacy-policy engine job.
+// Ordinary online advance now consumes ingredients, so it is not a legacy oracle.
+// Policy durations are asserted independently below, while this reference checks
+// repository transactions against the already-supported old production mode.
+const legacyAdvanced = (state, wallSeconds, policy) => {
+  const engine = createEngine(state);
+  engine.applyOffline(wallSeconds, 'legacy-policy-reference', policy === 'unmarked' ? 1 : policy);
+  return engine.snapshot();
+};
 const assets = state => state.wallet + state.spend + state.manager.carrying + state.counters.reduce((sum, counter) => sum + counter.pendingCash, 0);
 const near = (actual, expected, message) => assert.ok(Math.abs(actual - expected) < 1e-8, `${message ?? 'number'}: ${actual} ≠ ${expected}`);
 const assertValidMoney = state => { assert.equal(validateState(state).ok, true); assert.equal(assets(state), INITIAL_WALLET + state.totalEarned); };
-const rawEnvelope = (state, savedAt = 100000, version = 3, recordChangeTag = 'policy-fixture') => JSON.stringify({ schemaVersion: 1, savedAt, recordChangeTag, ...(version === 'unmarked' ? {} : { offlinePolicyVersion: version }), state });
-const fixture = (state = checkpoint(), version = 3, savedAt = 100000) => {
+const rawEnvelope = (state, savedAt = 100000, version = 4, recordChangeTag = 'policy-fixture') => {
+  // Old pending anchors belong to old economies. Preserve real brew/route fields
+  // but remove the inventory that did not exist in economy4.
+  const archive = structuredClone(state);
+  if (version !== 4 && archive.economyVersion === 5) { archive.economyVersion = 4; delete archive.ingredients; }
+  return JSON.stringify({ schemaVersion: 1, savedAt, recordChangeTag, ...(version === 'unmarked' ? {} : { offlinePolicyVersion: version }), state: archive });
+};
+const fixture = (state = checkpoint(), version = 4, savedAt = 100000) => {
   const memory = createMemoryStorage(); memory.setItem(SAVE_KEY, rawEnvelope(state, savedAt, version));
-  return { initial: state, memory, raw: memory.getItem(SAVE_KEY), repo: new LocalSaveRepository(memory) };
+  return { initial: validateState(JSON.parse(memory.getItem(SAVE_KEY)).state).state, memory, raw: memory.getItem(SAVE_KEY), repo: new LocalSaveRepository(memory) };
 };
 const finish = (repo, pending, options = {}) => repo.finishOffline(pending, { yieldControl: async () => {}, ...options });
 const rejection = (result, initial, memory, raw, status = 'offline-save-failed') => {
@@ -40,8 +55,8 @@ async function oneBatchPerYield(run) {
   finally { if (descriptor) Object.defineProperty(performance, 'now', descriptor); else delete performance.now; }
 }
 
-test('TC-3D-020 v3 is continuous 80% at every former threshold, with no gameplay duration cap', () => {
-  assert.equal(OFFLINE_POLICY_VERSION, 3);
+test('TC-3D-020 v4 is continuous 80% at every former threshold, with no gameplay duration cap', () => {
+  assert.equal(OFFLINE_POLICY_VERSION, 4);
   for (const [wall, expected] of [...boundaries, [.01, .008], [86400, 69120], [8.64e12, 6.912e12]]) {
     near(core.offlineEffectiveSeconds(wall), expected, `${wall}s wall duration`);
     assert.equal(core.offlineWallSeconds(wall), wall);
@@ -51,8 +66,8 @@ test('TC-3D-020 v3 is continuous 80% at every former threshold, with no gameplay
     const wall = threshold + delta / 1000;
     assert.ok(core.offlineEffectiveSeconds(wall) > core.offlineEffectiveSeconds(wall - .001));
   }
-  for (const policy of [1, 2]) for (const wall of [0, .01, 29.9, 30, 30.1, 1799.9, 1800, 1800.1, 7200, 7200.1, 86400]) {
-    const expected = policy === 1 && wall < 30 ? 0 : Math.min(wall, 7200) / 2;
+  for (const policy of [1, 2, 3]) for (const wall of [0, .01, 29.9, 30, 30.1, 1799.9, 1800, 1800.1, 7200, 7200.1, 86400]) {
+    const expected = policy === 3 ? wall * .8 : policy === 1 && wall < 30 ? 0 : Math.min(wall, 7200) / 2;
     near(core.offlineEffectiveSeconds(wall, policy), expected, `legacy v${policy}`);
   }
 });
@@ -62,7 +77,7 @@ test('TC-3D-020 exact boundary settlements equal ordinary simulation at 80%, inc
   for (const [wall, expected] of boundaries) {
     const oracle = createEngine(initial); oracle.advance(wall * .8);
     const engine = createEngine(initial), result = engine.applyOffline(wall, `boundary-${wall}`);
-    assert.equal(result.accepted, true); assert.equal(result.seconds, wall); assert.equal(result.awaySeconds, wall); assert.equal(result.policyVersion, 3);
+    assert.equal(result.accepted, true); assert.equal(result.seconds, wall); assert.equal(result.awaySeconds, wall); assert.equal(result.policyVersion, 4);
     near(result.effectiveSeconds, expected); assert.deepEqual(business(engine.snapshot()), business(oracle.snapshot()), `${wall}s boundary`);
     assert.equal(result.amount, engine.state.wallet - initial.wallet);
     assert.equal(result.generatedAmount, engine.state.totalEarned - initial.totalEarned);
@@ -89,6 +104,11 @@ test('TC-3D-020 a real 24-hour interval completes 69,120 seconds of ordinary sim
   assert.deepEqual(business(offline.snapshot()), business(wholeOnline.snapshot()));
   near(offline.state.elapsed, initial.elapsed + 69120); assert.ok(offline.state.elapsed > initial.elapsed + 7200);
   assertValidMoney(offline.snapshot());
+  const prepaid = initial.counters.filter(counter => counter.brew).length;
+  assert.ok(offline.state.totalServed - initial.totalServed <= initial.ingredients.beans + prepaid, 'a full day has finite stock-limited production');
+  const exhausted = createEngine(initial); exhausted.advance(3600);
+  assert.equal(offline.state.totalEarned, exhausted.state.totalEarned, 'the empty-stock remainder advances the clock without creating more revenue');
+  assert.deepEqual(offline.state.ingredients, exhausted.state.ingredients);
   const before = offline.snapshot(); job.advance(1); job.advance(Number.MAX_SAFE_INTEGER); assert.deepEqual(offline.snapshot(), before);
 });
 
@@ -123,13 +143,13 @@ test('TC-3D-020 short partitions and reloads conserve fractional time through cl
   assert.equal(memory.getItem(SAVE_KEY), raw, 'durable endpoint remains authoritative after old claim IDs expire');
 });
 
-test('TC-3D-020 saved v3 short intervals settle once, while zero and rollback loads are byte-preserving', () => {
+test('TC-3D-020 saved v4 short intervals settle once, while zero and rollback loads are byte-preserving', () => {
   for (const [wall, effective] of [[0, 0], [.01, .008], [29.9, 23.92], [30, 24], [30.1, 24.08]]) {
     const { initial, memory, raw, repo } = fixture(); const now = 100000 + wall * 1000;
     const result = repo.load(now); assert.equal(result.status, 'loaded');
     assert.deepEqual(business(result.state), business(advanced(initial, effective)));
     const stored = memory.getItem(SAVE_KEY), envelope = JSON.parse(stored);
-    assert.equal(envelope.savedAt, now); assert.equal(envelope.offlinePolicyVersion, 3);
+    assert.equal(envelope.savedAt, now); assert.equal(envelope.offlinePolicyVersion, 4);
     if (!wall) assert.equal(stored, raw);
     for (const at of [now - 1, now]) assert.deepEqual(new LocalSaveRepository(memory).load(at).state, result.state);
     assert.equal(memory.getItem(SAVE_KEY), stored);
@@ -160,54 +180,56 @@ test('TC-3D-027 legacy cash is transferred before offline simulation and never r
   assert.deepEqual(business(engine.snapshot()), business(migrated)); assertValidMoney(engine.snapshot());
 });
 
-test('TC-3D-020 every legacy anchor uses its own policy once, then all subsequent short gaps use v3', () => {
-  for (const version of ['unmarked', 1, 2]) for (const wall of [0, 29.9, 30, 30.1, 7200.1, 86400]) {
+test('TC-3D-020 every legacy anchor uses its own policy once, then all subsequent short gaps use v4', () => {
+  for (const version of ['unmarked', 1, 2, 3]) for (const wall of [0, 29.9, 30, 30.1, 7200.1, 86400]) {
     const { initial, memory, repo } = fixture(checkpoint(), version); const now = 100000 + wall * 1000;
-    const expected = version !== 2 && wall < 30 ? 0 : Math.min(wall, 7200) / 2;
+    const expected = version === 3 ? wall * .8 : version !== 2 && wall < 30 ? 0 : Math.min(wall, 7200) / 2;
     const first = repo.load(now); assert.equal(first.status, 'loaded');
-    assert.deepEqual(business(first.state), business(advanced(initial, expected)), `${version}: ${wall}s`);
+    near(first.state.elapsed + first.state.stepCarry, initial.elapsed + initial.stepCarry + expected);
+    assert.deepEqual(first.state.ingredients, initial.ingredients, 'the unpaid old anchor does not consume starter stock');
+    assert.deepEqual(business(first.state), business(legacyAdvanced(initial, wall, version)), `${version}: ${wall}s`);
     const migrated = memory.getItem(SAVE_KEY), envelope = JSON.parse(migrated);
-    assert.equal(envelope.offlinePolicyVersion, 3); assert.equal(envelope.savedAt, now);
+    assert.equal(envelope.offlinePolicyVersion, 4); assert.equal(envelope.savedAt, now);
     assert.deepEqual(new LocalSaveRepository(memory).load(now).state, first.state); assert.equal(memory.getItem(SAVE_KEY), migrated);
     const next = new LocalSaveRepository(memory).load(now + 29900);
     assert.deepEqual(business(next.state), business(advanced(first.state, 23.92)), 'subsequent short gap uses 80%');
-    assert.equal(next.offline.policyVersion, 3); assertValidMoney(next.state);
+    assert.equal(next.offline.policyVersion, 4); assertValidMoney(next.state);
   }
 });
 
 test('TC-3D-020 zero, short, paused and rollback migrations never stamp policy or anchors before a successful write', () => {
-  for (const version of ['unmarked', 1, 2]) for (const now of [90000, 100000, 129900]) for (const paused of [false, true]) {
-    const initial = checkpoint(); initial.paused = paused;
-    const { memory, raw } = fixture(initial, version); let deny = true;
+  for (const version of ['unmarked', 1, 2, 3]) for (const now of [90000, 100000, 129900]) for (const paused of [false, true]) {
+    const source = checkpoint(); source.paused = paused;
+    const { initial, memory, raw } = fixture(source, version); let deny = true;
     const storage = { ...memory, setItem(key, value) { if (deny) throw Error('quota'); memory.setItem(key, value); } };
     const repo = new LocalSaveRepository(storage), failed = repo.load(now);
     rejection(failed, initial, memory, raw); assert.equal(JSON.parse(raw).offlinePolicyVersion, version === 'unmarked' ? undefined : version);
     assert.equal(repo.save(initial, now).ok, false, 'failed transaction requires a successful reload');
-    deny = false; const recovered = repo.load(now), expected = paused || version !== 2 || now <= 100000 ? 0 : 14.95;
-    assert.equal(recovered.status, 'loaded'); assert.deepEqual(business(recovered.state), business(advanced(initial, expected)));
-    const migrated = JSON.parse(memory.getItem(SAVE_KEY)); assert.equal(migrated.offlinePolicyVersion, 3); assert.equal(migrated.savedAt, Math.max(now, 100000));
+    deny = false; const recovered = repo.load(now), expected = legacyAdvanced(initial, Math.max(0, now - 100000) / 1000, version);
+    assert.equal(recovered.status, 'loaded'); assert.deepEqual(business(recovered.state), business(expected));
+    const migrated = JSON.parse(memory.getItem(SAVE_KEY)); assert.equal(migrated.offlinePolicyVersion, 4); assert.equal(migrated.savedAt, Math.max(now, 100000));
     assert.deepEqual(new LocalSaveRepository(memory).load(now).state, recovered.state);
   }
 });
 
 test('TC-3D-020 unsupported versions fail closed; future-time migration never moves the anchor backwards', () => {
-  for (const version of [0, -1, 1.5, '3', null, 4]) {
+  for (const version of [0, -1, 1.5, '4', null, 5]) {
     const { memory, raw, repo } = fixture(checkpoint(), version), result = repo.load(140000);
-    assert.equal(result.status, version === 4 ? 'future' : 'corrupt'); assert.equal(result.protectedRaw, true);
+    assert.equal(result.status, version === 5 ? 'future' : 'corrupt'); assert.equal(result.protectedRaw, true);
     assert.equal(repo.save(createInitialState(), 140000).ok, false); assert.equal(memory.getItem(SAVE_KEY), raw);
   }
-  for (const version of ['unmarked', 1, 2, 3]) {
+  for (const version of ['unmarked', 1, 2, 3, 4]) {
     const { initial, memory, raw, repo } = fixture(checkpoint(), version, 140000), result = repo.load(100000);
     assert.deepEqual(result.state, initial); assert.equal(JSON.parse(memory.getItem(SAVE_KEY)).savedAt, 140000);
-    assert.equal(JSON.parse(memory.getItem(SAVE_KEY)).offlinePolicyVersion, 3);
-    if (version === 3) assert.equal(memory.getItem(SAVE_KEY), raw);
+    assert.equal(JSON.parse(memory.getItem(SAVE_KEY)).offlinePolicyVersion, 4);
+    if (version === 4) assert.equal(memory.getItem(SAVE_KEY), raw);
     assert.equal(repo.save(result.state, 110000).ok, true);
     assert.deepEqual(new LocalSaveRepository(memory).load(139999).state, initial);
     assert.deepEqual(business(new LocalSaveRepository(memory).load(140010).state), business(advanced(initial, .008)));
   }
 });
 
-test('TC-3D-020 paused v3 archives preserve all business state and consume each real interval once', () => {
+test('TC-3D-020 paused v4 archives preserve all business state and consume each real interval once', () => {
   const initial = checkpoint(); initial.paused = true;
   const { memory, repo } = fixture(initial), loaded = repo.load(86400100000, { deferOffline: true });
   assert.equal(loaded.status, 'loaded'); assert.equal(loaded.offline.accepted, true); assert.equal(loaded.offline.effectiveSeconds, 0);
@@ -297,14 +319,14 @@ test('TC-3D-020 aborting or throwing from the final progress callback still prev
   }
 });
 
-test('TC-3D-020 interrupted legacy async migration never exposes v3 before successful settlement', async () => {
-  for (const version of ['unmarked', 1, 2]) {
+test('TC-3D-020 interrupted legacy async migration never exposes v4 before successful settlement', async () => {
+  for (const version of ['unmarked', 1, 2, 3]) {
     const { initial, memory, raw, repo } = fixture(checkpoint(), version), loaded = repo.load(130000, { deferOffline: true });
     assert.equal(loaded.status, 'settling'); assert.equal(memory.getItem(SAVE_KEY), raw);
     const failed = await finish(repo, loaded.pending, { yieldControl: async () => { throw Error('interrupted'); } });
     rejection(failed, initial, memory, raw);
     const retry = repo.load(130000, { deferOffline: true }), done = await finish(repo, retry.pending);
-    assert.deepEqual(business(done.state), business(advanced(initial, 15))); assert.equal(JSON.parse(memory.getItem(SAVE_KEY)).offlinePolicyVersion, 3);
+    assert.deepEqual(business(done.state), business(legacyAdvanced(initial, 30, version))); assert.equal(JSON.parse(memory.getItem(SAVE_KEY)).offlinePolicyVersion, 4);
     const next = repo.load(159900); assert.deepEqual(business(next.state), business(advanced(done.state, 23.92)));
   }
 });
@@ -344,7 +366,7 @@ test('TC-3D-020 overlapping finish calls cannot commit twice or cancel the activ
 
 test('TC-3D-020 final write failure and compare-before-write races preserve source bytes and full unpaid time', async () => {
   for (const mode of ['write-failure', 'commit-CAS']) {
-    const { initial, memory, raw } = fixture(); const winning = rawEnvelope(initial, 140000, 3, 'winner'); let fail = false;
+    const { initial, memory, raw } = fixture(); const winning = rawEnvelope(initial, 140000, 4, 'winner'); let fail = false;
     const storage = { ...memory, getItem(key) { if (fail && mode === 'commit-CAS') { fail = false; memory.setItem(SAVE_KEY, winning); } return memory.getItem(key); }, setItem(key, value) { if (fail && mode === 'write-failure') throw Error('quota'); memory.setItem(key, value); } };
     const repo = new LocalSaveRepository(storage), loaded = repo.load(130000, { deferOffline: true });
     const result = await finish(repo, loaded.pending, { onProgress: progress => { if (progress.fraction === 1) fail = true; } });
@@ -356,12 +378,12 @@ test('TC-3D-020 final write failure and compare-before-write races preserve sour
 });
 
 test('TC-3D-020 zero and short legacy migration CAS conflicts cannot stamp the losing candidate', () => {
-  for (const version of ['unmarked', 1, 2]) for (const now of [90000, 100000, 129900]) {
+  for (const version of ['unmarked', 1, 2, 3]) for (const now of [90000, 100000, 129900]) {
     const { initial, memory, raw } = fixture(checkpoint(), version), winning = rawEnvelope(initial, 140000, version, 'concurrent-anchor'); let reads = 0;
     const storage = { ...memory, getItem(key) { if (++reads === 2) memory.setItem(SAVE_KEY, winning); return memory.getItem(key); } };
     const result = new LocalSaveRepository(storage).load(now); rejection(result, initial, memory, winning, 'conflict'); assert.notEqual(raw, winning);
     const recovered = new LocalSaveRepository(memory).load(now); assert.deepEqual(recovered.state, initial);
-    const envelope = JSON.parse(memory.getItem(SAVE_KEY)); assert.equal(envelope.offlinePolicyVersion, 3); assert.equal(envelope.savedAt, 140000);
+    const envelope = JSON.parse(memory.getItem(SAVE_KEY)); assert.equal(envelope.offlinePolicyVersion, 4); assert.equal(envelope.savedAt, 140000);
   }
 });
 
@@ -379,7 +401,7 @@ test('TC-3D-020 live hidden settlement respects later durable anchors, cancellat
 });
 
 test('TC-3D-020 maximum storage tags and rejected duplicate claims never discard an unpaid endpoint', () => {
-  const initial = checkpoint(), memory = createMemoryStorage(); memory.setItem(SAVE_KEY, rawEnvelope(initial, 100000, 3, 'x'.repeat(256)));
+  const initial = checkpoint(), memory = createMemoryStorage(); memory.setItem(SAVE_KEY, rawEnvelope(initial, 100000, 4, 'x'.repeat(256)));
   const loaded = new LocalSaveRepository(memory).load(130000); assert.equal(loaded.offline.accepted, true); assert.ok(loaded.state.lastOfflineClaimId.length <= 256);
   assert.deepEqual(business(loaded.state), business(advanced(initial, 24)));
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
@@ -430,7 +452,7 @@ test('TC-3D-020 cancellation of a 10ms live gap preserves its source and fractio
 test('TC-3D-020 live CAS conflict stays latched even if another actor later restores the old bytes', async () => {
   const { initial, memory, raw, repo } = fixture(); assert.equal(repo.load(100000).status, 'loaded');
   const live = advanced(initial, 5), pending = repo.settleOffline(live, 105000, 135000, { deferOffline: true });
-  const winner = rawEnvelope(initial, 140000, 3, 'new-authority'); memory.setItem(SAVE_KEY, winner);
+  const winner = rawEnvelope(initial, 140000, 4, 'new-authority'); memory.setItem(SAVE_KEY, winner);
   const result = await finish(repo, pending.pending); rejection(result, live, memory, winner, 'conflict');
   memory.setItem(SAVE_KEY, raw);
   const retry = repo.settleOffline(live, 105000, 135000, { deferOffline: true }); rejection(retry, live, memory, raw, 'conflict');
@@ -459,6 +481,7 @@ test('TC-3D-020 generated live claim collisions and failed reads never grant exa
 test('TC-3D-023 coffee upgrades use the same prices and durations online and offline with exact 80% settlement', async () => {
   const engine = createEngine(); engine.advance(240);
   assert.equal(engine.upgradeCoffee('espresso'), true); assert.equal(engine.upgradeCoffee('latte'), true);
+  assert.equal(engine.buyIngredient('beans', 'batch'), true); assert.equal(engine.buyIngredient('milk', 'batch'), true);
   engine.setRecipe('counter-b', 'espresso'); engine.advance(13.137);
   const initial = engine.snapshot(), online = createEngine(initial), offline = createEngine(initial), wall = 396.524;
   online.advance(wall * .8);
@@ -477,6 +500,7 @@ test('TC-3D-023 coffee upgrades use the same prices and durations online and off
 
 test('TC-3D-023 failed or cancelled coffee settlement preserves upgraded source and rejects altered retry progress', async () => {
   const engine = createEngine(); engine.advance(240); engine.upgradeCoffee('latte');
+  assert.equal(engine.buyIngredient('beans', 'batch'), true); assert.equal(engine.buyIngredient('milk', 'batch'), true);
   const initial = engine.snapshot(), { memory, repo, raw } = fixture(initial);
   assert.equal(repo.load(100000).status, 'loaded');
   const pending = repo.settleOffline(initial, 100000, 120000, { deferOffline: true });
@@ -496,11 +520,11 @@ test('TC-3D-023 legacy economy migrates independently of one-time offline policy
     const legacy = structuredClone(legacyArchives.inactive); legacy.economyVersion = 1; delete legacy.coffeeLevels; delete legacy.layout;
     const modern = validateState(legacy); assert.equal(modern.ok, true, modern.message);
     const { memory, repo } = fixture(legacy, policy);
-    const loaded = repo.load(160000), expected = advanced(modern.state, policy === 3 ? 48 : 30);
+    const loaded = repo.load(160000), expected = legacyAdvanced(modern.state, 60, policy);
     assert.equal(loaded.status, 'loaded'); assert.equal(loaded.offline.accepted, true);
-    assert.deepEqual(business(loaded.state), business(expected)); assert.equal(loaded.state.economyVersion, 4);
+    assert.deepEqual(business(loaded.state), business(expected)); assert.equal(loaded.state.economyVersion, 5);
     assert.deepEqual(loaded.state.coffeeLevels, { espresso: 1, latte: 1 });
-    const durable = JSON.parse(memory.getItem(SAVE_KEY)); assert.equal(durable.state.economyVersion, 4); assert.equal(durable.offlinePolicyVersion, 3);
+    const durable = JSON.parse(memory.getItem(SAVE_KEY)); assert.equal(durable.state.economyVersion, 5); assert.equal(durable.offlinePolicyVersion, 4);
     assert.deepEqual(new LocalSaveRepository(memory).load(160000).state, loaded.state);
   }
 });

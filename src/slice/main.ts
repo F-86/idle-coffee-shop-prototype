@@ -1,4 +1,5 @@
 import { createEngine, recipeById, counterPrice, counterBrewSeconds } from "./core/engine";
+import { INGREDIENT_CONFIG } from "./core/ingredients";
 import { LocalSaveRepository, SAVE_KEY, type LoadResult, type OfflineSettlement } from "./core/persistence";
 import type {
   CounterId,
@@ -25,7 +26,7 @@ const root = document.querySelector<HTMLDivElement>("#slice-root")!;
 root.innerHTML = `
 <main class="coffee-world" aria-label="Mellow Bean 全屏咖啡店">
   <canvas id="coffee-canvas" tabindex="0" aria-label="Mellow Bean 店铺场景" aria-describedby="scene-instructions"></canvas>
-  <p id="scene-instructions" class="sr-only">拖动逛店，点击柜台前脸的配方牌和升级牌。底部图标可升级咖啡、换背景、布置家具和招客。客人右门进、左门出，柜台交杯时直接到账。装修前点击右上角暂停营业，布置后再点击恢复营业。键盘左右箭头选择店内物件，上下箭头平移，Enter 或空格操作，Home 返回柜台 A。</p>
+  <p id="scene-instructions" class="sr-only">拖动逛店，点击柜台前脸的配方牌和升级牌。底部图标可升级咖啡、手动购买原料、换背景、布置家具和招客。客人右门进、左门出，柜台交杯时直接到账。装修前点击右上角暂停营业，布置后再点击恢复营业。键盘左右箭头选择店内物件，上下箭头平移，Enter 或空格操作，Home 返回柜台 A。</p>
   <header class="hud" aria-label="金额、营业与设置"><div class="wallet-chip"><strong id="wallet">¥0.00</strong><span id="business-status">营业中</span></div><div class="hud-actions"><button id="business-toggle" class="business-toggle" aria-pressed="false">暂停营业</button><button id="settings" class="settings-button" aria-label="打开店铺设置">⚙</button></div></header>
   <section id="migration-notice" class="migration-notice" role="status" hidden><p>小店已换成双门动线。为留出新出口，部分旧家具已移入收纳或调整位置，资产与等级都保留了。暂停营业后可重新布置。</p><button id="migration-dismiss" aria-label="确认动线调整提示">知道了</button></section>
   <div id="render-error" class="render-error" hidden></div>
@@ -38,13 +39,13 @@ root.innerHTML = `
         <button data-select-recipe="latte"><span class="cup-art latte-cup" aria-hidden="true"></span><strong>拿铁</strong><small id="recipe-latte-stats"></small></button>
       </div>
       <p id="counter-affinity" class="affinity-badge"></p>
-      <p class="detail-note">下一杯生效</p>
+      <p class="detail-note">下一杯生效</p><p id="recipe-stock-note" class="supply-note" role="status"></p>
     </div>
     <div id="counter-panel" class="operation-panel" hidden>
       <div class="upgrade-card">
         <div class="section-heading"><h2 id="counter-coffee"></h2><span id="counter-level" class="level-badge"></span></div>
         <div class="detail-grid upgrade-stats"><span>每杯售价<strong id="counter-price"></strong><small id="counter-next-price"></small></span><span>制作时长<strong id="counter-seconds"></strong><small id="counter-next-seconds"></small></span></div>
-        <button id="counter-upgrade" class="primary-button"></button><p id="counter-funds" class="action-note"></p>
+        <button id="counter-upgrade" class="primary-button"></button><p id="counter-funds" class="action-note"></p><p id="counter-stock-note" class="supply-note"></p>
       </div>
     </div>
     <div id="coffee-panel" class="operation-panel" hidden>
@@ -52,9 +53,25 @@ root.innerHTML = `
       <div class="upgrade-card">
         <div class="section-heading"><h2>咖啡升级</h2><span id="coffee-level" class="level-badge"></span></div>
         <div class="detail-grid upgrade-stats"><span>基础杯价<strong id="coffee-price"></strong><small id="coffee-next-price"></small></span><span>制作时长<strong id="coffee-seconds"></strong><small id="coffee-next-seconds"></small></span></div>
-        <button id="coffee-upgrade" class="primary-button"></button><p id="coffee-funds" class="action-note"></p>
+        <button id="coffee-upgrade" class="primary-button"></button><p id="coffee-funds" class="action-note"></p><p id="coffee-stock-note" class="supply-note"></p>
       </div>
       <details class="quiet-details counter-management"><summary>管理营业柜台</summary><div id="counter-shortcuts"></div></details>
+    </div>
+    <div id="ingredients-panel" class="operation-panel" hidden>
+      <p class="ingredient-rules">所有柜台共用原料。需要时手动购买；用水免费，不会自动补货。</p>
+      <p id="ingredient-supply-note" class="supply-note" role="status"></p>
+      <section class="ingredient-card" aria-labelledby="ingredient-beans-name">
+        <div class="ingredient-heading"><img src="./assets/catalog-beans.svg" alt="" draggable="false"><div><h2 id="ingredient-beans-name">咖啡豆</h2><p id="ingredient-beans-unit" class="detail-note"></p></div><strong id="ingredient-beans-stock" class="ingredient-stock"></strong></div>
+        <meter id="ingredient-beans-meter" class="ingredient-meter" min="0" max="1" value="0" aria-label="咖啡豆库存"></meter><p class="ingredient-use">每杯浓缩或拿铁消耗 1 份</p>
+        <div class="ingredient-options" role="group" aria-label="咖啡豆购买数量"><button id="ingredient-beans-one" data-ingredient-id="beans" data-ingredient-mode="one"><span>买 1 份</span><strong id="ingredient-beans-one-quantity"></strong><small id="ingredient-beans-one-cost"></small></button><button id="ingredient-beans-batch" data-ingredient-id="beans" data-ingredient-mode="batch"><span>买一批</span><strong id="ingredient-beans-batch-quantity"></strong><small id="ingredient-beans-batch-cost"></small></button><button id="ingredient-beans-fill" data-ingredient-id="beans" data-ingredient-mode="fill"><span>补满</span><strong id="ingredient-beans-fill-quantity"></strong><small id="ingredient-beans-fill-cost"></small></button></div>
+        <button id="ingredient-beans-buy" class="primary-button" data-buy-ingredient="beans"></button><p id="ingredient-beans-note" class="action-note" role="status"></p>
+      </section>
+      <section class="ingredient-card" aria-labelledby="ingredient-milk-name">
+        <div class="ingredient-heading"><img src="./assets/catalog-milk.svg" alt="" draggable="false"><div><h2 id="ingredient-milk-name">牛奶</h2><p id="ingredient-milk-unit" class="detail-note"></p></div><strong id="ingredient-milk-stock" class="ingredient-stock"></strong></div>
+        <meter id="ingredient-milk-meter" class="ingredient-meter" min="0" max="1" value="0" aria-label="牛奶库存"></meter><p class="ingredient-use">每杯拿铁消耗 1 份</p>
+        <div class="ingredient-options" role="group" aria-label="牛奶购买数量"><button id="ingredient-milk-one" data-ingredient-id="milk" data-ingredient-mode="one"><span>买 1 份</span><strong id="ingredient-milk-one-quantity"></strong><small id="ingredient-milk-one-cost"></small></button><button id="ingredient-milk-batch" data-ingredient-id="milk" data-ingredient-mode="batch"><span>买一批</span><strong id="ingredient-milk-batch-quantity"></strong><small id="ingredient-milk-batch-cost"></small></button><button id="ingredient-milk-fill" data-ingredient-id="milk" data-ingredient-mode="fill"><span>补满</span><strong id="ingredient-milk-fill-quantity"></strong><small id="ingredient-milk-fill-cost"></small></button></div>
+        <button id="ingredient-milk-buy" class="primary-button" data-buy-ingredient="milk"></button><p id="ingredient-milk-note" class="action-note" role="status"></p>
+      </section>
     </div>
     <div id="background-panel" class="operation-panel" hidden>
       <div class="background-picker" role="group" aria-label="店外背景">
@@ -93,11 +110,12 @@ root.innerHTML = `
     </div>
     <div id="offline-panel" class="operation-panel" hidden>
       <div id="offline-working"><div class="earnings-art" aria-hidden="true"><span></span><i></i></div><p id="offline-progress-text" role="status" aria-live="polite">正在整理小店收益…</p><progress id="offline-progress" max="1" value="0" aria-label="离线收益整理进度"></progress><p class="detail-note">完成后安全到账，取消可稍后重试。</p><button id="offline-cancel" class="secondary-button">稍后再算</button></div>
-      <div id="offline-result" hidden><div class="earnings-art" aria-hidden="true"><span></span><i></i></div><p id="offline-duration"></p><div class="earnings-reward"><span>本次到账</span><strong id="offline-deposited"></strong><small>已计入当前金额</small></div><button id="offline-done" class="primary-button">回到小店</button></div>
+      <div id="offline-result" hidden><div class="earnings-art" aria-hidden="true"><span></span><i></i></div><p id="offline-duration"></p><div class="earnings-reward"><span>本次净收入</span><strong id="offline-deposited"></strong><small>余额变化 · 已计入当前金额</small></div><p id="offline-stockout" class="supply-note" hidden>离开期间原料用完，部分咖啡已停做。回到小店后可手动补货。</p><button id="offline-done" class="primary-button">回到小店</button></div>
     </div>
   </dialog>
   <nav id="action-dock" class="action-dock" aria-label="小店操作">
     <button id="dock-coffee" title="升级咖啡" aria-label="升级咖啡"><img src="./assets/catalog-espresso.svg" alt="" draggable="false"><span>咖啡</span></button>
+    <button id="dock-ingredients" title="购买原料" aria-label="购买原料"><img src="./assets/catalog-ingredients.svg" alt="" draggable="false"><span>原料</span></button>
     <button id="dock-background" title="切换背景" aria-label="切换背景"><img src="./assets/catalog-garden.svg" alt="" draggable="false"><span>背景</span></button>
     <button id="dock-furniture" title="布置家具" aria-label="布置家具"><img src="./assets/catalog-table.svg" alt="" draggable="false"><span>家具</span></button>
     <button id="dock-invite" title="招呼客人" aria-label="招呼客人"><img src="./assets/catalog-invite.svg" alt="" draggable="false"><span>招客</span></button>
@@ -187,9 +205,13 @@ let hasUsableState = ["new", "loaded", "settling", "conflict", "offline-save-fai
 $("#reload").hidden = !saveBlocked;
 $("#new-shop").hidden = !loaded.protectedRaw && loaded.status !== "missing";
 let selected: CounterId = "counter-a";
-let panel: "recipe" | "counter" | "coffee" | "background" | "settings" | "files" | "offline" | null =
+let panel: "recipe" | "counter" | "coffee" | "ingredients" | "background" | "settings" | "files" | "offline" | null =
     null,
   viewedRecipe: RecipeId = "espresso";
+type IngredientId = keyof typeof INGREDIENT_CONFIG;
+type IngredientMode = "one" | "batch" | "fill";
+const ingredientModes: Record<IngredientId, IngredientMode> = { beans: "batch", milk: "batch" };
+const ingredientQuotes: Partial<Record<IngredientId, { quantity: number; cost: number }>> = {};
 let scene: CoffeeScene | null = null;
 let renovating = false;
 let layoutDraft: ShopLayout | null = null;
@@ -253,7 +275,7 @@ type OfflineRetry = { kind: "load" } | { kind: "hidden"; state: SliceState; hidd
 let offlineJob: { pending: OfflineSettlement; controller: AbortController; started: number; lastObserved: number } | null = null;
 let offlineRetry: OfflineRetry | null = null;
 let resumeOfflineAfterHide = false;
-let offlineReturnPanel: "recipe" | "counter" | "coffee" | "background" | "settings" | "files" | null = null;
+let offlineReturnPanel: "recipe" | "counter" | "coffee" | "ingredients" | "background" | "settings" | "files" | null = null;
 // Only a completed visible computation proves a long unrendered interval was
 // foreground work. Other long clock gaps need explicit recovery, not guessing.
 let verifiedForegroundSeconds = 0;
@@ -758,6 +780,7 @@ on($("#business-toggle"), "click", () => {
   toast(saveBlocked ? "存档发生冲突，进度已保护；请到设置恢复，营业状态尚未保存" : saveFailed ? "营业状态已在当前页面更改，但保存失败；刷新可能恢复旧状态，请到设置导出备份" : engine.state.paused ? "已停止接待新客，店内客人会喝完后离开" : "开门啦，欢迎光临！");
 });
 on($("#dock-coffee"), "click", () => { if (!stopped && !dialog.open && !renovating) showPanel("coffee"); });
+on($("#dock-ingredients"), "click", () => { if (!stopped && !document.hidden && !dialog.open && !renovating) showPanel("ingredients"); });
 on($("#dock-background"), "click", () => { if (!stopped && !dialog.open && !renovating) showPanel("background"); });
 on($("#dock-furniture"), "click", () => { if (!stopped && !dialog.open) startRenovation(); });
 on($("#dock-invite"), "click", () => { if (!stopped && !dialog.open && !renovating) invite(); });
@@ -846,18 +869,43 @@ on($("#coffee-upgrade"), "click", () => {
   }
   updateUI();
 });
+function ingredientPurchaseBlocked(): boolean {
+  return stopped || document.hidden || renovating || saveBlocked || !!offlineJob || fileBusy || !!fileReview;
+}
+root.querySelectorAll<HTMLButtonElement>("[data-ingredient-mode]").forEach(button => on(button, "click", () => {
+  if (panel !== "ingredients" || !dialog.open || ingredientPurchaseBlocked()) return;
+  ingredientModes[button.dataset.ingredientId as IngredientId] = button.dataset.ingredientMode as IngredientMode;
+  updateUI();
+}));
+root.querySelectorAll<HTMLButtonElement>("[data-buy-ingredient]").forEach(button => on(button, "click", () => {
+  if (panel !== "ingredients" || !dialog.open || ingredientPurchaseBlocked() || !settleVisibleTail()) return;
+  const id = button.dataset.buyIngredient as IngredientId, mode = ingredientModes[id];
+  const quote = engine.ingredientQuote(id, mode), shown = ingredientQuotes[id];
+  // A brew can consume stock since the last painted frame. Never replace the
+  // displayed fill price with a larger purchase behind the player's click.
+  if (!shown || quote.quantity !== shown.quantity || quote.cost !== shown.cost) {
+    updateUI(); toast("库存刚有变化，数量与价格已更新，请再确认购买"); return;
+  }
+  if (!quote.quantity || !quote.affordable || !engine.buyIngredient(id, mode)) { updateUI(); return; }
+  save();
+  updateUI();
+  toast(saveBlocked ? "原料已加入当前库存，但存档冲突，进度已保护；请到设置恢复" : saveFailed ? "原料已加入当前库存，但保存失败；请到设置导出备份" : `已购买 ${quote.quantity} 份${INGREDIENT_CONFIG[id].name} · ${money(quote.cost)}`);
+}));
 on($("#save"), "click", () => save(true));
 function fileMessage(message: string) { $("#file-status").textContent = message; }
 function coffeeLevelsSummary(state: SliceState): string {
   return `浓缩 Lv. ${state.coffeeLevels?.espresso ?? 1} · 拿铁 Lv. ${state.coffeeLevels?.latte ?? 1}`;
 }
+function ingredientSummary(state: SliceState): string {
+  return `咖啡豆 ${state.ingredients.beans} / ${INGREDIENT_CONFIG.beans.capacity} · 牛奶 ${state.ingredients.milk} / ${INGREDIENT_CONFIG.milk.capacity}`;
+}
 function summaryDetails(state: SliceState, savedAt?: number): string {
   const o = overviewOf(state);
-  return `${savedAt === undefined ? "当前未存盘进度" : `时间 ${new Date(savedAt).toLocaleString()}`}\n余额 ${money(o.wallet)} · 营业额 ${money(o.totalEarned)} · 已售 ${o.totalServed} 杯\n柜台 ${o.counterLevels.join(" / ")} 级\n${coffeeLevelsSummary(state)}\n营业柜台 ${o.placedCounters} · 座位 ${o.placedSeats} · ${o.expanded ? "已扩建" : "初始店面"}\n${state.paused ? "已暂停营业" : "营业中"} · 经营 ${duration(o.elapsed)}`;
+  return `${savedAt === undefined ? "当前未存盘进度" : `时间 ${new Date(savedAt).toLocaleString()}`}\n余额 ${money(o.wallet)} · 营业额 ${money(o.totalEarned)} · 已售 ${o.totalServed} 杯\n柜台 ${o.counterLevels.join(" / ")} 级\n${coffeeLevelsSummary(state)}\n${ingredientSummary(state)}\n营业柜台 ${o.placedCounters} · 座位 ${o.placedSeats} · ${o.expanded ? "已扩建" : "初始店面"}\n${state.paused ? "已暂停营业" : "营业中"} · 经营 ${duration(o.elapsed)}`;
 }
 function summary(state: SliceState, savedAt?: number): string {
   const o = overviewOf(state);
-  return `余额 ${money(o.wallet)}\n已售 ${o.totalServed} 杯\n柜台 ${o.counterLevels.join(" / ")} 级\n${coffeeLevelsSummary(state)}\n${o.placedCounters} 个营业柜台 · ${o.placedSeats} 个座位 · ${o.expanded ? "已扩建" : "初始店面"}${savedAt === undefined ? "" : `\n${new Date(savedAt).toLocaleString()}`}`;
+  return `余额 ${money(o.wallet)}\n已售 ${o.totalServed} 杯\n柜台 ${o.counterLevels.join(" / ")} 级\n${coffeeLevelsSummary(state)}\n${ingredientSummary(state)}\n${o.placedCounters} 个营业柜台 · ${o.placedSeats} 个座位 · ${o.expanded ? "已扩建" : "初始店面"}${savedAt === undefined ? "" : `\n${new Date(savedAt).toLocaleString()}`}`;
 }
 function updateFileControls() {
   const review = fileReview !== null;
@@ -963,7 +1011,7 @@ on($("#file-prepare"), "click", () => {
   if (!written?.ok || saveBlocked || !durable || JSON.stringify(durable.state) !== JSON.stringify(engine.snapshot()) || !durable.saveId || !durable.revision) { fileMessage("当前进度尚未安全保存。请在上方重试保存，或导出当前副本。"); return; }
   const generation = ++fileGeneration;
   fileBusy = true; preparedFile = null; updateFileControls();
-  void createPortableSave({ gameSchemaVersion: 1, economyVersion: durable.state.economyVersion, offlinePolicyVersion: 3, saveId: durable.saveId, revision: durable.revision, savedAt: durable.savedAt, exportedAt: Date.now(), overview: overviewOf(durable.state), state: durable.state }).then(file => {
+  void createPortableSave({ gameSchemaVersion: 1, economyVersion: durable.state.economyVersion, offlinePolicyVersion: 4, saveId: durable.saveId, revision: durable.revision, savedAt: durable.savedAt, exportedAt: Date.now(), overview: overviewOf(durable.state), state: durable.state }).then(file => {
     if (generation !== fileGeneration || stopped || document.hidden || panel !== "files" || !dialog.open) return;
     preparedFile = file; fileBusy = false;
     $("#file-export-summary").textContent = summary(file.payload.state, file.payload.savedAt);
@@ -992,7 +1040,7 @@ on($("#backup-live"), "click", () => {
   if (!backup?.liveState || fileBusy || fileReview) { fileMessage("没有可读取的导入前有效进度；请导出原始档。"); return; }
   const generation = ++fileGeneration;
   fileBusy = true; updateFileControls();
-  void createPortableSave({ gameSchemaVersion: 1, economyVersion: backup.liveState.economyVersion, offlinePolicyVersion: 3, saveId: crypto.randomUUID(), revision: 1, savedAt: backup.createdAt, exportedAt: Date.now(), overview: overviewOf(backup.liveState), state: backup.liveState }).then(file => {
+  void createPortableSave({ gameSchemaVersion: 1, economyVersion: backup.liveState.economyVersion, offlinePolicyVersion: 4, saveId: crypto.randomUUID(), revision: 1, savedAt: backup.createdAt, exportedAt: Date.now(), overview: overviewOf(backup.liveState), state: backup.liveState }).then(file => {
     if (generation !== fileGeneration || stopped || document.hidden || panel !== "files") return;
     preparedFile = file; fileBusy = false;
     $("#file-export-summary").textContent = `导入前进度\n${summary(file.payload.state, file.payload.savedAt)}`;
@@ -1096,6 +1144,7 @@ function showOfflineResult(result: LoadResult) {
   $("#offline-result").hidden = false;
   // Player reward is the committed wallet delta, never generated/pending cash.
   $("#offline-deposited").textContent = money(offline.amount);
+  $("#offline-stockout").hidden = !offline.stockout;
   $("#offline-duration").textContent = `离开了 ${duration(Math.floor(offline.awaySeconds))}`;
   showPanel("offline");
   return true;
@@ -1282,6 +1331,42 @@ function updateRenderModeUI() {
       ? "画面与耗电之间的平衡。"
       : "减少绘制，画面与动作会更简约。";
 }
+function setSupplyText(selector: string, message: string) {
+  const element = $(selector);
+  if (element.textContent !== message) element.textContent = message;
+}
+function recipeSupplyNote(recipe: RecipeId): string {
+  const { beans, milk } = engine.state.ingredients;
+  if (!beans) return "咖啡豆用完了，暂停制作新杯；已开做的咖啡会完成。";
+  if (recipe === "latte" && !milk) return "牛奶用完了，拿铁暂停制作；可把柜台切换为浓缩，无需购买牛奶。";
+  return recipe === "latte" ? "每杯用 1 份咖啡豆 + 1 份牛奶 · 用水免费" : "每杯用 1 份咖啡豆 · 用水免费";
+}
+function updateIngredientPanel() {
+  const blocked = ingredientPurchaseBlocked();
+  const { beans, milk } = engine.state.ingredients;
+  setSupplyText("#ingredient-supply-note", !beans && engine.state.wallet < INGREDIENT_CONFIG.beans.unitCost && !engine.state.counters.some(counter => counter.brew) ? "原料不足，余额也不够购买咖啡豆；没有自动补货。" : !beans ? "咖啡豆用完了，补货后才能制作新杯。已开做的咖啡会完成。" : !milk ? "牛奶用完了，拿铁暂停制作；可把柜台切换为浓缩，无需购买牛奶。" : "原料充足，所有柜台共用这份库存。");
+  for (const id of ["beans", "milk"] as const) {
+    const config = INGREDIENT_CONFIG[id], stock = engine.state.ingredients[id];
+    $(`#ingredient-${id}-stock`).textContent = `${stock} / ${config.capacity} 份`;
+    $(`#ingredient-${id}-unit`).textContent = `${money(config.unitCost)} / 份`;
+    $(`#ingredient-${id}-meter`).setAttribute("max", String(config.capacity));
+    $(`#ingredient-${id}-meter`).setAttribute("value", String(stock));
+    $(`#ingredient-${id}-meter`).setAttribute("aria-valuetext", `${stock} 份，上限 ${config.capacity} 份`);
+    for (const mode of ["one", "batch", "fill"] as const) {
+      const q = engine.ingredientQuote(id, mode), button = $<HTMLButtonElement>(`#ingredient-${id}-${mode}`);
+      button.setAttribute("aria-pressed", String(ingredientModes[id] === mode));
+      button.setAttribute("aria-label", `${config.name}${mode === "one" ? "单份" : mode === "batch" ? "一批" : "补满"}：${q.quantity} 份，${money(q.cost)}`);
+      button.disabled = blocked || q.quantity === 0;
+      $(`#ingredient-${id}-${mode}-quantity`).textContent = `${q.quantity} 份`;
+      $(`#ingredient-${id}-${mode}-cost`).textContent = money(q.cost);
+    }
+    const q = engine.ingredientQuote(id, ingredientModes[id]);
+    ingredientQuotes[id] = { quantity: q.quantity, cost: q.cost };
+    $(`#ingredient-${id}-buy`).textContent = q.quantity ? `购买 ${q.quantity} 份 · ${money(q.cost)}` : "库存已满";
+    $<HTMLButtonElement>(`#ingredient-${id}-buy`).disabled = blocked || !q.quantity || !q.affordable;
+    setSupplyText(`#ingredient-${id}-note`, saveBlocked ? "请先到设置恢复存档，再购买原料" : blocked ? "当前正在处理进度，暂时不能购买" : !q.quantity ? "仓库已装满，不会扣款" : !q.affordable ? `余额不足，还差 ${money(q.cost - engine.state.wallet)}；可选择更少数量` : engine.state.paused ? "已暂停营业，仍可手动补货" : "点击购买后扣款并加入库存");
+  }
+}
 function updateUI() {
   updateRenovation();
   updateBackupControls();
@@ -1301,12 +1386,15 @@ function updateUI() {
   $("#business-status").classList.toggle("closed", s.paused);
   $<HTMLButtonElement>("#dock-invite").disabled = frozen || s.paused || s.inviteCooldown > 0;
   $<HTMLButtonElement>("#dock-furniture").disabled = frozen;
+  $("#dock-ingredients").classList.toggle("needs-stock", !s.ingredients.beans || !s.ingredients.milk);
+  $("#dock-ingredients").setAttribute("aria-label", `购买原料：咖啡豆 ${s.ingredients.beans} 份，牛奶 ${s.ingredients.milk} 份${!s.ingredients.beans || !s.ingredients.milk ? "，需要补货" : ""}`);
   $("#dock-furniture").setAttribute("title", s.paused ? "布置家具" : "先暂停营业，再布置家具");
   if (panel === "recipe") {
     const c = s.counters.find((c) => c.id === selected)!;
     $("#dialog-eyebrow").textContent = `柜台 ${selected.slice(-1).toUpperCase()} · Lv. ${c.level}`;
     $("#dialog-title").textContent = "选择咖啡";
     $("#dialog-description").textContent = "";
+    setSupplyText("#recipe-stock-note", recipeSupplyNote(c.recipe));
     $("#counter-affinity").textContent = selected === "counter-a" ? "浓缩时长 −25%" : selected === "counter-b" ? "拿铁杯价 +12%" : "两种咖啡都能制作";
     root.querySelectorAll<HTMLButtonElement>("[data-select-recipe]").forEach((b) => {
       const recipe = b.dataset.selectRecipe as RecipeId;
@@ -1320,6 +1408,7 @@ function updateUI() {
     $("#dialog-eyebrow").textContent = `柜台 ${selected.slice(-1).toUpperCase()}`;
     $("#dialog-title").textContent = "升级柜台";
     $("#dialog-description").textContent = "";
+    $("#counter-stock-note").textContent = recipeSupplyNote(c.recipe);
     $("#counter-coffee").textContent = recipeById[c.recipe].name;
     $("#counter-level").textContent = `Lv. ${c.level}${q.capped ? " · MAX" : ` → ${c.level + 1}`}`;
     $("#counter-next-price").textContent = q.capped ? "已达上限" : `→ ${money(q.afterPrice)}`;
@@ -1335,6 +1424,7 @@ function updateUI() {
     $("#dialog-eyebrow").textContent = "咖啡";
     $("#dialog-title").textContent = r.name;
     $("#dialog-description").textContent = "";
+    $("#coffee-stock-note").textContent = recipeSupplyNote(viewedRecipe);
     $("#coffee-level").textContent = `Lv. ${q.level}${q.capped ? " · MAX" : ` → ${q.nextLevel}`}`;
     $("#coffee-price").textContent = money(q.beforePrice);
     $("#coffee-seconds").textContent = `${q.beforeSeconds.toFixed(2)} 秒`;
@@ -1346,6 +1436,11 @@ function updateUI() {
     $("#coffee-symbol").style.background = r.color;
     $("#coffee-image").setAttribute("src", `./assets/catalog-${viewedRecipe}.svg`);
     root.querySelectorAll<HTMLButtonElement>("[data-view-coffee]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.viewCoffee === viewedRecipe)));
+  } else if (panel === "ingredients") {
+    $("#dialog-eyebrow").textContent = "SHOP PANTRY";
+    $("#dialog-title").textContent = "原料小仓库";
+    $("#dialog-description").textContent = `可用余额 ${money(s.wallet)}`;
+    updateIngredientPanel();
   } else if (panel === "background") {
     $("#dialog-eyebrow").textContent = "AROUND THE SHOP";
     $("#dialog-title").textContent = "换个店外景色";
@@ -1354,7 +1449,7 @@ function updateUI() {
   } else if (panel === "offline") {
     $("#dialog-eyebrow").textContent = "WELCOME BACK";
     $("#dialog-title").textContent = offlineJob ? "小店忙碌了一会儿" : "欢迎回来";
-    $("#dialog-description").textContent = offlineJob ? "正在把收益装进口袋" : "你不在的时候，咖啡依然飘香";
+    $("#dialog-description").textContent = offlineJob ? "正在整理离开期间的经营进度" : "离开期间的经营进度已保存";
   } else if (panel === "files") {
     $("#dialog-eyebrow").textContent = "COFFEE TO GO";
     $("#dialog-title").textContent = "小店存档";

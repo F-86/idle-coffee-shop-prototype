@@ -1,0 +1,1156 @@
+{
+  "initial": {
+    "schemaVersion": 1,
+    "economyVersion": 4,
+    "layout": {
+      "version": 3,
+      "active": true,
+      "expanded": false,
+      "furniture": [
+        {
+          "id": "counter-a",
+          "kind": "counter",
+          "counterId": "counter-a",
+          "x": 0,
+          "z": 0,
+          "rotation": 0,
+          "stored": false
+        },
+        {
+          "id": "counter-b",
+          "kind": "counter",
+          "counterId": "counter-b",
+          "x": 5,
+          "z": 0,
+          "rotation": 0,
+          "stored": false
+        }
+      ],
+      "coffeeSigns": [
+        {
+          "id": "menu-espresso",
+          "recipe": "espresso",
+          "x": 0,
+          "stored": true
+        },
+        {
+          "id": "menu-latte",
+          "recipe": "latte",
+          "x": 5,
+          "stored": true
+        }
+      ]
+    },
+    "coffeeLevels": {
+      "espresso": 1,
+      "latte": 1
+    },
+    "managerRouteVersion": 2,
+    "customerRouteVersion": 4,
+    "elapsed": 0,
+    "wallet": 1200,
+    "totalEarned": 0,
+    "totalServed": 0,
+    "spend": 0,
+    "nextCustomerId": 1,
+    "arrivalTimer": 0,
+    "inviteCooldown": 0,
+    "paused": false,
+    "stepCarry": 0,
+    "eventSequence": 0,
+    "offlineClaimIds": [],
+    "counters": [
+      {
+        "id": "counter-a",
+        "x": 0,
+        "level": 1,
+        "recipe": "espresso",
+        "pendingCash": 0,
+        "brewed": 0,
+        "brew": null
+      },
+      {
+        "id": "counter-b",
+        "x": 5,
+        "level": 1,
+        "recipe": "latte",
+        "pendingCash": 0,
+        "brewed": 0,
+        "brew": null
+      }
+    ],
+    "customers": [],
+    "manager": {
+      "x": 8.8,
+      "z": -1.7,
+      "carrying": 0,
+      "phase": "moving",
+      "target": 2,
+      "timer": 0,
+      "level": 1
+    },
+    "lastOfflineClaimId": null
+  },
+  "inFlight": {
+    "schemaVersion": 1,
+    "economyVersion": 4,
+    "layout": {
+      "version": 3,
+      "active": true,
+      "expanded": false,
+      "furniture": [
+        {
+          "id": "counter-a",
+          "kind": "counter",
+          "counterId": "counter-a",
+          "x": 0,
+          "z": 0,
+          "rotation": 0,
+          "stored": false
+        },
+        {
+          "id": "counter-b",
+          "kind": "counter",
+          "counterId": "counter-b",
+          "x": 5,
+          "z": 0,
+          "rotation": 0,
+          "stored": false
+        }
+      ],
+      "coffeeSigns": [
+        {
+          "id": "menu-espresso",
+          "recipe": "espresso",
+          "x": 0,
+          "stored": true
+        },
+        {
+          "id": "menu-latte",
+          "recipe": "latte",
+          "x": 5,
+          "stored": true
+        }
+      ]
+    },
+    "coffeeLevels": {
+      "espresso": 1,
+      "latte": 1
+    },
+    "managerRouteVersion": 2,
+    "customerRouteVersion": 4,
+    "elapsed": 7.4,
+    "wallet": 400,
+    "totalEarned": 0,
+    "totalServed": 0,
+    "spend": 800,
+    "nextCustomerId": 3,
+    "arrivalTimer": 2.15,
+    "inviteCooldown": 0,
+    "paused": false,
+    "stepCarry": 0.037,
+    "eventSequence": 4,
+    "offlineClaimIds": [],
+    "counters": [
+      {
+        "id": "counter-a",
+        "x": 0,
+        "level": 2,
+        "recipe": "latte",
+        "pendingCash": 0,
+        "brewed": 0,
+        "brew": {
+          "recipe": "espresso",
+          "customerId": 1,
+          "elapsed": 0.5,
+          "duration": 2.583732057416268,
+          "price": 123
+        }
+      },
+      {
+        "id": "counter-b",
+        "x": 5,
+        "level": 1,
+        "recipe": "latte",
+        "pendingCash": 0,
+        "brewed": 0,
+        "brew": null
+      }
+    ],
+    "customers": [
+      {
+        "id": 1,
+        "x": 0,
+        "z": 2,
+        "phase": "serving",
+        "counterId": "counter-a",
+        "timer": 0,
+        "hasCup": false,
+        "skin": 0
+      },
+      {
+        "id": 2,
+        "x": -4.5,
+        "z": 3,
+        "phase": "entering",
+        "counterId": "counter-b",
+        "timer": 0,
+        "hasCup": false,
+        "skin": 1,
+        "nav": [
+          {
+            "x": -4,
+            "z": 3
+          },
+          {
+            "x": -3,
+            "z": 3
+          },
+          {
+            "x": -2,
+            "z": 3
+          },
+          {
+            "x": -1,
+            "z": 3
+          },
+          {
+            "x": 0,
+            "z": 3
+          },
+          {
+            "x": 1,
+            "z": 3
+          },
+          {
+            "x": 1,
+            "z": 2
+          },
+          {
+            "x": 2,
+            "z": 2
+          },
+          {
+            "x": 3,
+            "z": 2
+          },
+          {
+            "x": 4,
+            "z": 2
+          },
+          {
+            "x": 5,
+            "z": 2
+          }
+        ]
+      }
+    ],
+    "manager": {
+      "x": 8.8,
+      "z": -1.7,
+      "carrying": 0,
+      "phase": "moving",
+      "target": 2,
+      "timer": 0,
+      "level": 1
+    },
+    "lastOfflineClaimId": null
+  },
+  "paused": {
+    "schemaVersion": 1,
+    "economyVersion": 4,
+    "layout": {
+      "version": 3,
+      "active": true,
+      "expanded": false,
+      "furniture": [
+        {
+          "id": "counter-a",
+          "kind": "counter",
+          "counterId": "counter-a",
+          "x": 0,
+          "z": 0,
+          "rotation": 0,
+          "stored": false
+        },
+        {
+          "id": "counter-b",
+          "kind": "counter",
+          "counterId": "counter-b",
+          "x": 5,
+          "z": 0,
+          "rotation": 0,
+          "stored": false
+        }
+      ],
+      "coffeeSigns": [
+        {
+          "id": "menu-espresso",
+          "recipe": "espresso",
+          "x": 0,
+          "stored": true
+        },
+        {
+          "id": "menu-latte",
+          "recipe": "latte",
+          "x": 5,
+          "stored": true
+        }
+      ]
+    },
+    "coffeeLevels": {
+      "espresso": 1,
+      "latte": 1
+    },
+    "managerRouteVersion": 2,
+    "customerRouteVersion": 4,
+    "elapsed": 7.4,
+    "wallet": 400,
+    "totalEarned": 0,
+    "totalServed": 0,
+    "spend": 800,
+    "nextCustomerId": 3,
+    "arrivalTimer": 2.15,
+    "inviteCooldown": 0,
+    "paused": true,
+    "stepCarry": 0.037,
+    "eventSequence": 4,
+    "offlineClaimIds": [],
+    "counters": [
+      {
+        "id": "counter-a",
+        "x": 0,
+        "level": 2,
+        "recipe": "latte",
+        "pendingCash": 0,
+        "brewed": 0,
+        "brew": {
+          "recipe": "espresso",
+          "customerId": 1,
+          "elapsed": 0.5,
+          "duration": 2.583732057416268,
+          "price": 123
+        }
+      },
+      {
+        "id": "counter-b",
+        "x": 5,
+        "level": 1,
+        "recipe": "latte",
+        "pendingCash": 0,
+        "brewed": 0,
+        "brew": null
+      }
+    ],
+    "customers": [
+      {
+        "id": 1,
+        "x": 0,
+        "z": 2,
+        "phase": "serving",
+        "counterId": "counter-a",
+        "timer": 0,
+        "hasCup": false,
+        "skin": 0
+      },
+      {
+        "id": 2,
+        "x": -4.5,
+        "z": 3,
+        "phase": "entering",
+        "counterId": "counter-b",
+        "timer": 0,
+        "hasCup": false,
+        "skin": 1,
+        "nav": [
+          {
+            "x": -4,
+            "z": 3
+          },
+          {
+            "x": -3,
+            "z": 3
+          },
+          {
+            "x": -2,
+            "z": 3
+          },
+          {
+            "x": -1,
+            "z": 3
+          },
+          {
+            "x": 0,
+            "z": 3
+          },
+          {
+            "x": 1,
+            "z": 3
+          },
+          {
+            "x": 1,
+            "z": 2
+          },
+          {
+            "x": 2,
+            "z": 2
+          },
+          {
+            "x": 3,
+            "z": 2
+          },
+          {
+            "x": 4,
+            "z": 2
+          },
+          {
+            "x": 5,
+            "z": 2
+          }
+        ]
+      }
+    ],
+    "manager": {
+      "x": 8.8,
+      "z": -1.7,
+      "carrying": 0,
+      "phase": "moving",
+      "target": 2,
+      "timer": 0,
+      "level": 1
+    },
+    "lastOfflineClaimId": null
+  },
+  "offlineWindows": [
+    {
+      "policy": 1,
+      "wall": 29.9,
+      "state": {
+        "schemaVersion": 1,
+        "economyVersion": 4,
+        "layout": {
+          "version": 3,
+          "active": true,
+          "expanded": false,
+          "furniture": [
+            {
+              "id": "counter-a",
+              "kind": "counter",
+              "counterId": "counter-a",
+              "x": 0,
+              "z": 0,
+              "rotation": 0,
+              "stored": false
+            },
+            {
+              "id": "counter-b",
+              "kind": "counter",
+              "counterId": "counter-b",
+              "x": 5,
+              "z": 0,
+              "rotation": 0,
+              "stored": false
+            }
+          ],
+          "coffeeSigns": [
+            {
+              "id": "menu-espresso",
+              "recipe": "espresso",
+              "x": 0,
+              "stored": true
+            },
+            {
+              "id": "menu-latte",
+              "recipe": "latte",
+              "x": 5,
+              "stored": true
+            }
+          ]
+        },
+        "coffeeLevels": {
+          "espresso": 1,
+          "latte": 1
+        },
+        "managerRouteVersion": 2,
+        "customerRouteVersion": 4,
+        "elapsed": 7.4,
+        "wallet": 400,
+        "totalEarned": 0,
+        "totalServed": 0,
+        "spend": 800,
+        "nextCustomerId": 3,
+        "arrivalTimer": 2.15,
+        "inviteCooldown": 0,
+        "paused": false,
+        "stepCarry": 0.037,
+        "eventSequence": 4,
+        "offlineClaimIds": [
+          "old-window"
+        ],
+        "counters": [
+          {
+            "id": "counter-a",
+            "x": 0,
+            "level": 2,
+            "recipe": "latte",
+            "pendingCash": 0,
+            "brewed": 0,
+            "brew": {
+              "recipe": "espresso",
+              "customerId": 1,
+              "elapsed": 0.5,
+              "duration": 2.583732057416268,
+              "price": 123
+            }
+          },
+          {
+            "id": "counter-b",
+            "x": 5,
+            "level": 1,
+            "recipe": "latte",
+            "pendingCash": 0,
+            "brewed": 0,
+            "brew": null
+          }
+        ],
+        "customers": [
+          {
+            "id": 1,
+            "x": 0,
+            "z": 2,
+            "phase": "serving",
+            "counterId": "counter-a",
+            "timer": 0,
+            "hasCup": false,
+            "skin": 0
+          },
+          {
+            "id": 2,
+            "x": -4.5,
+            "z": 3,
+            "phase": "entering",
+            "counterId": "counter-b",
+            "timer": 0,
+            "hasCup": false,
+            "skin": 1,
+            "nav": [
+              {
+                "x": -4,
+                "z": 3
+              },
+              {
+                "x": -3,
+                "z": 3
+              },
+              {
+                "x": -2,
+                "z": 3
+              },
+              {
+                "x": -1,
+                "z": 3
+              },
+              {
+                "x": 0,
+                "z": 3
+              },
+              {
+                "x": 1,
+                "z": 3
+              },
+              {
+                "x": 1,
+                "z": 2
+              },
+              {
+                "x": 2,
+                "z": 2
+              },
+              {
+                "x": 3,
+                "z": 2
+              },
+              {
+                "x": 4,
+                "z": 2
+              },
+              {
+                "x": 5,
+                "z": 2
+              }
+            ]
+          }
+        ],
+        "manager": {
+          "x": 8.8,
+          "z": -1.7,
+          "carrying": 0,
+          "phase": "moving",
+          "target": 2,
+          "timer": 0,
+          "level": 1
+        },
+        "lastOfflineClaimId": "old-window"
+      }
+    },
+    {
+      "policy": 1,
+      "wall": 60,
+      "state": {
+        "schemaVersion": 1,
+        "economyVersion": 4,
+        "layout": {
+          "version": 3,
+          "active": true,
+          "expanded": false,
+          "furniture": [
+            {
+              "id": "counter-a",
+              "kind": "counter",
+              "counterId": "counter-a",
+              "x": 0,
+              "z": 0,
+              "rotation": 0,
+              "stored": false
+            },
+            {
+              "id": "counter-b",
+              "kind": "counter",
+              "counterId": "counter-b",
+              "x": 5,
+              "z": 0,
+              "rotation": 0,
+              "stored": false
+            }
+          ],
+          "coffeeSigns": [
+            {
+              "id": "menu-espresso",
+              "recipe": "espresso",
+              "x": 0,
+              "stored": true
+            },
+            {
+              "id": "menu-latte",
+              "recipe": "latte",
+              "x": 5,
+              "stored": true
+            }
+          ]
+        },
+        "coffeeLevels": {
+          "espresso": 1,
+          "latte": 1
+        },
+        "managerRouteVersion": 2,
+        "customerRouteVersion": 4,
+        "elapsed": 37.4,
+        "wallet": 1507,
+        "totalEarned": 1107,
+        "totalServed": 5,
+        "spend": 800,
+        "nextCustomerId": 7,
+        "arrivalTimer": 2.3,
+        "inviteCooldown": 0,
+        "paused": false,
+        "stepCarry": 0.037,
+        "eventSequence": 18,
+        "offlineClaimIds": [
+          "old-window"
+        ],
+        "counters": [
+          {
+            "id": "counter-a",
+            "x": 0,
+            "level": 2,
+            "recipe": "latte",
+            "pendingCash": 0,
+            "brewed": 3,
+            "brew": null
+          },
+          {
+            "id": "counter-b",
+            "x": 5,
+            "level": 1,
+            "recipe": "latte",
+            "pendingCash": 0,
+            "brewed": 2,
+            "brew": null
+          }
+        ],
+        "customers": [
+          {
+            "id": 4,
+            "x": 10,
+            "z": 5.75,
+            "phase": "leaving",
+            "counterId": "counter-b",
+            "timer": 0,
+            "hasCup": true,
+            "skin": 3,
+            "nav": [
+              {
+                "x": 10,
+                "z": 6
+              },
+              {
+                "x": 11,
+                "z": 6
+              }
+            ]
+          },
+          {
+            "id": 5,
+            "x": 0,
+            "z": 2,
+            "phase": "leaving",
+            "counterId": "counter-a",
+            "timer": 0,
+            "hasCup": true,
+            "skin": 4
+          },
+          {
+            "id": 6,
+            "x": -4.125,
+            "z": 3,
+            "phase": "entering",
+            "counterId": "counter-b",
+            "timer": 0,
+            "hasCup": false,
+            "skin": 5,
+            "nav": [
+              {
+                "x": -4,
+                "z": 3
+              },
+              {
+                "x": -3,
+                "z": 3
+              },
+              {
+                "x": -2,
+                "z": 3
+              },
+              {
+                "x": -1,
+                "z": 3
+              },
+              {
+                "x": 0,
+                "z": 3
+              },
+              {
+                "x": 1,
+                "z": 3
+              },
+              {
+                "x": 1,
+                "z": 2
+              },
+              {
+                "x": 2,
+                "z": 2
+              },
+              {
+                "x": 3,
+                "z": 2
+              },
+              {
+                "x": 4,
+                "z": 2
+              },
+              {
+                "x": 5,
+                "z": 2
+              }
+            ]
+          }
+        ],
+        "manager": {
+          "x": 8.8,
+          "z": -1.7,
+          "carrying": 0,
+          "phase": "moving",
+          "target": 2,
+          "timer": 0,
+          "level": 1
+        },
+        "lastOfflineClaimId": "old-window"
+      }
+    },
+    {
+      "policy": 2,
+      "wall": 29.9,
+      "state": {
+        "schemaVersion": 1,
+        "economyVersion": 4,
+        "layout": {
+          "version": 3,
+          "active": true,
+          "expanded": false,
+          "furniture": [
+            {
+              "id": "counter-a",
+              "kind": "counter",
+              "counterId": "counter-a",
+              "x": 0,
+              "z": 0,
+              "rotation": 0,
+              "stored": false
+            },
+            {
+              "id": "counter-b",
+              "kind": "counter",
+              "counterId": "counter-b",
+              "x": 5,
+              "z": 0,
+              "rotation": 0,
+              "stored": false
+            }
+          ],
+          "coffeeSigns": [
+            {
+              "id": "menu-espresso",
+              "recipe": "espresso",
+              "x": 0,
+              "stored": true
+            },
+            {
+              "id": "menu-latte",
+              "recipe": "latte",
+              "x": 5,
+              "stored": true
+            }
+          ]
+        },
+        "coffeeLevels": {
+          "espresso": 1,
+          "latte": 1
+        },
+        "managerRouteVersion": 2,
+        "customerRouteVersion": 4,
+        "elapsed": 22.35,
+        "wallet": 769,
+        "totalEarned": 369,
+        "totalServed": 2,
+        "spend": 800,
+        "nextCustomerId": 5,
+        "arrivalTimer": 2.25,
+        "inviteCooldown": 0,
+        "paused": false,
+        "stepCarry": 0.037,
+        "eventSequence": 10,
+        "offlineClaimIds": [
+          "old-window"
+        ],
+        "counters": [
+          {
+            "id": "counter-a",
+            "x": 0,
+            "level": 2,
+            "recipe": "latte",
+            "pendingCash": 0,
+            "brewed": 1,
+            "brew": {
+              "recipe": "latte",
+              "customerId": 3,
+              "elapsed": 5.55,
+              "duration": 6.507177033492823,
+              "price": 246
+            }
+          },
+          {
+            "id": "counter-b",
+            "x": 5,
+            "level": 1,
+            "recipe": "latte",
+            "pendingCash": 0,
+            "brewed": 1,
+            "brew": null
+          }
+        ],
+        "customers": [
+          {
+            "id": 2,
+            "x": 10,
+            "z": 5.25,
+            "phase": "leaving",
+            "counterId": "counter-b",
+            "timer": 0,
+            "hasCup": true,
+            "skin": 1,
+            "nav": [
+              {
+                "x": 10,
+                "z": 6
+              },
+              {
+                "x": 11,
+                "z": 6
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "x": 0,
+            "z": 2,
+            "phase": "serving",
+            "counterId": "counter-a",
+            "timer": 0,
+            "hasCup": false,
+            "skin": 2
+          },
+          {
+            "id": 4,
+            "x": -4.25,
+            "z": 3,
+            "phase": "entering",
+            "counterId": "counter-b",
+            "timer": 0,
+            "hasCup": false,
+            "skin": 3,
+            "nav": [
+              {
+                "x": -4,
+                "z": 3
+              },
+              {
+                "x": -3,
+                "z": 3
+              },
+              {
+                "x": -2,
+                "z": 3
+              },
+              {
+                "x": -1,
+                "z": 3
+              },
+              {
+                "x": 0,
+                "z": 3
+              },
+              {
+                "x": 1,
+                "z": 3
+              },
+              {
+                "x": 1,
+                "z": 2
+              },
+              {
+                "x": 2,
+                "z": 2
+              },
+              {
+                "x": 3,
+                "z": 2
+              },
+              {
+                "x": 4,
+                "z": 2
+              },
+              {
+                "x": 5,
+                "z": 2
+              }
+            ]
+          }
+        ],
+        "manager": {
+          "x": 8.8,
+          "z": -1.7,
+          "carrying": 0,
+          "phase": "moving",
+          "target": 2,
+          "timer": 0,
+          "level": 1
+        },
+        "lastOfflineClaimId": "old-window"
+      }
+    },
+    {
+      "policy": 3,
+      "wall": 600,
+      "state": {
+        "schemaVersion": 1,
+        "economyVersion": 4,
+        "layout": {
+          "version": 3,
+          "active": true,
+          "expanded": false,
+          "furniture": [
+            {
+              "id": "counter-a",
+              "kind": "counter",
+              "counterId": "counter-a",
+              "x": 0,
+              "z": 0,
+              "rotation": 0,
+              "stored": false
+            },
+            {
+              "id": "counter-b",
+              "kind": "counter",
+              "counterId": "counter-b",
+              "x": 5,
+              "z": 0,
+              "rotation": 0,
+              "stored": false
+            }
+          ],
+          "coffeeSigns": [
+            {
+              "id": "menu-espresso",
+              "recipe": "espresso",
+              "x": 0,
+              "stored": true
+            },
+            {
+              "id": "menu-latte",
+              "recipe": "latte",
+              "x": 5,
+              "stored": true
+            }
+          ]
+        },
+        "coffeeLevels": {
+          "espresso": 1,
+          "latte": 1
+        },
+        "managerRouteVersion": 2,
+        "customerRouteVersion": 4,
+        "elapsed": 487.4,
+        "wallet": 15775,
+        "totalEarned": 15375,
+        "totalServed": 63,
+        "spend": 800,
+        "nextCustomerId": 66,
+        "arrivalTimer": 0.5,
+        "inviteCooldown": 0,
+        "paused": false,
+        "stepCarry": 0.037,
+        "eventSequence": 193,
+        "offlineClaimIds": [
+          "old-window"
+        ],
+        "counters": [
+          {
+            "id": "counter-a",
+            "x": 0,
+            "level": 2,
+            "recipe": "latte",
+            "pendingCash": 0,
+            "brewed": 32,
+            "brew": null
+          },
+          {
+            "id": "counter-b",
+            "x": 5,
+            "level": 1,
+            "recipe": "latte",
+            "pendingCash": 0,
+            "brewed": 31,
+            "brew": {
+              "recipe": "latte",
+              "customerId": 64,
+              "elapsed": 1.65,
+              "duration": 6.8,
+              "price": 246
+            }
+          }
+        ],
+        "customers": [
+          {
+            "id": 63,
+            "x": 5.125,
+            "z": 4,
+            "phase": "leaving",
+            "counterId": "counter-a",
+            "timer": 0,
+            "hasCup": true,
+            "skin": 2,
+            "nav": [
+              {
+                "x": 6,
+                "z": 4
+              },
+              {
+                "x": 7,
+                "z": 4
+              },
+              {
+                "x": 8,
+                "z": 4
+              },
+              {
+                "x": 9,
+                "z": 4
+              },
+              {
+                "x": 10,
+                "z": 4
+              },
+              {
+                "x": 10,
+                "z": 5
+              },
+              {
+                "x": 10,
+                "z": 6
+              },
+              {
+                "x": 11,
+                "z": 6
+              }
+            ]
+          },
+          {
+            "id": 64,
+            "x": 5,
+            "z": 2,
+            "phase": "serving",
+            "counterId": "counter-b",
+            "timer": 0,
+            "hasCup": false,
+            "skin": 3
+          },
+          {
+            "id": 65,
+            "x": -2.875,
+            "z": 2,
+            "phase": "entering",
+            "counterId": "counter-a",
+            "timer": 0,
+            "hasCup": false,
+            "skin": 4,
+            "nav": [
+              {
+                "x": -2,
+                "z": 2
+              },
+              {
+                "x": -1,
+                "z": 2
+              },
+              {
+                "x": 0,
+                "z": 2
+              }
+            ]
+          }
+        ],
+        "manager": {
+          "x": 8.8,
+          "z": -1.7,
+          "carrying": 0,
+          "phase": "moving",
+          "target": 2,
+          "timer": 0,
+          "level": 1
+        },
+        "lastOfflineClaimId": "old-window"
+      }
+    }
+  ]
+}

@@ -14,6 +14,15 @@ const { createEngine, createInitialState, recipes, MAX_LEVEL, INITIAL_WALLET, co
 const { LocalSaveRepository, SAVE_KEY, validateState, createMemoryStorage } = await import('../src/slice/core/persistence.ts');
 const { InMemorySaveRepository, GuestAuthProvider } = await import('../src/slice/core/sync.ts');
 
+// Long-running route/throughput fixtures explicitly buy supplies. This is test
+// input through the real purchase API, never automatic production behavior.
+function restockFixture(engine) {
+  for (const id of ['beans', 'milk']) if (engine.state.ingredients[id] <= 10) assert.equal(engine.buyIngredient(id, 'batch'), true, `fixture can afford ${id}`);
+}
+function advanceWithSupplies(engine, seconds) {
+  for (let i = 0; i < seconds; i++) { restockFixture(engine); engine.advance(Math.min(1, seconds - i)); }
+}
+
 function assets(state) { return state.wallet + state.spend + state.manager.carrying + state.counters.reduce((sum, counter) => sum + counter.pendingCash, 0); }
 function withEarnedCash(a = 1200, b = 1200) {
   const state = createInitialState(); state.wallet += a + b; state.totalEarned = a + b; return state;
@@ -46,12 +55,12 @@ function legacyState(manager = {}, a = 900, b = 900) {
   return state;
 }
 function rawEnvelope(state, savedAt = 1000, recordChangeTag = 'legacy-route-source') {
-  return JSON.stringify({ schemaVersion: 1, savedAt, recordChangeTag, state });
+  return JSON.stringify({ schemaVersion: 1, ...(state.economyVersion === 5 ? { offlinePolicyVersion: 4 } : {}), savedAt, recordChangeTag, state });
 }
 
 test('TC-3D-027 new shops use active layout3 and direct counter receipts with a retired manager', () => {
   const initial = createInitialState();
-  assert.equal(ECONOMY_VERSION, 4); assert.equal(initial.economyVersion, 4);
+  assert.equal(ECONOMY_VERSION, 5); assert.equal(initial.economyVersion, 5);
   assert.equal(initial.layout.version, 3); assert.equal(initial.layout.active, true); assert.equal(initial.customerRouteVersion, 4);
   assert.deepEqual(initial.manager, { x: 8.8, z: -1.7, carrying: 0, phase: 'moving', target: 2, timer: 0, level: 1 });
   const engine = createEngine(), tombstone = structuredClone(engine.state.manager); let payments = 0;
@@ -95,7 +104,7 @@ test('TC-3D-027 economy1/2/3 migrate all old cash once and retire every in-fligh
     assert.equal(checked.ok, true, `${version}: ${JSON.stringify(manager)}: ${checked.message}`);
     assert.deepEqual(source, before); const current = checked.state;
     assert.equal(current.wallet, source.wallet + 1800 + (manager.carrying ?? 0)); assert.equal(current.totalEarned, source.totalEarned);
-    assert.equal(current.economyVersion, 4); assert.equal(current.layout.version, 3); assert.equal(current.customerRouteVersion, 4);
+    assert.equal(current.economyVersion, 5); assert.equal(current.layout.version, 3); assert.equal(current.customerRouteVersion, 4);
     assert.deepEqual(current.manager, { x: 8.8, z: -1.7, carrying: 0, phase: 'moving', target: 2, timer: 0, level: 7 });
     assert.ok(current.counters.every(counter => counter.pendingCash === 0));
     for (const key of ['spend', 'elapsed', 'stepCarry', 'eventSequence', 'lastOfflineClaimId', 'offlineClaimIds']) assert.deepEqual(current[key], source[key]);
@@ -139,13 +148,13 @@ test('TC-3D-027 current retired-cash corruption and future versions preserve arc
     s => { s.counters[0].pendingCash = 1; s.totalEarned = 1; }, s => { s.manager.carrying = 1; s.totalEarned = 1; },
     s => s.manager.phase = 'collecting', s => s.manager.target = 1, s => s.manager.x = 5, s => s.manager.timer = .1,
     s => s.manager.finishLegacySweep = true, s => s.manager.nav = [{ x: 9, z: -2 }], s => s.managerRouteVersion = '2',
-    s => s.customerRouteVersion = 5, s => s.economyVersion = 5, s => s.layout.version = 4,
+    s => s.customerRouteVersion = 5, s => s.economyVersion = 6, s => s.layout.version = 4,
   ];
   for (const mutate of mutations) {
     const source = createInitialState(); mutate(source); assert.equal(validateState(source).ok, false, mutate.toString());
     const storage = createMemoryStorage(), raw = rawEnvelope(source); storage.setItem(SAVE_KEY, raw);
     const repo = new LocalSaveRepository(storage), loaded = repo.load(121000);
-    const future = source.customerRouteVersion === 5 || source.economyVersion === 5 || source.layout.version === 4;
+    const future = source.customerRouteVersion === 5 || source.economyVersion === 6 || source.layout.version === 4;
     assert.equal(loaded.status, future ? 'future' : 'corrupt'); assert.equal(loaded.protectedRaw, true);
     assert.equal(repo.save(loaded.state, 121000).ok, false); assert.equal(storage.getItem(SAVE_KEY), raw);
   }
@@ -156,10 +165,10 @@ test('TC-3D-004 authentic legacy archives migrate offline only once and retain r
   const raw = rawEnvelope(source), memory = createMemoryStorage(); memory.setItem(SAVE_KEY, raw);
   const immediate = new LocalSaveRepository(memory).load(1000);
   assert.equal(immediate.status, 'loaded'); assert.equal(immediate.state.managerRouteVersion, 2);
-  assert.equal(JSON.parse(memory.getItem(SAVE_KEY)).offlinePolicyVersion, 3);
+  assert.equal(JSON.parse(memory.getItem(SAVE_KEY)).offlinePolicyVersion, 4);
   assert.deepEqual(JSON.parse(memory.getItem(SAVE_KEY)).state, immediate.state);
   memory.setItem(SAVE_KEY, raw); // Exercise failure/retry from authentic pre-policy bytes.
-  const expected = createEngine(immediate.state); expected.advance(60);
+  const expected = createEngine(immediate.state); expected.applyOffline(120, 'independent-old-anchor', 1);
   const unavailable = { ...memory, setItem() { throw Error('quota'); } };
   const failed = new LocalSaveRepository(unavailable).load(121000);
   assert.equal(failed.status, 'offline-save-failed'); assert.equal(failed.offline.accepted, false); assert.deepEqual(failed.state, immediate.state); assert.equal(memory.getItem(SAVE_KEY), raw);
@@ -229,7 +238,7 @@ test('TC-3D-002 original counter affinities create a meaningful recipe tradeoff'
   assert.ok(counterPrice('latte', 1, 'counter-b') > counterPrice('latte', 1, 'counter-a'));
   const fast = createEngine(), slow = createEngine();
   fast.setRecipe('counter-b', 'espresso'); slow.setRecipe('counter-a', 'latte');
-  fast.advance(180); slow.advance(180);
+  advanceWithSupplies(fast, 180); advanceWithSupplies(slow, 180);
   assert.ok(fast.state.totalServed > slow.state.totalServed);
 });
 
@@ -287,10 +296,11 @@ test('TC-3D-004 strict validation catches enums, non-finite values, bounds and b
   assert.equal(validateState(createInitialState()).ok, true);
 });
 
-test('TC-3D-004 offline close-loop income has no gameplay cap and is claimed only once', () => {
+test('TC-3D-004 offline close-loop advances uncapped time with finite stock and claims each interval once', () => {
   const engine = createEngine();
   const result = engine.applyOffline(7201, 'claim-1');
-  assert.equal(result.accepted, true); assert.equal(result.seconds, 7201); assert.ok(result.amount > 0);
+  assert.equal(result.accepted, true); assert.equal(result.seconds, 7201); assert.equal(result.effectiveSeconds, 7201 * .8); assert.ok(result.amount > 0);
+  assert.equal(engine.state.totalServed, 40); assert.equal(engine.state.ingredients.beans, 0);
   const snapshot = engine.snapshot();
   assert.equal(engine.applyOffline(7201, 'claim-1').accepted, false);
   assert.deepEqual(engine.snapshot(), snapshot);
@@ -433,7 +443,7 @@ function coffeeFixture(wallet = 200_000) {
 }
 
 test('TC-3D-023 coffee Lv1 preserves every previous counter and manager parameter', () => {
-  assert.equal(ECONOMY_VERSION, 4); assert.equal(COFFEE_MAX_LEVEL, 10);
+  assert.equal(ECONOMY_VERSION, 5); assert.equal(COFFEE_MAX_LEVEL, 10);
   assert.equal(Object.isFrozen(COFFEE_UPGRADE_CONFIG), true); assert.equal(Object.isFrozen(COFFEE_UPGRADE_CONFIG.baseCosts), true);
   assert.deepEqual(createInitialState().coffeeLevels, { espresso: 1, latte: 1 });
   for (const recipe of recipes) for (let level = 1; level <= MAX_LEVEL; level++) for (const id of ['counter-a', 'counter-b']) {
@@ -544,12 +554,12 @@ test('TC-3D-023 economy1 migration adds Lv1 coffee progress and rejects malforme
   const memory = createMemoryStorage(); memory.setItem(SAVE_KEY, JSON.stringify({ schemaVersion: 1, offlinePolicyVersion: 3, savedAt: 100000, recordChangeTag: 'pre-coffee', state: legacy }));
   const repo = new LocalSaveRepository(memory), loaded = repo.load(100000);
   assert.equal(loaded.status, 'loaded'); assert.deepEqual(loaded.state, checked.state); assert.equal(repo.save(loaded.state, 100000).ok, true);
-  assert.equal(JSON.parse(memory.getItem(SAVE_KEY)).state.economyVersion, 4);
+  assert.equal(JSON.parse(memory.getItem(SAVE_KEY)).state.economyVersion, 5);
   for (const levels of [undefined, null, [], {}, { espresso: 1 }, { espresso: 1, latte: 1, mocha: 1 }, { espresso: 0, latte: 1 }, { espresso: 11, latte: 1 }, { espresso: 1.1, latte: 1 }, { espresso: '2', latte: 1 }, { espresso: Infinity, latte: 1 }, { espresso: 1, latte: NaN }]) {
     const bad = createInitialState(); bad.coffeeLevels = levels;
     assert.equal(validateState(bad).ok, false, JSON.stringify(levels)); assert.throws(() => createEngine(bad));
   }
-  for (const version of [0, 1, '2', 2.5, 5, 999]) {
+  for (const version of [0, 1, '2', 2.5, 6, 999]) {
     const bad = createInitialState(); bad.economyVersion = version;
     assert.equal(validateState(bad).ok, false); assert.throws(() => createEngine(bad));
     const storage = createMemoryStorage(), raw = rawEnvelope(bad); storage.setItem(SAVE_KEY, raw);
@@ -570,7 +580,7 @@ test('TC-3D-023 sync adapter preserves recipe progress under CAS, replay and cha
   assert.equal(conflict.status, 'conflict'); assert.deepEqual(conflict.state, state);
   const next = await repository.save('coffee-user', engine.snapshot(), saved.recordChangeTag, 'coffee-next');
   assert.equal(next.status, 'saved'); assert.deepEqual((await repository.load('coffee-user')).state, engine.snapshot());
-  const future = engine.snapshot(); future.economyVersion = 5;
+  const future = engine.snapshot(); future.economyVersion = 6;
   assert.equal((await repository.save('coffee-user', future, next.recordChangeTag, 'coffee-future')).status, 'invalid-state');
   assert.deepEqual((await repository.load('coffee-user')).state, engine.snapshot());
 });

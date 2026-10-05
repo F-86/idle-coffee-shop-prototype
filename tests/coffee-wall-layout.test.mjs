@@ -10,11 +10,11 @@ const { LocalSaveRepository, SAVE_KEY, createMemoryStorage, validateState } = aw
 const { PORTABLE_VERSION, createPortableSave, overviewOf, parsePortableSave } = await import('../src/slice/core/portableSave.ts');
 const legacy = JSON.parse(readFileSync(new URL('./fixtures/economy3-operations-migration.json', import.meta.url)));
 const copy = value => structuredClone(value);
-const payload = state => ({ saveId: 'hidden-sign-exchange', revision: 7, gameSchemaVersion: 1, economyVersion: ECONOMY_VERSION, offlinePolicyVersion: 3, savedAt: 100000, exportedAt: 100123, overview: overviewOf(state), state: copy(state) });
-const envelope = state => JSON.stringify({ schemaVersion: 1, offlinePolicyVersion: 3, savedAt: 100000, recordChangeTag: 'hidden-sign-fixture', saveId: 'hidden-sign-fixture', revision: 3, state });
+const payload = state => ({ saveId: 'hidden-sign-exchange', revision: 7, gameSchemaVersion: 1, economyVersion: ECONOMY_VERSION, offlinePolicyVersion: 4, savedAt: 100000, exportedAt: 100123, overview: overviewOf(state), state: copy(state) });
+const envelope = state => JSON.stringify({ schemaVersion: 1, offlinePolicyVersion: 4, savedAt: 100000, recordChangeTag: 'hidden-sign-fixture', saveId: 'hidden-sign-fixture', revision: 3, state });
 
 test('TC-3D-027 current shops store legacy plaques and cannot re-hang them', () => {
-  const layout = initialLayout(); assert.equal(LAYOUT_VERSION, 3); assert.equal(PORTABLE_VERSION, 4); assert.equal(layout.active, true);
+  const layout = initialLayout(); assert.equal(LAYOUT_VERSION, 3); assert.equal(PORTABLE_VERSION, 5); assert.equal(layout.active, true);
   assert.deepEqual(getCoffeeSigns(layout), [{ id: 'menu-espresso', recipe: 'espresso', x: 0, stored: true }, { id: 'menu-latte', recipe: 'latte', x: 5, stored: true }]);
   const before = copy(layout); assert.equal(moveCoffeeSign(layout, 'menu-espresso', -2), false); assert.deepEqual(layout, before); assert.equal(storeCoffeeSign(layout, 'menu-espresso'), true);
   layout.coffeeSigns[0].stored = false; assert.equal(validateLayout(layout).ok, false);
@@ -41,7 +41,7 @@ test('TC-3D-027 malformed current plaque tombstones and newer layouts fail close
   const layout = initialLayout(); layout.version = 1; assert.throws(() => normalizeLayout(layout));
 });
 
-test('TC-3D-027 current local and portable4 snapshots preserve hidden plaques and business pause', async () => {
+test('TC-3D-027 current local and portable5 snapshots preserve hidden plaques and business pause', async () => {
   const engine = createEngine(); engine.advance(20); engine.togglePause(); const snapshot = engine.snapshot(), storage = createMemoryStorage(), repo = new LocalSaveRepository(storage); repo.load(100000); assert.equal(repo.save(snapshot, 100000).ok, true);
   const loaded = new LocalSaveRepository(storage).load(200000); assert.equal(loaded.state.paused, true); assert.equal(loaded.offline.amount, 0); assert.deepEqual(loaded.state.customers, snapshot.customers);
   const file = await createPortableSave(payload(loaded.state)), parsed = await parsePortableSave(file.text); assert.equal(parsed.ok, true, parsed.message); assert.deepEqual(parsed.file.payload.state, loaded.state); assert.ok(parsed.file.payload.state.layout.coffeeSigns.every(sign => sign.stored));
@@ -50,6 +50,6 @@ test('TC-3D-027 current local and portable4 snapshots preserve hidden plaques an
 test('TC-3D-027 corrupt wall records protect original bytes and reject checksummed portable input', async () => {
   for (const value of [null, [], [{ id: 'menu-espresso', recipe: 'espresso', x: 0, stored: true }]]) {
     const state = createInitialState(); state.layout.coffeeSigns = value; const raw = envelope(state), storage = createMemoryStorage(); storage.setItem(SAVE_KEY, raw); const repo = new LocalSaveRepository(storage); assert.equal(repo.load(100000).status, 'corrupt'); assert.equal(repo.save(createInitialState()).ok, false); assert.equal(storage.getItem(SAVE_KEY), raw);
-    const source = { ...payload(createInitialState()), state }, payloadText = JSON.stringify(source), sha256 = createHash('sha256').update(payloadText).digest('hex'); assert.equal((await parsePortableSave(JSON.stringify({ format: 'mellow-bean-portable-save', formatVersion: 4, payloadText, integrity: { algorithm: 'SHA-256', sha256 } }))).ok, false);
+    const source = { ...payload(createInitialState()), state }, payloadText = JSON.stringify(source), sha256 = createHash('sha256').update(payloadText).digest('hex'); assert.equal((await parsePortableSave(JSON.stringify({ format: 'mellow-bean-portable-save', formatVersion: 5, payloadText, integrity: { algorithm: 'SHA-256', sha256 } }))).ok, false);
   }
 });
