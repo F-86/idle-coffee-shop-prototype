@@ -35,3 +35,5 @@
 无上限80%后续实机证据：[Mac短区间有限复测](testing/runs/2026-10-05-offline-unlimited/mac-limited-qa.md)。一次42.49秒→33.99秒显示符合80%；不代表长区间、迁移、取消或精确去重已通过，未知旧origin与4180失联原因如实保留。
 
 手动文件存档 v1：[规格](product/specs/portable-save-files.md)、[版本化QA计划](testing/plans/portable-save-files.md)、[TC-3D-021](testing/cases/slice/TC-3D-021.md)。导出已保存快照，导入先预览/备份/确认；新本地身份，不补发文件交换期间收益。不是自动iCloud同步，localStorage跨窗口冲突检查也不是真正原子事务。
+
+游戏面板重设计：[规格](product/specs/game-panel-redesign.md)、[计划](testing/plans/game-panel-redesign.md)、[TC-3D-022](testing/cases/slice/TC-3D-022.md)。升级/设置/存档采用游戏卡片，技术细节按需展开；离线结果只显示离开时长与实际金库到账，不改变结算或保存协议。

@@ -593,7 +593,7 @@ test('TC-3D-009 REQ-3D-016 physical invite remains cooldown/conflict guarded wit
 test('TC-3D-008 REQ-3D-015 modal controls maintain 44px targets, safe-area and dynamic viewport hooks (static contract)', () => {
   assert.match(index, /viewport-fit=cover/);
   for (const property of ['width', 'height']) for (const value of declarations('.dialog-close', property)) assert.ok(Number.parseFloat(value) >= 44, `.dialog-close ${property}: ${value}`);
-  for (const selector of ['.primary-button', '.secondary-button', '.assign-buttons button', '.settings-grid button', '.jump-grid button', '.recipe-picker button', 'summary']) assert.ok(declarations(selector, 'min-height').some(value => Number.parseFloat(value) >= 44), selector);
+  for (const selector of ['.primary-button', '.secondary-button', '.assign-buttons button', '.settings-grid button', '.jump-grid button', '.recipe-picker button', '.quiet-details summary']) assert.ok(declarations(selector, 'min-height').some(value => Number.parseFloat(value) >= 44), selector);
   for (const [property, inset] of [['left', 'left'], ['top', 'top']]) assert.ok(declarations('.hud', property).every(value => value.includes(`safe-area-inset-${inset}`)));
   assert.ok(declarations('.operation-dialog', 'max-height').every(value => value.includes('dvh') && value.includes('safe-area-inset-bottom')));
   assert.match(main, /sizeObserver\?\.observe\(\$\("#coffee-canvas"\)\)/);
@@ -1590,11 +1590,11 @@ test('TC-3D-020 unlimited 80% loading stays responsive, exposes only committed a
     assert.equal(committed.savedAt, 20_000_000, 'the commit anchors its endpoint, not the end of computation');
     assert.deepEqual(f.state(), expected.snapshot());
     assert.equal(f.element('#offline-result').hidden, false);
-    assert.equal(f.element('#offline-legacy').hidden, true);
-    assert.equal(f.element('#offline-deposited').textContent, `离开期间已存入金库 ¥${(report.amount / 100).toFixed(2)}`);
-    assert.match(f.element('#offline-duration').textContent, /离开 3 小时 · 有效经营 2 小时 24 分钟/);
-    assert.equal(f.element('#offline-generated').textContent, `期间售出咖啡产生 ¥${(report.generatedAmount / 100).toFixed(2)}`);
-    assert.match(f.element('#offline-pending').textContent, /台面待收.*经理运送.*送回金库/);
+    assert.equal(f.element('#offline-deposited').textContent, `¥${(report.amount / 100).toFixed(2)}`);
+    assert.equal(f.element('#offline-duration').textContent, '离开了 3 小时');
+    assert.equal(f.state().wallet - initial.wallet, report.amount, 'the reward is the committed wallet delta');
+    assert.equal(f.state().totalEarned - initial.totalEarned, report.generatedAmount, 'generated sales remain in the accounting, not the reward label');
+    for (const id of ['offline-legacy', 'offline-generated', 'offline-pending']) assert.equal(f.element(`#${id}`), null, `${id} is no longer normal-player presentation`);
     f.click('#offline-done'); f.click('#save');
     expected.advance(2.5);
     assert.deepEqual(f.state(), expected.snapshot(), 'foreground computation time is ordinary 100% online time, including save before the next RAF');
@@ -1701,32 +1701,40 @@ test('TC-3D-020 hidden retry retains unsaved source after write failure and canc
   }
 });
 
-test('TC-3D-020 legacy policy is explained only for its one-time settled interval', async () => {
+test('TC-3D-020 legacy policy settles its old interval once while the result shows only committed money and away time', async () => {
   const initial = createInitialState();
   const now = 20_000_000, raw = JSON.stringify({ schemaVersion: 1, savedAt: now - 3 * 3600000, recordChangeTag: 'legacy-policy-details', state: initial });
   const f = fixture({ raw, now });
   try {
     await f.flushOffline({ dismissResult: false });
+    const expected = createEngine(initial), legacy = expected.applyOffline(10800, f.state().lastOfflineClaimId, 1);
+    assert.deepEqual(f.state(), expected.snapshot());
     assert.equal(f.state().elapsed, 3600);
-    assert.equal(f.element('#offline-legacy').hidden, false);
-    assert.match(f.element('#offline-legacy').textContent, /旧规则.*50%.*最多2小时.*一次.*80%.*无时长上限/);
-    assert.match(f.element('#offline-duration').textContent, /离开 3 小时 · 有效经营 1 小时/);
+    assert.equal(f.element('#offline-legacy'), null, 'migration diagnostics stay out of the compact result');
+    assert.equal(f.element('#offline-deposited').textContent, `¥${(legacy.amount / 100).toFixed(2)}`);
+    assert.equal(f.element('#offline-duration').textContent, '离开了 3 小时');
     assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).offlinePolicyVersion, 3);
     f.click('#offline-done');
     f.document.hidden = true; f.document.emit('visibilitychange');
     f.clock.now += 60000; f.clock.performance += 60000;
     f.document.hidden = false; f.document.emit('visibilitychange'); await f.flushOffline({ dismissResult: false });
+    const current = expected.applyOffline(60, f.state().lastOfflineClaimId, 3);
+    assert.deepEqual(f.state(), expected.snapshot(), 'later intervals use the unchanged 80% policy');
     assert.equal(f.state().elapsed, 3648);
-    assert.equal(f.element('#offline-legacy').hidden, true);
+    assert.equal(f.element('#offline-deposited').textContent, `¥${(current.amount / 100).toFixed(2)}`);
+    assert.equal(f.element('#offline-duration').textContent, '离开了 1 分钟');
   } finally { f.dispose(); }
 });
 
 
-test('TC-3D-020 settlement details retain fractional away and effective duration', async () => {
+test('TC-3D-020 rounded away-time presentation retains the exact fractional settlement', async () => {
   const f = fixture({ now: 500_000, savedAtAgoSeconds: 30.1 });
   try {
     await f.flushOffline({ dismissResult: false });
-    assert.equal(f.element('#offline-duration').textContent, '离开 30.1 秒 · 有效经营 24.08 秒');
+    assert.equal(f.element('#offline-duration').textContent, '离开了 30 秒');
+    const expected = createEngine(); expected.applyOffline(30.1, f.state().lastOfflineClaimId);
+    assert.deepEqual(f.state(), expected.snapshot(), 'flooring the display must not quantize the actual 24.08-second settlement');
+    assert.ok(Math.abs(f.state().elapsed + f.state().stepCarry - 24.08) < 1e-9);
   } finally { f.dispose(); }
 });
 
@@ -2326,4 +2334,314 @@ test('TC-3D-021 a repeated previously imported file warns before an explicit rep
     assert.equal(importBackupWrites(f).length, 2);
     assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).revision, 1);
   } finally { f.dispose(); }
+});
+
+// TC-3D-022 checks the player-facing panel redesign against actual templates,
+// styles and event handlers. Native file dialogs, screen-reader traversal,
+// touch hit-testing and responsive pixels still require independent browser QA.
+const detailsBlocks = [...modal.matchAll(/<details\b[^>]*>[\s\S]*?<\/details>/g)].map(match => match[0]);
+const withoutDetails = markup => markup.replace(/<details\b[^>]*>[\s\S]*?<\/details>/g, '');
+const centsLabel = cents => `¥${(cents / 100).toFixed(2)}`;
+
+test('TC-3D-022 panel controls keep unique accessible IDs and an enabled styled native file picker (static contract)', () => {
+  const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
+  assert.equal(new Set(ids).size, ids.length, 'the redesign must not duplicate control, heading or description IDs');
+  for (const match of html.matchAll(/\b(?:aria-labelledby|aria-describedby)="([^"]+)"/g)) {
+    for (const id of match[1].split(/\s+/)) assert.ok(ids.includes(id), `accessible-name/description target ${id} exists`);
+  }
+  for (const match of html.matchAll(/\bfor="([^"]+)"/g)) assert.ok(ids.includes(match[1]), `label target ${match[1]} exists`);
+  assert.match(modal, /<dialog\b[^>]*aria-labelledby="dialog-title"/);
+  assert.match(modal, /<label\b[^>]*for="file-input"[^>]*>[\s\S]*?选择存档文件[\s\S]*?<input\b[^>]*id="file-input"/);
+  const picker = openingTags(modal, 'input').find(tag => /id="file-input"/.test(tag));
+  assert.match(picker, /type="file"/); assert.match(picker, /accept="application\/json,\.json"/);
+  assert.doesNotMatch(picker, /\s(?:disabled|hidden|aria-hidden|tabindex)(?:[\s=>])/);
+  assert.match(picker, /aria-describedby="file-picker-note file-selection"/);
+  assert.deepEqual(declarations('.file-picker input', 'display'), ['block']);
+  assert.ok(declarations('.file-picker input', 'min-height').some(value => Number.parseFloat(value) >= 44));
+  assert.equal(declarations('.file-picker input', 'opacity').includes('0'), false);
+  for (const selector of ['.file-picker input::file-selector-button', '.file-picker input::-webkit-file-upload-button']) {
+    assert.ok(rules(selector).length > 0, `${selector} styles the real browser button`);
+    assert.ok(declarations(selector, 'background').length > 0);
+    assert.ok(declarations(selector, 'min-height').some(value => Number.parseFloat(value) > 0));
+  }
+  assert.ok(declarations('input:focus-visible', 'outline').length > 0);
+  assert.match(modal, /id="file-review"[^>]*tabindex="-1"[^>]*role="region"[^>]*aria-label="导入存档预览"/);
+  assert.match(modal, /<label\b[^>]*class="file-confirm-label"[^>]*>\s*<input\b[^>]*id="file-other-tabs"[^>]*>[\s\S]*?已关闭其他游戏标签页和窗口[\s\S]*?<\/label>/);
+});
+
+test('TC-3D-022 technical metadata and full ledger are closed disclosures while replacement safeguards remain visible (static contract)', () => {
+  assert.ok(detailsBlocks.length >= 6, 'secondary guidance remains available in native disclosures');
+  for (const block of detailsBlocks) {
+    const tag = openingTags(block, 'details')[0];
+    assert.doesNotMatch(tag, /\s(?:open|aria-hidden)(?:[\s=>])/);
+    assert.match(block, /^<details\b[^>]*>\s*<summary>[^<]+<\/summary>/, 'every disclosure has a native named summary');
+  }
+  for (const id of ['file-current-details', 'file-incoming-details', 'counter-payback', 'pending', 'carrying']) {
+    const disclosure = detailsBlocks.find(block => block.includes(`id="${id}"`));
+    assert.ok(disclosure, `${id} stays available inside a default-closed disclosure`);
+    assert.doesNotMatch(withoutDetails(modal), new RegExp(`id="${id}"`));
+  }
+  const fileMarkup = modal.slice(modal.indexOf('<div id="files-panel"'), modal.indexOf('<div id="offline-panel"'));
+  const confirmation = withoutDetails(fileMarkup.slice(fileMarkup.indexOf('<div id="file-review"')));
+  for (const safety of [/当前小店将被完整替换/, /较早进度会回退/, /金币不合并/, /文件导出至本次导入之间不补离线收益/, /替换前会先校验本地备份/, /备份失败就停止/, /已关闭其他游戏标签页和窗口/, /多窗口同时写入可能造成冲突/]) assert.match(confirmation, safety, 'essential confirmation text cannot be hidden in details');
+  for (const id of ['file-current-summary', 'file-incoming-summary', 'file-older-warning', 'file-repeat-warning', 'file-confirm', 'file-cancel']) assert.match(confirmation, new RegExp(`id="${id}"`));
+  const offlineMarkup = modal.slice(modal.indexOf('<div id="offline-result"'));
+  assert.match(offlineMarkup, /本次到账/); assert.match(offlineMarkup, /已存入金库/); assert.match(offlineMarkup, /继续营业/);
+  assert.doesNotMatch(offlineMarkup, /offline-(?:generated|pending|legacy)|有效经营|期间售出|台面待收|经理运送|50%|SHA-256/);
+});
+
+test('TC-3D-022 selected render mode stays visually and accessibly selected across panel navigation without changing the shop', () => {
+  for (const mode of ['smooth', 'clear-60', 'balanced', 'low-power']) {
+    const f = fixture({ renderMode: mode });
+    try {
+      const raw = f.memory.getItem(SAVE_KEY), before = f.state();
+      f.click('#settings'); openFilePanel(f); f.click('#file-back'); f.click('#dialog-close');
+      f.action({ type: 'vault' }); f.click('#dialog-close'); f.click('#settings');
+      for (const button of f.nodes.filter(node => node.dataset.renderMode)) {
+        const selected = button.dataset.renderMode === mode;
+        assert.equal(button.classList.contains('active'), selected, `${mode}: visible selection`);
+        assert.equal(button.getAttribute('aria-pressed'), String(selected), `${mode}: accessible selection`);
+      }
+      assert.equal(f.renderer.renderMode, mode);
+      assert.equal(f.memory.getItem(RENDER_MODE_KEY), mode);
+      assert.equal(f.memory.getItem(SAVE_KEY), raw);
+      assert.deepEqual(f.state(), before);
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-022 file preview names and focuses the chosen file, permits cancel/reselection, and requires renewed overwrite acknowledgement', async () => {
+  const incoming = await portableFixture();
+  const f = fixture({ now: 130000 });
+  try {
+    const before = f.state(), raw = f.memory.getItem(SAVE_KEY);
+    openFilePanel(f);
+    assert.equal(f.element('#file-input').disabled, false);
+    const name = '<my saved shop>.json';
+    f.chooseFile({ name, text: incoming.text });
+    assert.equal(f.element('#file-input').disabled, false, 'the native picker remains available while a previous read is pending');
+    await f.flushFiles();
+    assert.equal(f.element('#file-input').value, '', 'the native value is cleared so choosing the same file can fire change again');
+    assert.equal(f.element('#file-input').disabled, false, 'a ready review does not block choosing another file');
+    assert.equal(f.element('#file-selection').hidden, false);
+    assert.equal(f.element('#file-selection').textContent, `正在预览：${name}`, 'untrusted filenames are plain text');
+    assert.equal(f.document.activeElement, f.element('#file-review'), 'focus moves to the review rather than to an unavailable disabled confirmation button');
+    assert.equal(f.element('#file-confirm').disabled, true);
+    f.element('#file-other-tabs').checked = true; f.element('#file-other-tabs').emit('change');
+    assert.equal(f.element('#file-confirm').disabled, false);
+    f.click('#file-cancel');
+    assert.equal(f.element('#file-review').hidden, true);
+    assert.equal(f.element('#file-selection').hidden, true);
+    assert.equal(f.element('#file-other-tabs').checked, false);
+    assert.equal(f.element('#file-confirm').disabled, true);
+    assert.equal(f.document.activeElement, f.element('#file-input'), 'explicit cancel returns focus to the visible native picker');
+    assert.deepEqual(f.state(), before); assert.equal(f.memory.getItem(SAVE_KEY), raw);
+    assert.equal(importBackupWrites(f).length, 0);
+    f.chooseFile({ name, text: incoming.text }); await f.flushFiles();
+    assert.equal(f.element('#file-review').hidden, false);
+    assert.equal(f.element('#file-confirm').disabled, true, 'previous acknowledgement cannot approve a newly selected file');
+    f.element('#file-confirm').emit('click');
+    assert.equal(portableWrites(f).length, 0, 'the actual handler independently guards unacknowledged overwrite');
+    confirmPortable(f);
+    assert.equal(portableWrites(f).length, 1); assert.equal(importBackupWrites(f).length, 1);
+    assert.deepEqual(f.state(), incoming.payload.state, 'explicit replacement uses exactly the chosen snapshot');
+    assert.equal(f.element('#file-selection').hidden, true);
+    assert.equal(f.document.activeElement, f.element('#file-input'), 'successful replacement cannot leave focus inside the now-hidden review');
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-022 an older file warns before replacement, equal/newer files clear that warning, and summaries retain hidden metadata', async () => {
+  const now = 130000;
+  const initial = createEngine(); initial.advance(45);
+  const f = fixture({ initial: initial.snapshot(), now });
+  try {
+    const current = f.state(), raw = f.memory.getItem(SAVE_KEY), durable = JSON.parse(raw);
+    for (const savedAt of [now - 1, now, now + 1, now - 5000]) {
+      const incoming = await portableFixture({ savedAt, exportedAt: now + 1000, saveId: `source-${savedAt}`, revision: 27 });
+      openFilePanel(f); f.chooseFile({ name: `${savedAt}.json`, text: incoming.text }); await f.flushFiles();
+      assert.equal(f.element('#file-older-warning').hidden, savedAt >= now, `warning follows file save time ${savedAt} versus durable time ${now}`);
+      assert.equal(f.element('#file-confirm').disabled, true, 'a warning or reselect never authorizes replacement');
+      const currentSummary = f.element('#file-current-summary').textContent;
+      const incomingSummary = f.element('#file-incoming-summary').textContent;
+      assert.ok(currentSummary.includes(centsLabel(current.wallet)));
+      assert.ok(incomingSummary.includes(centsLabel(incoming.payload.state.wallet)));
+      for (const summary of [currentSummary, incomingSummary]) assert.doesNotMatch(summary, /SHA-256|营业额|待收|运送|当前未存盘| · r\d+/);
+      assert.equal(currentSummary.includes(durable.saveId), false);
+      assert.equal(incomingSummary.includes(incoming.payload.saveId), false);
+      assert.equal(incomingSummary.includes(incoming.fingerprint), false);
+      const currentDetails = f.element('#file-current-details').textContent;
+      const incomingDetails = f.element('#file-incoming-details').textContent;
+      assert.ok(currentDetails.includes(durable.saveId)); assert.ok(currentDetails.includes(`r${durable.revision}`));
+      assert.match(currentDetails, /营业额.*已售/); assert.match(currentDetails, /待收.*运送.*经营/);
+      assert.ok(incomingDetails.includes(incoming.payload.saveId)); assert.ok(incomingDetails.includes('r27'));
+      assert.ok(incomingDetails.includes(`SHA-256 ${incoming.fingerprint}`));
+      assert.match(incomingDetails, /导出/); assert.match(incomingDetails, /营业额.*已售/); assert.match(incomingDetails, /待收.*运送.*经营/);
+      assert.deepEqual(f.state(), current); assert.equal(f.memory.getItem(SAVE_KEY), raw);
+    }
+    f.click('#file-cancel');
+    assert.equal(portableWrites(f).length, 0); assert.equal(importBackupWrites(f).length, 0);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-022 blocked save recovery opens its disclosure automatically and retains frozen assets and recovery controls', async () => {
+  for (const cause of ['corrupt', 'unreadable', 'storage-conflict', 'cancel-offline']) {
+    const f = fixture({ now: 130000, ...(cause === 'corrupt' ? { raw: '{invalid save' } : cause === 'unreadable' ? { readUnavailable: true } : cause === 'cancel-offline' ? { savedAtAgoSeconds: 60 } : {}) });
+    try {
+      if (cause === 'storage-conflict') {
+        f.click('#settings');
+        assert.equal(f.element('#save-recovery').hasAttribute('open'), false, 'healthy settings keep advanced recovery collapsed');
+        f.memory.setItem(SAVE_KEY, 'other-window-save');
+        f.window.emit('storage', { key: SAVE_KEY, newValue: 'other-window-save' });
+      }
+      if (cause === 'cancel-offline') { f.click('#offline-cancel'); await f.flushOffline(); }
+      f.click('#settings');
+      assert.equal(f.element('#save-recovery').hasAttribute('open'), true, `${cause}: recovery is not left hidden`);
+      assert.equal(f.element('#reload').hidden, false, cause);
+      assert.equal(f.element('#save-status').textContent.length > 0, true, cause);
+      const before = f.state(), raw = f.memory.getItem(SAVE_KEY);
+      assert.equal(before.paused, true, cause);
+      f.click('#save'); f.tick(.1); f.action({ type: 'invite' });
+      assert.deepEqual(f.state(), before, cause); assert.equal(f.memory.getItem(SAVE_KEY), raw, cause);
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-022 a normal settings save failure exposes backup recovery immediately without replacing durable bytes', async () => {
+  const f = fixture();
+  try {
+    f.click('#settings');
+    assert.equal(f.element('#save-recovery').hasAttribute('open'), false);
+    const raw = f.memory.getItem(SAVE_KEY);
+    f.tick(.25);
+    const live = f.state();
+    assert.notDeepEqual(live, JSON.parse(raw).state, 'there is real unsaved progress to protect');
+    f.storageControl.writeUnavailable = true;
+    f.click('#save');
+    assert.equal(f.element('#settings-panel').hidden, false);
+    assert.equal(f.element('#save-recovery').hasAttribute('open'), true, 'ordinary write/quota failure immediately reveals backups in the already-open panel');
+    assert.match(f.element('#save-status').textContent, /保存失败.*导出备份/);
+    assert.equal(f.memory.getItem(SAVE_KEY), raw);
+    assert.deepEqual(f.state(), live);
+    assert.equal(f.element('#export').disabled, false);
+    f.click('#export');
+    assert.equal(f.downloads.length, 1);
+    assert.deepEqual(JSON.parse(await f.blobs[0].text()).state, live, 'the revealed backup action exports the actual live progress');
+    f.storageControl.writeUnavailable = false;
+    f.click('#save');
+    assert.equal(f.element('#save-status').textContent, '本地已保存');
+    assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, live);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-022 offline reward shows only the exact credited wallet delta, including zero when sales remain uncollected', async () => {
+  for (const carrying of [0, 570]) {
+    const initial = createInitialState();
+    initial.manager.carrying = carrying; initial.totalEarned = carrying;
+    if (carrying) Object.assign(initial.manager, { phase: 'depositing', target: 2, timer: .55 });
+    const f = fixture({ initial, now: 130000, savedAtAgoSeconds: 30.999 });
+    try {
+      await f.flushOffline({ dismissResult: false });
+      const after = f.state(), committed = JSON.parse(f.memory.getItem(SAVE_KEY)).state;
+      const credited = after.wallet - initial.wallet, generated = after.totalEarned - initial.totalEarned;
+      assert.equal(credited, carrying, 'fixture separately covers zero credit and existing cash deposited');
+      assert.notEqual(generated, credited, 'fixture would catch incorrectly displaying generated sales as a reward');
+      assert.ok(after.counters.some(counter => counter.pendingCash > 0)); assert.ok(after.manager.carrying > 0);
+      assert.deepEqual(after, committed, 'the displayed amount comes from the installed durable state');
+      assert.equal(f.element('#offline-deposited').textContent, centsLabel(credited));
+      assert.equal(f.element('#offline-duration').textContent, '离开了 30 秒');
+      for (const id of ['offline-generated', 'offline-pending', 'offline-legacy']) assert.equal(f.element(`#${id}`), null);
+      const beforeContinue = f.memory.getItem(SAVE_KEY);
+      f.click('#offline-done'); f.click('#offline-done');
+      assert.equal(f.element('#operation-dialog').open, false);
+      assert.deepEqual(f.state(), after); assert.equal(f.memory.getItem(SAVE_KEY), beforeContinue, 'continue cannot award the same reward again');
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-022 human away duration floors seconds without changing exact settlement or minute boundaries', async () => {
+  for (const [seconds, label] of [[59.999, '离开了 59 秒'], [60, '离开了 1 分钟'], [61.999, '离开了 1 分钟 1 秒']]) {
+    const f = fixture({ now: 500000, savedAtAgoSeconds: seconds });
+    try {
+      await f.flushOffline({ dismissResult: false });
+      assert.equal(f.element('#offline-duration').textContent, label);
+      const expected = createEngine(); expected.applyOffline(seconds, f.state().lastOfflineClaimId);
+      assert.deepEqual(f.state(), expected.snapshot(), 'presentation flooring never changes simulation time');
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-022 counter upgrades show real cost and before/after benefits while retaining insufficient-funds and capped behavior', () => {
+  for (const id of ['counter-a', 'counter-b']) {
+    const f = fixture();
+    try {
+      f.action({ type: 'counter', id });
+      const before = f.state(), expected = createEngine(before), quote = expected.quote(id);
+      assert.ok(quote.afterPrice > quote.beforePrice); assert.ok(quote.afterSeconds < quote.beforeSeconds);
+      assert.equal(f.element('#counter-price').textContent, centsLabel(quote.beforePrice));
+      assert.equal(f.element('#counter-seconds').textContent, `${quote.beforeSeconds.toFixed(1)} 秒`);
+      assert.equal(f.element('#counter-next-price').textContent, `→ ${centsLabel(quote.afterPrice)}`);
+      assert.equal(f.element('#counter-next-seconds').textContent, `→ ${quote.afterSeconds.toFixed(1)} 秒`);
+      assert.equal(f.element('#counter-upgrade').textContent, `升级柜台 · ${centsLabel(quote.cost)}`);
+      assert.equal(f.element('#counter-upgrade').disabled, false);
+      assert.equal(f.element('#counter-funds').textContent, '');
+      f.click('#counter-upgrade'); assert.equal(expected.upgrade(id), true);
+      assert.deepEqual(f.state(), expected.snapshot());
+      assert.equal(before.wallet - f.state().wallet, quote.cost);
+      assert.equal(f.state().spend - before.spend, quote.cost);
+      const next = expected.quote(id);
+      assert.equal(f.element('#counter-upgrade').disabled, true);
+      assert.equal(f.element('#counter-funds').textContent, `还差 ${centsLabel(next.cost - f.state().wallet)}`);
+      const insufficient = f.state();
+      f.click('#counter-upgrade'); f.element('#counter-upgrade').emit('click');
+      assert.deepEqual(f.state(), insufficient, 'disabled UI and the actual purchase handler both reject insufficient funds');
+    } finally { f.dispose(); }
+    const capped = createInitialState(); capped.counters.find(counter => counter.id === id).level = 20;
+    const g = fixture({ initial: capped });
+    try {
+      g.action({ type: 'counter', id }); const before = g.state();
+      assert.match(g.element('#counter-level').textContent, /20.*MAX/);
+      assert.equal(g.element('#counter-next-price').textContent, '已达上限');
+      assert.equal(g.element('#counter-next-seconds').textContent, '已达上限');
+      assert.equal(g.element('#counter-upgrade').textContent, '已满级');
+      assert.equal(g.element('#counter-upgrade').disabled, true);
+      assert.equal(g.element('#counter-funds').textContent, '');
+      g.click('#counter-upgrade'); g.element('#counter-upgrade').emit('click');
+      assert.deepEqual(g.state(), before, 'max-level upgrades cannot charge money or increase levels');
+    } finally { g.dispose(); }
+  }
+});
+
+test('TC-3D-022 manager upgrade shows efficiency, benefit and real cost without bypassing funds or level caps', () => {
+  const f = fixture();
+  try {
+    f.action({ type: 'vault' });
+    const before = f.state(), expected = createEngine(before), quote = expected.managerQuote();
+    assert.ok(quote.nextSpeed > quote.speed);
+    assert.equal(f.element('#manager-speed').textContent, `${Math.round(quote.speed / managerSpeed(1) * 100)}%`);
+    assert.equal(f.element('#manager-preview').textContent, `→ ${Math.round(quote.nextSpeed / managerSpeed(1) * 100)}% · 容量提升`);
+    assert.equal(f.element('#manager-upgrade').textContent, `升级经理 · ${centsLabel(quote.cost)}`);
+    assert.equal(f.element('#manager-upgrade').disabled, false);
+    assert.equal(f.element('#manager-funds').textContent, '');
+    f.click('#manager-upgrade'); assert.equal(expected.upgradeManager(), true);
+    assert.deepEqual(f.state(), expected.snapshot());
+    assert.equal(before.wallet - f.state().wallet, quote.cost);
+    assert.equal(f.state().spend - before.spend, quote.cost);
+    assert.equal(f.element('#manager-rank').textContent, 'Lv. 2');
+    assert.equal(f.element('#manager-upgrade').disabled, true);
+    assert.equal(f.element('#manager-funds').textContent, `还差 ${centsLabel(expected.managerQuote().cost - f.state().wallet)}`);
+    const insufficient = f.state();
+    f.click('#manager-upgrade'); f.element('#manager-upgrade').emit('click');
+    assert.deepEqual(f.state(), insufficient);
+  } finally { f.dispose(); }
+  const capped = createInitialState(); capped.manager.level = 20;
+  const g = fixture({ initial: capped });
+  try {
+    g.action({ type: 'vault' }); const before = g.state();
+    assert.equal(g.element('#manager-preview').textContent, '经理已满级');
+    assert.equal(g.element('#manager-upgrade').textContent, '已满级');
+    assert.equal(g.element('#manager-upgrade').disabled, true);
+    assert.equal(g.element('#manager-funds').textContent, '');
+    g.click('#manager-upgrade'); g.element('#manager-upgrade').emit('click');
+    assert.deepEqual(g.state(), before, 'max-level manager cannot charge money or upgrade again');
+  } finally { g.dispose(); }
 });

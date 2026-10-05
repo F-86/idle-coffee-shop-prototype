@@ -68,3 +68,7 @@ REQ-3D-030 → [TC-3D-020](cases/slice/TC-3D-020.md)、[计划](plans/offline-un
 ## 手动文件存档
 
 REQ-3D-031 → [TC-3D-021](cases/slice/TC-3D-021.md)、[PORTABLE-QA-1.0](plans/portable-save-files.md)。协议/完整性/账本、备份与乐观冲突故障、实际main.ts异步与生命周期；Mac/iPhone/Safari原生文件及iCloud到达需独立合成数据验收，不混作自动同步通过。
+
+## 游戏化操作面板
+
+REQ-3D-032 → [TC-3D-022](cases/slice/TC-3D-022.md)、[计划](plans/game-panel-redesign.md)。统一升级/设置/存档层级、原生文件输入、可见确认后果、恢复入口和离线简明结果；原TC-3D-019/020/021资产与失败保护继续回归，真实像素/原生选择器单独验收。

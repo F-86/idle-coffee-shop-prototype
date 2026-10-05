@@ -30,32 +30,59 @@ root.innerHTML = `
     <button id="dialog-close" class="dialog-close" aria-label="关闭操作窗口">×</button>
     <div class="dialog-heading"><span class="dialog-eyebrow" id="dialog-eyebrow">MELLOW BEAN</span><h1 id="dialog-title"></h1><p id="dialog-description"></p></div>
     <div id="counter-panel" class="operation-panel" hidden>
-      <div class="recipe-picker" aria-label="柜台咖啡配方"><button data-select-recipe="espresso">浓缩咖啡<small>出杯快</small></button><button data-select-recipe="latte">拿铁<small>杯价高</small></button></div>
-      <p id="counter-affinity" class="detail-note"></p><div class="detail-grid"><span>当前杯价<strong id="counter-price"></strong></span><span>制作时间<strong id="counter-seconds"></strong></span></div>
-      <div class="upgrade-preview"><span id="counter-preview"></span><small id="counter-payback"></small></div><button id="counter-upgrade" class="primary-button"></button>
-    </div>
-    <div id="coffee-panel" class="operation-panel" hidden><div class="coffee-medallion" id="coffee-symbol" aria-hidden="true">☕</div><p id="coffee-detail"></p><p class="detail-note">两款配方已解锁。分配到柜台后，下一杯开始生效。</p><div class="assign-buttons"><button data-assign="counter-a">供给柜台 A</button><button data-assign="counter-b">供给柜台 B</button></div></div>
-    <div id="vault-panel" class="operation-panel" hidden><div class="vault-total"><span>已存入金库</span><strong id="vault-total"></strong></div><div class="detail-grid"><span>台面待收<strong id="pending"></strong></span><span>经理运送<strong id="carrying"></strong></span></div><p class="detail-note">钱留在台面，再由经理沿后方通道送回。送到金库才可用于升级。</p><p id="served" class="detail-note"></p><h2 class="manager-heading">收钱经理</h2><div class="detail-grid"><span>收运等级<strong id="manager-rank"></strong></span><span>收运效率<strong id="manager-speed"></strong></span></div><p id="manager-status" class="detail-note"></p><p id="manager-preview"></p><button id="manager-upgrade" class="primary-button"></button></div>
-    <div id="settings-panel" class="operation-panel" hidden><p id="save-status" class="save-status">本地自动保存</p><p class="detail-note">自动保存只在本浏览器；跨设备请使用手动文件存档。</p><div class="settings-grid"><button id="save">保存进度</button><button id="save-files">手动文件存档</button><button id="export">导出备份</button><button id="export-current" hidden>导出当前副本</button><button id="reload" hidden>读取最新档</button><button id="new-shop" hidden>备份并开始新店</button></div><p class="settings-label" id="render-mode-label">画面与流畅度</p><div class="render-mode-picker" role="group" aria-labelledby="render-mode-label" aria-describedby="render-mode-note"><button data-render-mode="smooth">清晰流畅<small>跟随屏幕刷新</small></button><button data-render-mode="clear-60">清晰 60 帧<small>同等清晰度</small></button><button data-render-mode="balanced">平衡<small>较低清晰度 · 最高 60 帧</small></button><button data-render-mode="low-power">省电<small>低清晰度 · 最高 30 帧</small></button></div><p class="detail-note" id="render-mode-note"></p><p class="settings-label">逛逛小店</p><div class="jump-grid"><button data-focus="counter-a-recipe">柜台 A</button><button data-focus="counter-b-recipe">柜台 B</button><button data-focus="menu-espresso">咖啡墙</button><button data-focus="vault">金库</button><button data-focus="invite">入口</button></div><details><summary>怎么玩</summary><p>客人会自动进入、排队和取杯，入口也能招呼客人。柜台升级更快更值钱，在金库里升级经理提高收运。点柜台前脸的配方牌换咖啡，墙上菜单能查看配方或分配到柜台。制作中的那一杯不会被追改。</p><p>离线按80%经营速度推进，无时长上限；钱由经理送回金库后可用。此版本没有真实跨设备同步。</p></details></div>
-    <div id="files-panel" class="operation-panel" hidden>
-      <p class="detail-note">手动下载或分享 JSON 文件，再到另一台设备选择导入。可在系统面板中选择 iCloud Drive；这里无法确认文件是否已到达云端或另一台设备。</p>
-      <div class="settings-grid"><button id="file-prepare">生成新存档文件</button><button id="file-download" disabled>下载新文件</button><button id="file-share" disabled>分享文件</button></div>
-      <p id="file-export-summary" class="file-summary"></p>
-      <label class="file-picker" for="file-input">选择要导入的存档文件（最多 256 KiB）<input id="file-input" type="file" accept="application/json,.json"></label>
-      <p id="file-status" class="detail-note" role="status" aria-live="polite">选择文件只会预览，确认前不会替换当前小店。</p>
-      <div id="file-review" hidden>
-        <h2>对比进度</h2><p class="settings-label">当前小店</p><p id="file-current-summary" class="file-summary"></p><p class="settings-label">文件中的小店</p><p id="file-incoming-summary" class="file-summary"></p>
-        <p id="file-repeat-warning" class="save-status" hidden>此文件近期已导入过。再次导入会把进度退回该快照；不会再次发放文件期间的离线收益。</p>
-        <p class="detail-note">预览期间暂停经营。确认会完整替换为文件进度，并创建新的本地存档身份，不合并金额。导出后到导入期间不计离线收益；此后恢复本地 80% 离线经营。</p>
-        <p class="detail-note">替换前必须先写入并校验本浏览器内的备份（当前进度及原始存档）。备份不会自动删除；空间不足时拒绝导入。请先下载重要副本，浏览器清除数据会移除本地备份。</p>
-        <label class="file-confirm-label"><input id="file-other-tabs" type="checkbox">我已关闭其他游戏标签页和窗口。此浏览器的冲突检查无法保证多窗口同时写入安全。</label>
-        <div class="settings-grid"><button id="file-confirm" disabled>备份并替换当前小店</button><button id="file-cancel">取消导入</button></div>
+      <div class="recipe-picker" aria-label="柜台咖啡配方">
+        <button data-select-recipe="espresso"><span class="cup-art espresso-cup" aria-hidden="true"></span><strong>浓缩咖啡</strong><small>出杯快</small></button>
+        <button data-select-recipe="latte"><span class="cup-art latte-cup" aria-hidden="true"></span><strong>拿铁</strong><small>杯价高</small></button>
       </div>
-      <div id="file-backups" hidden><p class="settings-label">最近一次导入前的本地备份</p><div class="settings-grid"><button id="backup-live">导出导入前进度</button><button id="backup-original">导出导入前原始档</button></div></div>
-      <p class="detail-note">校验码只用于检查文件完整性，不证明来源可信，也不是云同步或防作弊验证。请选择自己保留的文件。</p>
-      <button id="file-back" class="secondary-button">返回设置</button>
+      <p id="counter-affinity" class="affinity-badge"></p>
+      <div class="upgrade-card">
+        <div class="section-heading"><h2>柜台升级</h2><span id="counter-level" class="level-badge"></span></div>
+        <div class="detail-grid upgrade-stats"><span>每杯售价<strong id="counter-price"></strong><small id="counter-next-price"></small></span><span>出杯时间<strong id="counter-seconds"></strong><small id="counter-next-seconds"></small></span></div>
+        <p id="counter-preview" class="upgrade-preview"></p>
+        <button id="counter-upgrade" class="primary-button"></button><p id="counter-funds" class="action-note"></p>
+      </div>
+      <details class="quiet-details"><summary>经营小贴士</summary><p>换配方从下一杯开始生效，正在制作的咖啡不受影响。</p><p id="counter-payback"></p></details>
     </div>
-    <div id="offline-panel" class="operation-panel" hidden><div id="offline-working"><p id="offline-progress-text" role="status" aria-live="polite">正在计算离线经营进度…</p><progress id="offline-progress" max="1" value="0" aria-label="离线经营结算进度"></progress><p class="detail-note">结算完成并安全保存后才会到账。取消会保留原有进度，稍后可以重试。</p><button id="offline-cancel" class="secondary-button">取消结算</button></div><div id="offline-result" hidden><p id="offline-deposited" class="offline-deposited"></p><p id="offline-duration"></p><p id="offline-generated"></p><p id="offline-pending"></p><p id="offline-legacy" class="detail-note" hidden></p><button id="offline-done" class="primary-button">继续营业</button></div></div>
+    <div id="coffee-panel" class="operation-panel" hidden><div class="coffee-medallion" id="coffee-symbol" aria-hidden="true">☕</div><p id="coffee-detail"></p><p class="detail-note">选择柜台，下一杯开始制作。</p><div class="assign-buttons"><button data-assign="counter-a">供给柜台 A</button><button data-assign="counter-b">供给柜台 B</button></div></div>
+    <div id="vault-panel" class="operation-panel" hidden>
+      <div class="vault-total"><span>可用金币</span><strong id="vault-total"></strong><small id="served"></small></div>
+      <div class="upgrade-card">
+        <div class="section-heading"><h2>收钱经理</h2><span id="manager-rank" class="level-badge"></span></div>
+        <div class="manager-card"><span class="manager-art" aria-hidden="true"><i></i></span><div><span class="stat-label">收运效率</span><strong id="manager-speed"></strong><span id="manager-preview"></span></div></div>
+        <p id="manager-status" class="action-note"></p><button id="manager-upgrade" class="primary-button"></button><p id="manager-funds" class="action-note"></p>
+      </div>
+      <details class="quiet-details"><summary>收款详情</summary><div class="detail-grid"><span>台面待收<strong id="pending"></strong></span><span>经理运送<strong id="carrying"></strong></span></div><p>经理把钱送回金库后，就能用来升级小店。</p></details>
+    </div>
+    <div id="settings-panel" class="operation-panel" hidden>
+      <section class="local-save-card"><div><span class="stat-label">这台设备的小店</span><p id="save-status" class="save-status" role="status">本地自动保存</p></div><button id="save" class="compact-button">保存</button></section>
+      <button id="save-files" class="menu-card"><span class="menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H6V3h1Zm7 0v5h4M9 12h6M9 16h6"/></svg></span><span><strong>小店存档</strong><small>导出文件 · 在另一台设备继续</small></span><span class="menu-chevron" aria-hidden="true">›</span></button>
+      <section class="settings-section"><div class="section-heading"><h2 id="render-mode-label">画面</h2><span class="section-kicker">选你喜欢的节奏</span></div><div class="render-mode-picker" role="group" aria-labelledby="render-mode-label" aria-describedby="render-mode-note"><button data-render-mode="smooth">清晰流畅<small>跟随屏幕刷新</small></button><button data-render-mode="clear-60">清晰 60 帧<small>同等清晰度</small></button><button data-render-mode="balanced">平衡<small>适中清晰度 · 最高 60 帧</small></button><button data-render-mode="low-power">省电<small>较低清晰度 · 最高 30 帧</small></button></div><p class="detail-note" id="render-mode-note"></p></section>
+      <details id="save-recovery" class="quiet-details"><summary>备份与恢复</summary><p>自动保存仅在本浏览器。换设备请使用“小店存档”；这里的恢复副本不一定能直接导入。</p><div class="settings-grid"><button id="export">导出备份</button><button id="export-current" hidden>导出当前副本</button><button id="reload" hidden>读取最新档</button><button id="new-shop" hidden>备份并开始新店</button></div></details>
+      <details class="quiet-details"><summary>逛逛小店</summary><div class="jump-grid"><button data-focus="counter-a-recipe">柜台 A</button><button data-focus="counter-b-recipe">柜台 B</button><button data-focus="menu-espresso">咖啡墙</button><button data-focus="vault">金库</button><button data-focus="invite">入口</button></div></details>
+      <details class="quiet-details"><summary>怎么玩</summary><p>客人自动进店买咖啡。升级柜台，让出杯更快、更值钱；升级经理，让金币更快到账。</p><p>点柜台配方牌换咖啡，入口可招呼客人。离线以 80% 经营速度持续营业，无时长上限。</p></details>
+    </div>
+    <div id="files-panel" class="operation-panel" hidden>
+      <section class="file-card export-card"><div class="section-heading"><h2><span class="step-badge" aria-hidden="true">↑</span>带走这间小店</h2><span class="section-kicker">导出</span></div><p class="detail-note">生成文件，把此刻的进度装进口袋。</p><button id="file-prepare" class="primary-button">生成存档</button><div id="file-output" hidden><p id="file-export-summary" class="file-summary"></p><div class="settings-grid"><button id="file-download" disabled>下载文件</button><button id="file-share" disabled>分享文件</button></div></div></section>
+      <section class="file-card import-card"><div class="section-heading"><h2><span class="step-badge" aria-hidden="true">↓</span>继续另一份进度</h2><span class="section-kicker">导入</span></div><label class="file-picker" for="file-input"><span>选择存档文件</span><input id="file-input" type="file" accept="application/json,.json" aria-describedby="file-picker-note file-selection"></label><p id="file-picker-note" class="detail-note">JSON · 最多 256 KiB · 先预览，再确认</p><p id="file-selection" class="file-selection" hidden></p></section>
+      <p id="file-status" class="file-status" role="status" aria-live="polite">选择文件不会立即替换小店。</p>
+      <div id="file-review" tabindex="-1" role="region" aria-label="导入存档预览" hidden>
+        <div class="section-heading"><h2>要继续这份进度吗？</h2><span class="level-badge">已暂停营业</span></div>
+        <div class="save-comparison"><section class="save-snapshot"><h3>现在的小店</h3><p id="file-current-summary" class="file-summary"></p></section><section class="save-snapshot incoming-snapshot"><h3>文件里的小店</h3><p id="file-incoming-summary" class="file-summary"></p></section></div>
+        <p id="file-older-warning" class="warning-note" hidden>这是较早的存档，导入会回退到文件中的进度。</p>
+        <p id="file-repeat-warning" class="warning-note" hidden>这份文件已导入过。再次导入会回退到该快照，不会重复获得离线收益。</p>
+        <div class="confirmation-note"><strong>当前小店将被完整替换</strong><p>较早进度会回退，金币不合并；文件导出至本次导入之间不补离线收益。替换前会先校验本地备份，备份失败就停止。</p></div>
+        <details class="quiet-details"><summary>备份与文件详情</summary><p>本地备份保留当前进度和原始档，不自动删除。空间不足时拒绝导入；清除浏览器数据会丢失备份，请先下载重要副本。</p><p>导入创建新的本地存档身份，此后按 80% 速度继续离线经营。</p><p class="technical-label">当前小店</p><p id="file-current-details" class="file-summary technical-summary"></p><p class="technical-label">导入文件</p><p id="file-incoming-details" class="file-summary technical-summary"></p></details>
+        <label class="file-confirm-label"><input id="file-other-tabs" type="checkbox"><span>已关闭其他游戏标签页和窗口<small>多窗口同时写入可能造成冲突，无法保证安全。</small></span></label>
+        <div class="import-actions"><button id="file-confirm" class="primary-button" disabled>备份并替换小店</button><button id="file-cancel" class="secondary-button">保留当前小店</button></div>
+      </div>
+      <details id="file-backups" class="quiet-details" hidden><summary>找回导入前的小店</summary><div class="settings-grid"><button id="backup-live">导出原进度</button><button id="backup-original">导出原始档</button></div></details>
+      <details class="quiet-details"><summary>如何换设备继续？</summary><p>生成后下载或分享文件，在另一台设备选择导入。新进度需要重新生成文件。</p><p>可在系统面板选择 iCloud Drive。这是手动文件存档，没有自动云同步，也无法确认云端或另一台设备是否已收到。</p><p>校验码只检查完整性，不证明来源可信。请选择自己保留的文件。</p></details>
+      <button id="file-back" class="text-button">‹ 返回设置</button>
+    </div>
+    <div id="offline-panel" class="operation-panel" hidden>
+      <div id="offline-working"><div class="earnings-art" aria-hidden="true"><span></span><i></i></div><p id="offline-progress-text" role="status" aria-live="polite">正在整理小店收益…</p><progress id="offline-progress" max="1" value="0" aria-label="离线收益整理进度"></progress><p class="detail-note">完成后安全到账，取消可稍后重试。</p><button id="offline-cancel" class="secondary-button">稍后再算</button></div>
+      <div id="offline-result" hidden><div class="earnings-art" aria-hidden="true"><span></span><i></i></div><p id="offline-duration"></p><div class="earnings-reward"><span>本次到账</span><strong id="offline-deposited"></strong><small>已存入金库</small></div><button id="offline-done" class="primary-button">继续营业</button></div>
+    </div>
   </dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>`;
@@ -173,6 +200,7 @@ function save(manual = false, saveAt = Date.now()) {
       ? "本地已保存"
       : "保存失败，请导出备份";
     lastSave = Date.now();
+    if (!result.ok) $("#save-recovery").setAttribute("open", "");
     if (result.status === "conflict") blockConflict(result.message);
     if (manual)
       toast(
@@ -183,6 +211,7 @@ function save(manual = false, saveAt = Date.now()) {
     return result;
   } catch {
     $("#save-status").textContent = "保存失败，请导出备份";
+    $("#save-recovery").setAttribute("open", "");
     if (manual) toast("浏览器未允许保存，请导出存档备份");
   }
 }
@@ -211,6 +240,8 @@ function showPanel(
   }
   if (recipe) viewedRecipe = recipe;
   panel = next;
+  dialog.dataset.panel = next;
+  dialog.scrollTop = 0;
   setSceneInteractive(false);
   root
     .querySelectorAll<HTMLElement>(".operation-panel")
@@ -406,12 +437,17 @@ on($("#manager-upgrade"), "click", () => {
 });
 on($("#save"), "click", () => save(true));
 function fileMessage(message: string) { $("#file-status").textContent = message; }
-function summary(state: SliceState, savedAt?: number): string {
+function summaryDetails(state: SliceState, savedAt?: number): string {
   const o = overviewOf(state);
   return `${savedAt === undefined ? "当前未存盘进度" : `时间 ${new Date(savedAt).toLocaleString()}`}\n金库 ${money(o.wallet)} · 营业额 ${money(o.totalEarned)} · 已售 ${o.totalServed} 杯\n柜台 A/B ${o.counterLevels.join(" / ")} 级 · 经理 ${o.managerLevel} 级\n待收 ${money(o.pendingCash)} · 运送 ${money(o.carrying)} · 经营 ${duration(o.elapsed)}`;
 }
+function summary(state: SliceState, savedAt?: number): string {
+  const o = overviewOf(state);
+  return `金库 ${money(o.wallet)}\n已售 ${o.totalServed} 杯\n柜台 ${o.counterLevels.join(" / ")} 级 · 经理 ${o.managerLevel} 级${savedAt === undefined ? "" : `\n${new Date(savedAt).toLocaleString()}`}`;
+}
 function updateFileControls() {
   const review = fileReview !== null;
+  $("#file-output").hidden = !preparedFile;
   $("#file-prepare").toggleAttribute("disabled", fileBusy || review || saveBlocked || !hasUsableState);
   $("#file-download").toggleAttribute("disabled", !preparedFile || fileBusy || review);
   $("#file-share").toggleAttribute("disabled", !preparedFile || fileBusy || review);
@@ -426,6 +462,7 @@ function cancelFileReview() {
   const reviewing = !!fileReview;
   fileGeneration++; fileBusy = false; fileReview = null;
   $("#file-review").hidden = true;
+  $("#file-selection").hidden = true;
   $<HTMLInputElement>("#file-other-tabs").checked = false;
   if (reviewing) {
     // Preview is an explicitly paused interval, not online/offline earnings.
@@ -443,12 +480,12 @@ function downloadText(text: string, filename: string) {
 }
 function downloadPrepared() {
   if (!preparedFile || fileBusy || fileReview) return;
-  try { downloadText(preparedFile.text, portableFilename(preparedFile)); fileMessage("已发起新文件下载，请在系统文件位置确认保存；尚未验证 iCloud 到达。"); }
+  try { downloadText(preparedFile.text, portableFilename(preparedFile)); fileMessage("下载已发起，请确认保存位置。无法验证 iCloud 是否收到。"); }
   catch { fileMessage("无法发起下载，请检查浏览器下载权限。"); }
 }
 on($("#save-files"), "click", () => { if (!offlineJob) { showPanel("files"); updateFileControls(); } });
 on($("#file-back"), "click", () => { cancelFileReview(); showPanel("settings"); });
-on($("#file-cancel"), "click", () => { cancelFileReview(); fileMessage("已取消导入，当前小店和原始存档保持不变。"); });
+on($("#file-cancel"), "click", () => { cancelFileReview(); fileMessage("已保留当前小店，未替换存档。"); $("#file-input").focus(); });
 on($("#file-other-tabs"), "change", updateFileControls);
 on($("#file-input"), "change", () => {
   const input = $<HTMLInputElement>("#file-input");
@@ -467,12 +504,18 @@ on($("#file-input"), "change", () => {
       if (!settleVisibleTail()) { fileMessage("当前进度需要先恢复，请导出备份或读取最新档。"); return; }
       fileReview = { file: parsed.file, expectedRaw: repository.inspect().rawText, currentState: hasUsableState ? engine.snapshot() : null };
       const durable = repository.durableSnapshot();
-      $("#file-current-summary").textContent = fileReview.currentState ? `${summary(fileReview.currentState)}\n最近本地保存 ${durable ? new Date(durable.savedAt).toLocaleString() : "无"}\n${durable?.saveId ?? "尚无身份"} · r${durable?.revision ?? 0}` : "当前原始存档无法读取。确认前将按原始字节备份；不会把占位新店当作当前进度。";
+      $("#file-current-summary").textContent = fileReview.currentState ? summary(fileReview.currentState) : "存档暂时无法读取\n原始内容将先备份";
+      $("#file-current-details").textContent = fileReview.currentState ? `${summaryDetails(fileReview.currentState)}\n最近本地保存 ${durable ? new Date(durable.savedAt).toLocaleString() : "无"}\n${durable?.saveId ?? "尚无身份"} · r${durable?.revision ?? 0}` : "当前原始存档无法读取。确认前将按原始字节备份；不会把占位新店当作当前进度。";
       const incoming = parsed.file.payload;
-      $("#file-incoming-summary").textContent = `${summary(incoming.state, incoming.savedAt)}\n导出 ${new Date(incoming.exportedAt).toLocaleString()}\n${incoming.saveId} · r${incoming.revision}\nSHA-256 ${parsed.file.fingerprint}`;
+      $("#file-incoming-summary").textContent = summary(incoming.state, incoming.savedAt);
+      $("#file-incoming-details").textContent = `${summaryDetails(incoming.state, incoming.savedAt)}\n导出 ${new Date(incoming.exportedAt).toLocaleString()}\n${incoming.saveId} · r${incoming.revision}\nSHA-256 ${parsed.file.fingerprint}`;
+      $("#file-older-warning").hidden = !durable || incoming.savedAt >= durable.savedAt;
       $("#file-repeat-warning").hidden = !durable?.importedFileHashes?.includes(parsed.file.fingerprint);
-      fileMessage("校验通过。请核对两份进度；确认前不会替换存档。");
+      $("#file-selection").textContent = `正在预览：${file.name}`;
+      $("#file-selection").hidden = false;
+      fileMessage("校验通过，请核对进度。");
       updateFileControls();
+      $("#file-review").focus({ preventScroll: false });
     } catch { if (generation === fileGeneration && !stopped) { fileBusy = false; fileMessage("无法读取文件，当前小店未改变。"); updateFileControls(); } }
   })();
 });
@@ -492,8 +535,9 @@ on($("#file-confirm"), "click", () => {
   acceptLoaded({ state: result.state, status: "loaded", message: result.message, protectedRaw: false, settledAt: result.settledAt }, performance.now(), "save reload");
   preparedFile = null;
   $("#file-export-summary").textContent = "";
-  fileMessage("已备份并导入。新本地身份已建立；文件导出到本次导入的间隔不计收益。");
+  fileMessage("已备份并导入，小店可以继续营业了。导入前的文件间隔不补收益。");
   updateFileControls();
+  $("#file-input").focus();
 });
 on($("#file-prepare"), "click", () => {
   if (fileBusy || fileReview || saveBlocked || !hasUsableState || stopped || document.hidden) return;
@@ -506,8 +550,8 @@ on($("#file-prepare"), "click", () => {
   void createPortableSave({ gameSchemaVersion: 1, economyVersion: 1, offlinePolicyVersion: 3, saveId: durable.saveId, revision: durable.revision, savedAt: durable.savedAt, exportedAt: Date.now(), overview: overviewOf(durable.state), state: durable.state }).then(file => {
     if (generation !== fileGeneration || stopped || document.hidden || panel !== "files" || !dialog.open) return;
     preparedFile = file; fileBusy = false;
-    $("#file-export-summary").textContent = `${summary(file.payload.state, file.payload.savedAt)}\n${file.payload.saveId} · r${file.payload.revision}`;
-    fileMessage("存档文件已准备好。下载或分享后，请自行确认保存位置；生成后的小店新进度不会自动写入此文件。"); updateFileControls();
+    $("#file-export-summary").textContent = summary(file.payload.state, file.payload.savedAt);
+    fileMessage("文件已准备好。请选择下载或分享；后续进度需重新生成。"); updateFileControls();
   }).catch(error => { if (generation === fileGeneration && !stopped) { fileBusy = false; fileMessage(error instanceof Error ? error.message : "无法生成存档文件。"); updateFileControls(); } });
 });
 on($("#file-download"), "click", downloadPrepared);
@@ -518,7 +562,7 @@ on($("#file-share"), "click", () => {
     if (!navigator.canShare?.({ files: [file] }) || !navigator.share) { downloadPrepared(); return; }
     // Called directly from this button gesture; no prior asynchronous work.
     const generation = fileGeneration;
-    void navigator.share({ files: [file], title: "Mellow Bean 手动存档" }).then(() => { if (generation === fileGeneration && !stopped) fileMessage("系统分享流程已结束，请自行确认保存位置与跨设备到达。"); }).catch(error => { if (generation === fileGeneration && !stopped) fileMessage(error?.name === "AbortError" ? "已取消分享，没有另行下载文件。" : "分享未完成，请使用下载新文件按钮。"); });
+    void navigator.share({ files: [file], title: "Mellow Bean 手动存档" }).then(() => { if (generation === fileGeneration && !stopped) fileMessage("系统分享流程已结束，请自行确认保存位置与跨设备到达。"); }).catch(error => { if (generation === fileGeneration && !stopped) fileMessage(error?.name === "AbortError" ? "已取消分享，未下载文件。" : "分享未完成，请选择下载文件。"); });
   } catch { downloadPrepared(); }
 });
 on($("#backup-original"), "click", () => {
@@ -544,6 +588,7 @@ function updateBackupControls() {
   $("#export").textContent = sourceProtected ? "导出原始档" : "导出备份";
   $("#export").toggleAttribute("disabled", !sourceProtected && !hasUsableState);
   $("#export-current").hidden = !sourceProtected || !hasUsableState;
+  if (sourceProtected || saveBlocked) $("#save-recovery").setAttribute("open", "");
 }
 function exportBackup(original: boolean) {
   // An unreadable startup has no current shop to export; never label its
@@ -584,6 +629,7 @@ function blockConflict(message: string) {
   if (!engine.state.paused) engine.togglePause();
   $("#reload").hidden = false;
   $("#save-status").textContent = message;
+  $("#save-recovery").setAttribute("open", "");
   toast(message);
   updateUI();
 }
@@ -626,14 +672,10 @@ function showOfflineResult(result: LoadResult) {
       offline.generatedAmount === undefined || offline.pendingCash === undefined || offline.carrying === undefined) return false;
   $("#offline-working").hidden = true;
   $("#offline-result").hidden = false;
-  $("#offline-deposited").textContent = `离开期间已存入金库 ${money(offline.amount)}`;
-  $("#offline-duration").textContent = `离开 ${duration(offline.awaySeconds)} · 有效经营 ${duration(offline.effectiveSeconds)}`;
-  $("#offline-generated").textContent = `期间售出咖啡产生 ${money(offline.generatedAmount)}`;
-  $("#offline-pending").textContent = `台面待收 ${money(offline.pendingCash)} · 经理运送 ${money(offline.carrying)}。送回金库后才可用。`;
-  $("#offline-legacy").hidden = offline.policyVersion === 3;
-  $("#offline-legacy").textContent = "本次按旧规则以50%经营速度、最多2小时完成一次结算；之后按80%经营速度推进，无时长上限。";
+  // Player reward is the committed wallet delta, never generated/pending cash.
+  $("#offline-deposited").textContent = money(offline.amount);
+  $("#offline-duration").textContent = `离开了 ${duration(Math.floor(offline.awaySeconds))}`;
   showPanel("offline");
-  toast(`离开期间已存入金库 ${money(offline.amount)}`);
   return true;
 }
 function acceptLoaded(result: LoadResult, started: number, reason: "save reload" | "visibility / offline discontinuity" | "startup", verifiedUntil = performance.now()) {
@@ -700,7 +742,7 @@ function handleLoad(result: LoadResult, retry: OfflineRetry, started: number, re
   $("#offline-working").hidden = false;
   $("#offline-result").hidden = true;
   $("#offline-progress").setAttribute("value", "0");
-  $("#offline-progress-text").textContent = "正在计算离线经营进度…";
+  $("#offline-progress-text").textContent = "正在整理小店收益…";
   showPanel("offline");
   if (document.hidden) {
     resumeOfflineAfterHide = true;
@@ -740,7 +782,7 @@ function handleLoad(result: LoadResult, retry: OfflineRetry, started: number, re
     onProgress: progress => {
       if (offlineJob !== job || stopped || !observeForegroundTurn()) return;
       $("#offline-progress").setAttribute("value", String(progress.fraction));
-      $("#offline-progress-text").textContent = `已计算 ${Math.floor(progress.fraction * 100)}% · ${duration(progress.completedSeconds)} / ${duration(progress.totalSeconds)} 有效经营`;
+      $("#offline-progress-text").textContent = `正在整理收益 · ${Math.floor(progress.fraction * 100)}%`;
     },
   }).then(result => {
     if (offlineJob !== job || job.controller.signal.aborted || stopped) return;
@@ -808,12 +850,12 @@ function updateRenderModeUI() {
     button.setAttribute("aria-pressed", String(active));
   });
   $("#render-mode-note").textContent = renderMode === "smooth"
-    ? "保留高清晰度并跟随屏幕刷新；高刷新屏可选清晰 60 帧减少绘制次数。"
+    ? "高清画面，跟随屏幕刷新。"
     : renderMode === "clear-60"
-      ? "保留与清晰流畅相同的清晰度，最高每秒绘制 60 帧；经营速度不变。"
+      ? "相同清晰度，最高 60 帧，经营速度不变。"
     : renderMode === "balanced"
-      ? "适度降低清晰度与刷新率，兼顾画面与耗电。"
-      : "降低清晰度与刷新率来减少绘制，动作会较不连贯。";
+      ? "画面与耗电之间的平衡。"
+      : "减少绘制，画面与动作会更简约。";
 }
 function updateUI() {
   const s = engine.state;
@@ -827,17 +869,21 @@ function updateUI() {
     $("#dialog-title").textContent =
       selected === "counter-a" ? "街角快饮" : "柔奶时光";
     $("#dialog-description").textContent = c.brew
-      ? "当前杯继续制作；选择从下一杯开始生效"
-      : "选择咖啡，或者提升这个柜台";
+      ? "下一杯，换个好味道"
+      : "选好咖啡，让生意更红火";
     $("#counter-affinity").textContent =
       selected === "counter-a"
-        ? "柜台擅长：浓缩制作快 25%"
-        : "柜台擅长：拿铁售价高 12%";
+        ? "拿手好戏 · 浓缩快 25%"
+        : "拿手好戏 · 拿铁售价 +12%";
+    $("#counter-level").textContent = `Lv. ${c.level}${q.capped ? " · MAX" : ` → ${c.level + 1}`}`;
+    $("#counter-next-price").textContent = q.capped ? "已达上限" : `→ ${money(q.afterPrice)}`;
+    $("#counter-next-seconds").textContent = q.capped ? "已达上限" : `→ ${q.afterSeconds.toFixed(1)} 秒`;
+    $("#counter-funds").textContent = conflictBlocked ? "请先恢复存档" : q.capped ? "" : s.wallet < q.cost ? `还差 ${money(q.cost - s.wallet)}` : "";
     $("#counter-price").textContent = `${money(q.beforePrice)}`;
     $("#counter-seconds").textContent = `${q.beforeSeconds.toFixed(1)} 秒`;
     $("#counter-preview").textContent = q.capped
       ? "柜台已满级"
-      : `下一级 ${money(q.afterPrice)} / ${q.afterSeconds.toFixed(1)} 秒`;
+      : "更值钱，也更快";
     $("#counter-payback").textContent = q.capped
       ? "更多经营内容还在路上"
       : `满负荷增量回本约 ${Math.ceil(q.paybackSeconds)} 秒`;
@@ -877,7 +923,7 @@ function updateUI() {
     $("#pending").textContent =
       `${money(s.counters.reduce((n, c) => n + c.pendingCash, 0))}`;
     $("#carrying").textContent = `${money(s.manager.carrying)}`;
-    $("#served").textContent = `这间小店已卖出 ${s.totalServed} 杯咖啡`;
+    $("#served").textContent = `已送出 ${s.totalServed} 杯香气`;
     const q = engine.managerQuote();
     $("#manager-rank").textContent = `Lv. ${s.manager.level}`;
     $("#manager-speed").textContent = `${Math.round(q.speed / managerSpeed(1) * 100)}%`;
@@ -889,7 +935,8 @@ function updateUI() {
           : "正在后方通道收运";
     $("#manager-preview").textContent = q.capped
       ? "经理已满级"
-      : `下一级收运效率 ${Math.round(q.nextSpeed / managerSpeed(1) * 100)}%，收运容量也会提升。`;
+      : `→ ${Math.round(q.nextSpeed / managerSpeed(1) * 100)}% · 容量提升`;
+    $("#manager-funds").textContent = conflictBlocked ? "请先恢复存档" : q.capped ? "" : s.wallet < q.cost ? `还差 ${money(q.cost - s.wallet)}` : "";
     $("#manager-upgrade").textContent = q.capped
       ? "已满级"
       : `升级经理 · ${money(q.cost)}`;
@@ -899,16 +946,17 @@ function updateUI() {
     );
   } else if (panel === "offline") {
     $("#dialog-eyebrow").textContent = "WELCOME BACK";
-    $("#dialog-title").textContent = offlineJob ? "正在结算离线经营" : "离线经营记录";
-    $("#dialog-description").textContent = offlineJob ? "原有进度已保留，完成后一次到账" : "只有经理送回金库的现金可以使用";
+    $("#dialog-title").textContent = offlineJob ? "小店忙碌了一会儿" : "欢迎回来";
+    $("#dialog-description").textContent = offlineJob ? "正在把收益装进口袋" : "你不在的时候，咖啡依然飘香";
   } else if (panel === "files") {
-    $("#dialog-eyebrow").textContent = "MANUAL SAVE FILE";
-    $("#dialog-title").textContent = "手动文件存档";
-    $("#dialog-description").textContent = "预览、备份、明确确认后才替换";
+    $("#dialog-eyebrow").textContent = "COFFEE TO GO";
+    $("#dialog-title").textContent = "小店存档";
+    $("#dialog-description").textContent = "把喜欢的小店，带在身边";
   } else if (panel === "settings") {
     $("#dialog-eyebrow").textContent = "MELLOW BEAN";
     $("#dialog-title").textContent = "小店设置";
-    $("#dialog-description").textContent = "本地保存与逛店导航";
+    $("#dialog-description").textContent = "给小店调个舒服的节奏";
+    if (saveBlocked) $("#save-recovery").setAttribute("open", "");
   }
 }
 let hudElapsed = 0;
