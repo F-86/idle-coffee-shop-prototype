@@ -1,0 +1,36 @@
+BJS - [21:41:58]: Babylon.js v9.29.0 - Null engine
+BJS - [21:41:58]: Babylon.js v9.29.0 - Null engine
+BJS - [21:41:58]: Babylon.js v9.29.0 - Null engine
+BJS - [21:41:58]: Babylon.js v9.29.0 - Null engine
+BJS - [21:41:59]: Babylon.js v9.29.0 - Null engine
+BJS - [21:41:59]: Babylon.js v9.29.0 - Null engine
+BJS - [21:41:59]: Babylon.js v9.29.0 - Null engine
+BJS - [21:41:59]: Babylon.js v9.29.0 - Null engine
+BJS - [21:41:59]: Babylon.js v9.29.0 - Null engine
+BJS - [21:41:59]: Babylon.js v9.29.0 - Null engine
+BJS - [21:42:00]: Babylon.js v9.29.0 - Null engine
+BJS - [21:42:00]: Babylon.js v9.29.0 - Null engine
+BJS - [21:42:00]: Babylon.js v9.29.0 - Null engine
+BJS - [21:42:00]: Babylon.js v9.29.0 - Null engine
+✔ TC-3D-010 physical manager plaque clears the entire vault silhouette at 1280×900, DPR 1 (projection only) (298.719622ms)
+✔ TC-3D-010 physical manager plaque clears the entire vault silhouette at 1280×900, DPR 1.75 (projection only) (188.248198ms)
+✔ TC-3D-010 physical manager plaque clears the entire vault silhouette at 390×844, DPR 1 (projection only) (163.806092ms)
+✔ TC-3D-010 physical manager plaque clears the entire vault silhouette at 390×844, DPR 1.75 (projection only) (169.394072ms)
+✔ TC-3D-010 physical manager plaque clears the entire vault silhouette at 844×390, DPR 1 (projection only) (192.945835ms)
+✔ TC-3D-010 physical manager plaque clears the entire vault silhouette at 844×390, DPR 1.75 (projection only) (167.073668ms)
+✔ TC-3D-013 side aisles join a separate return lane ending beyond the entrance, with no obsolete arrows (168.149046ms)
+✔ TC-3D-018 vault plaque stays close without covering its icon at 1280×900, DPR 1 (projection only) (141.246493ms)
+✔ TC-3D-018 vault plaque stays close without covering its icon at 1280×900, DPR 1.75 (projection only) (145.071905ms)
+✔ TC-3D-018 vault plaque stays close without covering its icon at 390×844, DPR 1 (projection only) (144.070753ms)
+✔ TC-3D-018 vault plaque stays close without covering its icon at 390×844, DPR 1.75 (projection only) (160.694478ms)
+✔ TC-3D-018 vault plaque stays close without covering its icon at 844×390, DPR 1 (projection only) (135.465677ms)
+✔ TC-3D-018 vault plaque stays close without covering its icon at 844×390, DPR 1.75 (projection only) (160.96982ms)
+✔ TC-3D-018 full-width departure corners are filled and meet without overlapping top surfaces (geometry/rays only) (154.327108ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2702.69729

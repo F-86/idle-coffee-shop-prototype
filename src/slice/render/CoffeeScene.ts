@@ -632,14 +632,19 @@ export class CoffeeScene {
     }
     // The counter-side aisles join a separate return lane to the entrance-side boundary.
     // Crossings yield in the core; no threshold suggests disappearing at the rug end.
+    const departureWidth = .65, returnDepth = .54;
+    const returnNearZ = WORLD.exitZ - returnDepth / 2;
     for (const x of [0, 5]) {
       const exitX = x + WORLD.departureOffsetX;
-      const aisle = this.box(`departure-aisle-${x}`, .65, .012, WORLD.exitZ - WORLD.serviceZ,
-        exitX, .006, (WORLD.exitZ + WORLD.serviceZ) / 2, '#ded6c0', undefined, false);
+      // Meet the cross-strip at its near edge, avoiding overlapping coplanar tops.
+      const aisle = this.box(`departure-aisle-${x}`, departureWidth, .012, returnNearZ - WORLD.serviceZ,
+        exitX, .006, (returnNearZ + WORLD.serviceZ) / 2, '#ded6c0', undefined, false);
       aisle.metadata = { coffeeFlow: 'outgoing' };
     }
-    const returnStartX = 5 + WORLD.departureOffsetX;
-    const returnLane = this.box('departure-return-lane', returnStartX - WORLD.exitX, .012, .54,
+    // Cover the entire outer aisle width; stopping on its centerline left the
+    // screen-left bend missing its outside quarter under the oblique camera.
+    const returnStartX = 5 + WORLD.departureOffsetX + departureWidth / 2;
+    const returnLane = this.box('departure-return-lane', returnStartX - WORLD.exitX, .012, returnDepth,
       (returnStartX + WORLD.exitX) / 2, .006, WORLD.exitZ, '#ded6c0', undefined, false);
     returnLane.metadata = { coffeeFlow: 'outgoing' };
     const threshold = this.box('customer-exit-boundary', .18, .02, .72, WORLD.exitX, .01, WORLD.exitZ, '#8fafa1', undefined, false);
@@ -1034,7 +1039,8 @@ export class CoffeeScene {
     this.box('vault-slot', 0.54, 0.063, 0.07, 0, 1.13, 0.55, '#213e37', vault, false);
     // Mount this plaque on the wall ABOVE the whole vault silhouette. A front-door
     // label would overlap its icon under the fixed oblique view even with a small Y gap.
-    const label = this.makeLabel('vault-bank-label', 1.55, 1.04, new Vector3(0, 2.79, -.46), vault, { type: 'vault' }, 512, 384);
+    // Keep a compact visible gap above the complete icon rather than a distant wall sign.
+    const label = this.makeLabel('vault-bank-label', 1.55, 1.04, new Vector3(0, 2.59, -.46), vault, { type: 'vault' }, 512, 384);
     label.mesh.metadata = { ...label.mesh.metadata, coffeeSurface: 'vault-upgrade-plaque' };
     this.registerAnchor('vault', label.mesh);
     const lamp = this.cylinder('vault-deposit-light', 0.12, 0.045, 0.48, 1.14, 0.56, '#92bfa3', vault, false); lamp.rotation.x = Math.PI / 2;

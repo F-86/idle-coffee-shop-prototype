@@ -25,3 +25,5 @@
 真实帧节奏诊断：[计划](testing/plans/performance-measurement.md)、[TC-3D-015](testing/cases/slice/TC-3D-015.md)。`?qa=1`可展开Performance QA，记录真实RAF提交节奏和现场负载；默认折叠无采样，FPS不冒充GPU完成帧或温度。
 
 清晰60帧选项：[计划](testing/plans/clear-60.md)、[TC-3D-016](testing/cases/slice/TC-3D-016.md)。显式选择、同smooth清晰度与60fps提交上限，旧默认/偏好/经营存档保持；真机对比与功耗结论分开。
+
+金库间距与地毯接角：[计划](testing/plans/scene-alignment.md)、[TC-3D-018](testing/cases/slice/TC-3D-018.md)。在已验证b1清晰60帧基线上缩小实体牌间距并补齐外拐角；不夹带另一分支离线策略。

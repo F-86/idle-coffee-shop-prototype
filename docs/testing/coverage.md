@@ -52,3 +52,7 @@ REQ-3D-024 辅助 → [TC-3D-015](cases/slice/TC-3D-015.md)、[计划](plans/per
 ## 独立清晰60帧选项
 
 REQ-3D-026 → [TC-3D-016](cases/slice/TC-3D-016.md)、[计划](plans/clear-60.md)。30–240Hz调度、同smooth像素预算、原生按钮/选择、旧偏好保留、新偏好读回、存档字节不变、插值/经营一致性和QA新分段；Mac实际buffer/节奏/字牌观感独立验收。
+
+## 金库靠近与地毯完整接角
+
+REQ-3D-028 → [TC-3D-018](cases/slice/TC-3D-018.md)、[计划](plans/scene-alignment.md)。三尺寸/双DPR投影间隔、真实拾取、全宽接角射线与无重叠几何；真实新像素、触控与顾客经过另验。

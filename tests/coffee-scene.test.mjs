@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { NullEngine } from '@babylonjs/core/Engines/nullEngine.js';
 import { ShadowGenerator } from '@babylonjs/core/Lights/Shadows/shadowGenerator.js';
+import { Ray } from '@babylonjs/core/Culling/ray.js';
 import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 
 registerHooks({ resolve(specifier, context, nextResolve) {
@@ -1030,14 +1031,14 @@ test('TC-3D-013 side aisles join a separate return lane ending beyond the entran
     assert.ok(WORLD.exitX < WORLD.entryX - 2);
     const returnLane = bounds(scene.getMeshByName('departure-return-lane'));
     assert.ok(Math.abs(returnLane.minimumWorld.x - WORLD.exitX) < 1e-6);
-    assert.ok(Math.abs(returnLane.maximumWorld.x - (5 + WORLD.departureOffsetX)) < 1e-6);
+    assert.ok(Math.abs(returnLane.maximumWorld.x - bounds(scene.getMeshByName('departure-aisle-5')).maximumWorld.x) < 1e-6, 'return strip reaches the outer edge of the final aisle');
     const incoming = bounds(scene.getMeshByName('welcome-runner'));
     assert.ok(returnLane.maximumWorld.z < incoming.minimumWorld.z, 'opposing horizontal roads are visibly separate');
     for (const x of [0, 5]) {
       assert.equal(scene.getMeshByName(`customer-exit-${x}`), null);
       const aisle = scene.getMeshByName(`departure-aisle-${x}`);
       assert.ok(bounds(aisle).minimumWorld.x > x + .9, 'departure geometry is alongside the queue');
-      assert.ok(Math.abs(bounds(aisle).maximumWorld.z - WORLD.exitZ) < 1e-6);
+      assert.ok(Math.abs(bounds(aisle).maximumWorld.z - returnLane.minimumWorld.z) < 1e-6, 'aisle meets the near edge of the return strip');
     }
     assert.ok(!scene.meshes.some(mesh => /^(queue|departure)-arrow-/.test(mesh.name)));
   } finally { f.dispose(); }
@@ -1137,5 +1138,67 @@ test('TC-3D-014 QA identity reads actual customer mesh and CSS projection withou
     core.state.customers = []; f.renderer.update(core.state, .016);
     assert.equal(f.renderer.readCustomerPose(1), null);
     f.renderer.dispose(); assert.equal(f.renderer.readCustomerPose(1), null);
+  } finally { f.dispose(); }
+});
+
+
+for (const [width, height] of [[1280, 900], [390, 844], [844, 390]]) {
+  for (const dpr of [1, 1.75]) {
+    test(`TC-3D-018 vault plaque stays close without covering its icon at ${width}×${height}, DPR ${dpr} (projection only)`, () => {
+      const f = fixture(width, height, 1 / dpr);
+      try {
+        const scene = f.renderer.scene;
+        const label = scene.getMeshByName('vault-bank-label');
+        const mount = scene.getMeshByName('vault-bank-label-mount');
+        const icon = scene.getTransformNodeByName('cash-vault').getChildMeshes().filter(mesh => mesh !== label && mesh !== mount);
+        for (const focus of [null, 'vault', 'menu-espresso', 'invite']) {
+          if (focus) f.renderer.focusAnchor(focus);
+          const plaqueScreen = projectedBounds(f, [label, mount]);
+          const iconScreen = projectedBounds(f, icon);
+          const gap = iconScreen.top - plaqueScreen.bottom;
+          assert.ok(gap >= 8, `${focus ?? 'initial'}: ${gap} CSS px preserves a visible gap`);
+          assert.ok(gap <= (iconScreen.bottom - iconScreen.top) * .1, `${focus ?? 'initial'}: ${gap} CSS px is compact, at most 10% of the vault silhouette height`);
+        }
+        assert.equal(label.parent.name, 'cash-vault');
+        assert.equal(label.billboardMode, 0);
+        assert.equal(label.renderingGroupId, 0);
+        assert.equal(label.material.disableDepthWrite, false);
+        f.renderer.focusAnchor('vault');
+        assert.ok(surfaceDiameter(f, label.name) >= 44);
+        assert.equal(f.renderer.activateFocused(), true);
+        tap(f, label.name);
+        assert.deepEqual(f.actions, [{ type: 'vault' }, { type: 'vault' }]);
+      } finally { f.dispose(); }
+    });
+  }
+}
+
+test('TC-3D-018 full-width departure corners are filled and meet without overlapping top surfaces (geometry/rays only)', () => {
+  const f = fixture();
+  try {
+    const scene = f.renderer.scene;
+    const laneMesh = scene.getMeshByName('departure-return-lane');
+    const lane = bounds(laneMesh);
+    const outer = bounds(scene.getMeshByName('departure-aisle-5'));
+    assert.ok(Math.abs(lane.maximumWorld.x - outer.maximumWorld.x) < 1e-6, 'screen-left outside bend reaches the full width of the B side aisle');
+    for (const counterX of [0, 5]) {
+      const aisleMesh = scene.getMeshByName(`departure-aisle-${counterX}`);
+      const aisle = bounds(aisleMesh);
+      assert.ok(Math.abs(aisle.maximumWorld.z - lane.minimumWorld.z) < 1e-6, 'side aisle meets the near edge, with neither a gap nor overlapping coplanar area');
+      assert.ok(Math.abs(aisle.maximumWorld.y - lane.maximumWorld.y) < 1e-6, 'one continuous carpet top height');
+      assert.equal(aisleMesh.material, laneMesh.material, 'same carpet material on each side of the join');
+      // Independently sample the complete bend footprint, including the missing outer
+      // quarter of the B junction. A centerline-only check misses the screenshot defect.
+      for (let u = 0; u <= 12; u++) {
+        for (let v = 0; v <= 12; v++) {
+          const x = aisle.minimumWorld.x + .001 + (aisle.maximumWorld.x - aisle.minimumWorld.x - .002) * u / 12;
+          const z = lane.minimumWorld.z - .05 + (lane.maximumWorld.z - lane.minimumWorld.z + .049) * v / 12;
+          const ray = new Ray(new Vector3(x, .5, z), new Vector3(0, -1, 0), 1);
+          const hit = scene.pickWithRay(ray, mesh => mesh === aisleMesh || mesh === laneMesh);
+          assert.equal(hit?.hit, true, `no exposed floor inside corner at (${x}, ${z})`);
+          assert.ok(Math.abs(hit.pickedPoint.y - lane.maximumWorld.y) < 1e-6, 'no raised filler block');
+        }
+      }
+    }
   } finally { f.dispose(); }
 });
