@@ -27,3 +27,5 @@
 清晰60帧选项：[计划](testing/plans/clear-60.md)、[TC-3D-016](testing/cases/slice/TC-3D-016.md)。显式选择、同smooth清晰度与60fps提交上限，旧默认/偏好/经营存档保持；真机对比与功耗结论分开。
 
 离线边界一致性：[计划](testing/plans/offline-boundary.md)、[TC-3D-017](testing/cases/slice/TC-3D-017.md)。新正区间从首秒统一半速，30秒无跳降；旧未付区间按原刷新规则一次结清后升级标记，写入成功才发布后台收益。
+
+清晰60帧Mac实测：[完整报告与冻结原文](testing/runs/2026-10-05-clear-60-mac/report.md)。固定b1ebbdd版本，三段累计120/60/120fps且buffer相同；偏好刷新持久化通过。后续ba7c6e0离线修复、字牌像素和温度不包含在这次真机验收中。

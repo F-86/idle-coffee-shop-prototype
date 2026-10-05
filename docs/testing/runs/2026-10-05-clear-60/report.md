@@ -21,8 +21,10 @@
 
 只读独立审查未发现阻断。独立运行render-budget、frame-interpolation、fullscreen-ui、coffee-scene、frame-diagnostics相关测试150/150 PASS，typecheck与diff --check通过。额外确定性抽样：100,000次不规则/重复RAF输入与既有balanced 60fps调度逐项一致且时间守恒；10,000组viewport/DPR下clear-60与smooth采样计算完全相同。审查明确只覆盖CPU/DOM-harness/NullEngine，真实浏览器布局、屏幕阅读器、Mac节奏/像素/功耗不包含在这项PASS内。
 
-## NOT_RUN：新模式真机与温度
+## 实现提交时的真机状态与后续记录
 
-当前证据只有真实命令执行、模拟时钟应用harness和NullEngine，不能当作真实浏览器、字牌清晰度、GPU、上屏帧或温度验收。本轮未重新尝试此前被云浏览器安全限制拒绝的本地origin，也未绕过该限制。新的Mac三段对比尚未运行；历史smooth/balanced/low-power/smooth的120/60/30/120fps数据不是clear-60数据。
+本实现提交时的证据只有真实命令执行、模拟时钟应用harness和NullEngine，不能当作真实浏览器、字牌清晰度、GPU、上屏帧或温度验收。本轮未重新尝试此前被云浏览器安全限制拒绝的本地origin，也未绕过该限制。当时新的Mac三段对比尚未运行；历史smooth/balanced/low-power/smooth的120/60/30/120fps数据不是clear-60数据。
 
-下一步按[清晰60帧计划](../../plans/clear-60.md)在已授权Mac独立origin验证smooth→clear-60→smooth，每段30真实秒预热+≥60秒有效采样；保留精确commit/资源、实际buffer、完整冻结文本与场景上下文。实测buffer应一致，60为提交上限。三段自然经营负载变化不冒充严格同状态A/B。温度/功耗没有传感或系统读数则仍NOT_RUN，不宣称降温。
+当时的后续计划是按[清晰60帧计划](../../plans/clear-60.md)在已授权Mac独立origin验证smooth→clear-60→smooth，每段30真实秒预热+≥60秒有效采样；保留精确commit/资源、实际buffer、完整冻结文本与场景上下文。实测buffer应一致，60为提交上限。三段自然经营负载变化不冒充严格同状态A/B。温度/功耗没有传感或系统读数则仍NOT_RUN，不宣称降温。
+
+后续已在固定本实现提交`b1ebbdd8dcd1994d3ac0da6a735e2422be5e13ea`上完成Mac三段观察：[真机记录](../2026-10-05-clear-60-mac/report.md)。三段累计120/60/120fps、buffer均3344×2074，clear-60刷新持久化通过。此后`ba7c6e0`离线边界修复是另一版本，不能由该记录宣称真机验收；像素可读性、功耗/温度仍NOT_RUN。
