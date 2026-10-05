@@ -1,0 +1,206 @@
+(node:15) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✖ TC-3D-017 hidden return and reload share the same half-speed boundary, endpoint and once-only lifecycle (40.209887ms)
+✖ TC-3D-017 failed hidden anchor write and concurrent window publish no credit and remain frozen until reload (12.398805ms)
+✖ TC-3D-017 effective offline duration is continuous, monotone and bounded around 30s and 2h (1.294936ms)
+✖ TC-3D-017 current durable anchors settle all positive intervals once without altering production snapshots or prices (10.759079ms)
+✖ TC-3D-017 unmarked and v1 anchors receive legacy treatment exactly once before the new policy starts (5.454828ms)
+✖ TC-3D-017 migration and new short claims preserve bytes and state on failed writes and recover once (3.617954ms)
+✖ TC-3D-017 policy versions fail closed and future-time migration preserves a nondecreasing anchor (7.797687ms)
+✖ TC-3D-017 bounded claim IDs accept maximum legal storage tags and cannot discard unpaid elapsed time (1.589311ms)
+✖ TC-3D-017 transactional hidden settlement honors later durable anchors, failure and concurrent writers (1.170458ms)
+✔ TC-3D-017 paused and fractional short claims retain fixed-step time and duplicate protection (2.340595ms)
+✔ TC-3D-017 two-hour and arbitrarily long gaps have exactly the same bounded simulation result (939.717059ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 2
+ℹ fail 9
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1119.253673
+
+✖ failing tests:
+
+test at tests/fullscreen-ui.test.mjs:1326:1
+✖ TC-3D-017 hidden return and reload share the same half-speed boundary, endpoint and once-only lifecycle (40.209887ms)
+  AssertionError [ERR_ASSERTION]: hidden 0.01s
+  + actual - expected
+  ... Skipped lines
+
+    {
+      arrivalTimer: 0.8,
+      counters: [
+        {
+          brew: {
+  ...
+      spend: 800,
+  +   stepCarry: 0.047,
+  -   stepCarry: 0.042,
+      totalEarned: 123,
+      totalServed: 1,
+      wallet: 400
+    }
+
+      at TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/fullscreen-ui.test.mjs:1336:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.start (node:internal/test_runner/test:1242:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { schemaVersion: 1, economyVersion: 1, managerRouteVersion: 2, customerRouteVersion: 3, elapsed: 16.1, wallet: 400, totalEarned: 123, totalServed: 1, spend: 800, nextCustomerId: 7, arrivalTimer: 0.8, inviteCooldown: 0, stepCarry: 0.047, eventSequence: 10, counters: [ [Object], [Object] ], customers: [ [Object], [Object], [Object], [Object], [Object], [Object] ], manager: { x: 8.8, z: -1.7, carrying: 0, phase: 'depositing', target: 2, timer: 0, level: 1 } },
+    expected: { schemaVersion: 1, economyVersion: 1, managerRouteVersion: 2, customerRouteVersion: 3, elapsed: 16.1, wallet: 400, totalEarned: 123, totalServed: 1, spend: 800, nextCustomerId: 7, arrivalTimer: 0.8, inviteCooldown: 0, stepCarry: 0.042, eventSequence: 10, counters: [ [Object], [Object] ], customers: [ [Object], [Object], [Object], [Object], [Object], [Object] ], manager: { x: 8.8, z: -1.7, carrying: 0, phase: 'depositing', target: 2, timer: 0, level: 1 } },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/fullscreen-ui.test.mjs:1349:1
+✖ TC-3D-017 failed hidden anchor write and concurrent window publish no credit and remain frozen until reload (12.398805ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  false !== true
+
+      at TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/fullscreen-ui.test.mjs:1362:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/offline-policy.test.mjs:16:1
+✖ TC-3D-017 effective offline duration is continuous, monotone and bounded around 30s and 2h (1.294936ms)
+  TypeError: core.offlineEffectiveSeconds is not a function
+      at TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/offline-policy.test.mjs:18:60)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.start (node:internal/test_runner/test:1242:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+
+test at tests/offline-policy.test.mjs:23:1
+✖ TC-3D-017 current durable anchors settle all positive intervals once without altering production snapshots or prices (10.759079ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  undefined !== 2
+
+      at TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/offline-policy.test.mjs:28:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 2,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/offline-policy.test.mjs:40:1
+✖ TC-3D-017 unmarked and v1 anchors receive legacy treatment exactly once before the new policy starts (5.454828ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  undefined !== 2
+
+      at TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/offline-policy.test.mjs:47:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 2,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/offline-policy.test.mjs:56:1
+✖ TC-3D-017 migration and new short claims preserve bytes and state on failed writes and recover once (3.617954ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'loaded'
+  - 'offline-save-failed'
+
+      at TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/offline-policy.test.mjs:62:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'loaded',
+    expected: 'offline-save-failed',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/offline-policy.test.mjs:70:1
+✖ TC-3D-017 policy versions fail closed and future-time migration preserves a nondecreasing anchor (7.797687ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'loaded'
+  - 'corrupt'
+
+      at TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/offline-policy.test.mjs:74:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'loaded',
+    expected: 'corrupt',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/offline-policy.test.mjs:86:1
+✖ TC-3D-017 bounded claim IDs accept maximum legal storage tags and cannot discard unpaid elapsed time (1.589311ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  false !== true
+
+      at TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/offline-policy.test.mjs:90:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/offline-policy.test.mjs:95:1
+✖ TC-3D-017 transactional hidden settlement honors later durable anchors, failure and concurrent writers (1.170458ms)
+  TypeError: repo.settleOffline is not a function
+      at TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/offline-policy.test.mjs:98:26)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7)

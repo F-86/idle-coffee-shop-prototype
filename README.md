@@ -43,3 +43,5 @@ iCloud/CloudKit 只预留 AuthProvider / SaveRepository 边界，真实容器/�
 可用 `?qa=1` 展开Performance QA记录前台帧提交节奏，详见[真机测量计划](docs/testing/plans/performance-measurement.md)。默认不采样；须用独立测试存储。FPS/帧间隔不代表GPU完成时间、上屏帧或温度。
 
 新增独立清晰60帧选项见REQ-3D-026：[计划](docs/testing/plans/clear-60.md)。保留默认与已有选择；同等清晰度只限渲染提交率，不改变经营/存档。新选项真机对比结果独立记录，不推断温度收益。
+
+离线边界修复见REQ-3D-027：[计划](docs/testing/plans/offline-boundary.md)。后台返回与重开统一按50%经营速度、最多2小时推进，30秒附近无跳降。现有未结算旧区间按原刷新规则结清一次后启用新边界，不追补旧短区间；收益与端点成功保存才生效，失败保留原资产并提示读取最新档。

@@ -2,12 +2,13 @@ import { createEngine, createInitialState, CUSTOMER_ROUTE_VERSION, INITIAL_WALLE
 import type { SliceState } from './types';
 
 export const SAVE_KEY = 'mellow-bean-3d-v1';
+export const OFFLINE_POLICY_VERSION = 2;
 export interface StorageLike { getItem(key: string): string | null; setItem(key: string, value: string): void; removeItem(key: string): void }
 export type SaveStatus = 'new' | 'loaded' | 'saved' | 'corrupt' | 'future' | 'unavailable' | 'conflict' | 'invalid-state' | 'offline-save-failed';
 export interface OfflineResult { accepted: boolean; amount: number; seconds: number }
 export interface LoadResult { state: SliceState; status: SaveStatus; message: string; offline?: OfflineResult; protectedRaw: boolean }
 export interface SaveResult { ok: boolean; status: SaveStatus; message: string; recordChangeTag?: string; backupKey?: string }
-interface Envelope { schemaVersion: 1; savedAt: number; recordChangeTag: string; state: SliceState }
+interface Envelope { schemaVersion: 1; /** Missing/1 keeps legacy reload treatment until its next atomic settlement. */ offlinePolicyVersion?: 1 | 2; savedAt: number; recordChangeTag: string; state: SliceState }
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const object = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const number = (value: unknown, min = 0, max = 1e12): value is number => typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
@@ -118,11 +119,11 @@ export function validateState(value: unknown): { ok: true; state: SliceState } |
 function decode(raw: string): { ok: true; envelope: Envelope } | { ok: false; status: 'corrupt' | 'future'; message: string } {
   let value: unknown;
   try { value = JSON.parse(raw); } catch { return { ok: false, status: 'corrupt', message: '存档无法读取，原始内容已保留。请先备份或明确重置。' }; }
-  if (object(value) && (number(value.schemaVersion, 2) || object(value.state) && (number(value.state.schemaVersion, 2) || number(value.state.economyVersion, 2) || number(value.state.managerRouteVersion, MANAGER_ROUTE_VERSION + 1) || number(value.state.customerRouteVersion, CUSTOMER_ROUTE_VERSION + 1)))) return { ok: false, status: 'future', message: '这是较新版本的存档，当前版本不会覆盖它。请使用兼容的新版本。' };
-  if (!object(value) || value.schemaVersion !== 1 || !number(value.savedAt, 0, 8.64e15) || typeof value.recordChangeTag !== 'string' || !value.recordChangeTag || value.recordChangeTag.length > 256) return { ok: false, status: 'corrupt', message: '存档格式或结算时间无效，原始内容已保留。' };
+  if (object(value) && (number(value.offlinePolicyVersion, OFFLINE_POLICY_VERSION + 1) || number(value.schemaVersion, 2) || object(value.state) && (number(value.state.schemaVersion, 2) || number(value.state.economyVersion, 2) || number(value.state.managerRouteVersion, MANAGER_ROUTE_VERSION + 1) || number(value.state.customerRouteVersion, CUSTOMER_ROUTE_VERSION + 1)))) return { ok: false, status: 'future', message: '这是较新版本的存档，当前版本不会覆盖它。请使用兼容的新版本。' };
+  if (!object(value) || value.schemaVersion !== 1 || value.offlinePolicyVersion !== undefined && value.offlinePolicyVersion !== 1 && value.offlinePolicyVersion !== OFFLINE_POLICY_VERSION || !number(value.savedAt, 0, 8.64e15) || typeof value.recordChangeTag !== 'string' || !value.recordChangeTag || value.recordChangeTag.length > 256) return { ok: false, status: 'corrupt', message: '存档格式或结算时间无效，原始内容已保留。' };
   const checked = validateState(value.state);
   if (!checked.ok) return { ok: false, status: 'corrupt', message: `${checked.message} 原始内容已保留。` };
-  return { ok: true, envelope: { schemaVersion: 1, savedAt: value.savedAt, recordChangeTag: value.recordChangeTag, state: checked.state } };
+  return { ok: true, envelope: { schemaVersion: 1, offlinePolicyVersion: value.offlinePolicyVersion as 1 | 2 | undefined, savedAt: value.savedAt, recordChangeTag: value.recordChangeTag, state: checked.state } };
 }
 
 export function createMemoryStorage(): StorageLike {
@@ -156,7 +157,7 @@ export class LocalSaveRepository {
       if (current !== this.baseRaw) return { ok: false, status: 'conflict', message: '另一个窗口已更新存档。当前进度尚未保存，请重新读取后继续。' };
       const previous = this.baseRaw === null ? null : decode(this.baseRaw);
       const recordChangeTag = tag();
-      const envelope: Envelope = { schemaVersion: 1, savedAt: Math.max(now, previous?.ok ? previous.envelope.savedAt : 0), recordChangeTag, state: checked.state };
+      const envelope: Envelope = { schemaVersion: 1, offlinePolicyVersion: OFFLINE_POLICY_VERSION, savedAt: Math.max(now, previous?.ok ? previous.envelope.savedAt : 0), recordChangeTag, state: checked.state };
       const raw = JSON.stringify(envelope);
       this.storage.setItem(SAVE_KEY, raw); this.baseRaw = raw;
       return { ok: true, status: 'saved', message: '本地存档已保存。', recordChangeTag };
@@ -176,14 +177,33 @@ export class LocalSaveRepository {
     }
     const { envelope } = parsed;
     const seconds = Math.max(0, (now - envelope.savedAt) / 1000);
-    if (seconds < 30) return { state: envelope.state, status: 'loaded', message: '本地存档已恢复。', protectedRaw: false };
-    const engine = createEngine(envelope.state);
-    const offline = engine.applyOffline(seconds, `local:${envelope.recordChangeTag}:${envelope.savedAt}:${now}`);
+    const legacy = envelope.offlinePolicyVersion !== OFFLINE_POLICY_VERSION;
+    if (!legacy && seconds === 0) return { state: envelope.state, status: 'loaded', message: '本地存档已恢复。', protectedRaw: false };
+    // Do not retroactively reprice an old outstanding interval. Even zero/short/
+    // paused/backward intervals stamp policy + nondecreasing anchor atomically.
+    return this.settleInterval(envelope.state, legacy && seconds < 30 ? 0 : seconds, now);
+  }
+  private settleInterval(state: SliceState, seconds: number, now: number): LoadResult {
+    const engine = createEngine(state);
+    // IDs are bounded independently of untrusted (up to 256-character) CAS tags.
+    // Durable endpoints + expected bytes remain the authority for interval replay.
+    const offline = seconds > 0 ? engine.applyOffline(seconds, `local:${tag()}`) : undefined;
+    if (offline && !offline.accepted) return { state, status: 'offline-save-failed', message: '离线结算未完成，存档未改变，请读取最新档。', offline, protectedRaw: this.protectedRaw };
     const snapshot = engine.snapshot();
-    // The credited state and the once-only anchor are one atomic setItem value.
+    // Do not expose speculative money, movement or claims until the endpoint and
+    // credited state are committed together. Failure leaves the live input intact.
     const written = this.write(snapshot, now);
-    if (!written.ok) return { state: envelope.state, status: written.status === 'conflict' ? 'conflict' : 'offline-save-failed', message: `${written.message} 离线收益尚未领取。`, offline: { accepted: false, amount: 0, seconds: 0 }, protectedRaw: false };
-    return { state: snapshot, status: 'loaded', message: envelope.state.paused ? '本地存档已恢复，暂停期间没有离线收益。' : '本地存档已恢复，离线收益已完成一次结算。', offline, protectedRaw: false };
+    if (!written.ok) return { state, status: written.status === 'conflict' ? 'conflict' : 'offline-save-failed', message: `${written.message} 离线收益尚未领取。`, offline: { accepted: false, amount: 0, seconds: 0 }, protectedRaw: this.protectedRaw };
+    return { state: snapshot, status: 'loaded', message: state.paused ? '本地存档已恢复，暂停期间没有离线收益。' : '本地存档已恢复，离线收益已完成一次结算。', offline, protectedRaw: false };
+  }
+  /** Commit a live hidden interval without reloading/replacing this client's CAS base. */
+  settleOffline(state: SliceState, hiddenAt: number, now = Date.now()): LoadResult {
+    if (!number(hiddenAt, 0, 8.64e15) || !number(now, 0, 8.64e15)) return { state, status: 'offline-save-failed', message: '离线结算时间无效，存档未改变。', offline: { accepted: false, amount: 0, seconds: 0 }, protectedRaw: this.protectedRaw };
+    const previous = this.baseRaw === null ? null : decode(this.baseRaw);
+    // A failed hide-time save does not erase unsaved visible progress; conversely
+    // a future durable anchor cannot be reclaimed after the wall clock rolls back.
+    const start = Math.max(hiddenAt, previous?.ok ? previous.envelope.savedAt : 0);
+    return this.settleInterval(state, Math.max(0, (now - start) / 1000), now);
   }
   save(state: SliceState, now = Date.now()): SaveResult { return this.write(state, now); }
   inspect(): { rawText: string | null; protectedRaw: boolean; message: string } { return { rawText: this.baseRaw, protectedRaw: this.protectedRaw, message: this.lastMessage }; }

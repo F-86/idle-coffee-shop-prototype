@@ -9,6 +9,10 @@ export const QUEUE_CAPACITY = 8;
 export const INVITE_COOLDOWN_SECONDS = 18;
 export const OFFLINE_CAP_SECONDS = 7200;
 export const OFFLINE_EFFICIENCY = .5;
+/** One continuous policy for every new hidden/reload interval; cap wall time first. */
+export function offlineEffectiveSeconds(seconds: number): number {
+  return Number.isFinite(seconds) ? Math.min(OFFLINE_CAP_SECONDS, Math.max(0, seconds)) * OFFLINE_EFFICIENCY : 0;
+}
 export const MANAGER_ROUTE_VERSION = 2;
 export const CUSTOMER_ROUTE_VERSION = 3;
 export const CUSTOMER_SPEED = 2.5;
@@ -406,7 +410,7 @@ export function createEngine(initial: SliceState = createInitialState(), observe
       state.offlineClaimIds!.push(claimId);
       if (state.offlineClaimIds!.length > 256) state.offlineClaimIds!.shift();
       silent = true;
-      try { advance(bounded * OFFLINE_EFFICIENCY); } finally { silent = false; }
+      try { advance(offlineEffectiveSeconds(seconds)); } finally { silent = false; }
       return { accepted: true, amount: state.wallet - before, seconds: bounded };
     }
   };

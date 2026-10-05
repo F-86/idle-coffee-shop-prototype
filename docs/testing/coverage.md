@@ -52,3 +52,7 @@ REQ-3D-024 辅助 → [TC-3D-015](cases/slice/TC-3D-015.md)、[计划](plans/per
 ## 独立清晰60帧选项
 
 REQ-3D-026 → [TC-3D-016](cases/slice/TC-3D-016.md)、[计划](plans/clear-60.md)。30–240Hz调度、同smooth像素预算、原生按钮/选择、旧偏好保留、新偏好读回、存档字节不变、插值/经营一致性和QA新分段；Mac实际buffer/节奏/字牌观感独立验收。
+
+## 连续离线时间与安全升级
+
+REQ-3D-027 → [TC-3D-017](cases/slice/TC-3D-017.md)、[计划](plans/offline-boundary.md)。30秒边界/2小时上限、隐藏与刷新相同快照、分片余数、旧端点一次性策略标记、失败/并发回滚、未来时间、领取ID/历史淘汰与唯一RAF；真实浏览器独立验收，乐观localStorage检查不冒充跨进程原子CAS。

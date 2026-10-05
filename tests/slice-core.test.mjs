@@ -221,7 +221,10 @@ test('TC-3D-004 authentic legacy archives migrate offline only once and retain r
   const source = legacyState({ target: 1, x: 3, carrying: 600 }); source.stepCarry = .027; source.eventSequence = 42;
   const raw = rawEnvelope(source), memory = createMemoryStorage(); memory.setItem(SAVE_KEY, raw);
   const immediate = new LocalSaveRepository(memory).load(1000);
-  assert.equal(immediate.status, 'loaded'); assert.equal(immediate.state.managerRouteVersion, 2); assert.equal(memory.getItem(SAVE_KEY), raw);
+  assert.equal(immediate.status, 'loaded'); assert.equal(immediate.state.managerRouteVersion, 2);
+  assert.equal(JSON.parse(memory.getItem(SAVE_KEY)).offlinePolicyVersion, 2);
+  assert.deepEqual(JSON.parse(memory.getItem(SAVE_KEY)).state, immediate.state);
+  memory.setItem(SAVE_KEY, raw); // Exercise failure/retry from authentic pre-policy bytes.
   const expected = createEngine(immediate.state); expected.advance(60);
   const unavailable = { ...memory, setItem() { throw Error('quota'); } };
   const failed = new LocalSaveRepository(unavailable).load(121000);

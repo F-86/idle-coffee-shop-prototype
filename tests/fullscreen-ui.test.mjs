@@ -671,7 +671,7 @@ test('TC-3D-010 legacy raw route saves resume once, finish their current sweep a
       const saved = JSON.parse(f.memory.getItem(SAVE_KEY)).state;
       assert.deepEqual(saved, f.state());
       assert.equal(saved.managerRouteVersion, 2);
-      const reopened = fixture({ raw: f.memory.getItem(SAVE_KEY) });
+      const reopened = fixture({ raw: f.memory.getItem(SAVE_KEY), now: f.clock.now });
       try { assert.deepEqual(reopened.state(), saved, 'a route-v2 save is not remapped or deposited again on immediate reboot'); }
       finally { reopened.dispose(); }
     } finally { f.dispose(); }
@@ -744,7 +744,7 @@ test('TC-3D-010 migration persists before a hidden first frame and BFCache/repea
     const saved = JSON.parse(f.memory.getItem(SAVE_KEY));
     assert.deepEqual(saved.state, resumed);
     assert.equal(saved.savedAt, f.clock.now);
-    const reopened = fixture({ raw: f.memory.getItem(SAVE_KEY) });
+    const reopened = fixture({ raw: f.memory.getItem(SAVE_KEY), now: f.clock.now });
     try { assert.deepEqual(reopened.state(), resumed, 'reopening already anchored hidden progress never repeats the migrated sweep or offline earnings'); }
     finally { reopened.dispose(); }
   } finally { f.dispose(); }
@@ -763,7 +763,7 @@ test('TC-3D-009 REQ-3D-016 valid previous paused saves resume current play witho
       assert.deepEqual(f.state(), expected.snapshot(), 'only the new online interval advances after automatic resume');
       f.click('#settings'); f.click('#save');
       assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).state.paused, false);
-      const reloaded = fixture({ raw: f.memory.getItem(SAVE_KEY) });
+      const reloaded = fixture({ raw: f.memory.getItem(SAVE_KEY), now: f.clock.now });
       try { assert.deepEqual(reloaded.state(), f.state(), 'immediate new boot cannot reclaim the already settled paused interval'); }
       finally { reloaded.dispose(); }
     } finally { f.dispose(); }
@@ -924,7 +924,7 @@ test('TC-3D-011 sub-frame visibility and BFCache saves settle visible time once 
       f.document.hidden = false; f.document.emit('visibilitychange');
       f.window.emit('pageshow', { persisted: true });
     }
-    assert.ok(Math.abs(f.state().elapsed + f.state().stepCarry - .35) < 1e-8, 'visible skipped frames and hidden intervals are each applied once');
+    assert.ok(Math.abs(f.state().elapsed + f.state().stepCarry - .30) < 1e-8, 'visible 250ms plus half-speed hidden 100ms are each applied once');
     assert.equal(f.renderer.updates.length, 0, 'lifecycle settlement never schedules a catch-up render');
     assert.equal(f.frames.size, 1);
   } finally { f.dispose(); }
@@ -941,7 +941,7 @@ test('TC-3D-011 delayed duplicate pageshow preserves the newly visible tail', ()
     f.document.hidden = false; f.document.emit('visibilitychange');
     f.tick(.015);
     f.window.emit('pageshow', { persisted: true });
-    assert.ok(Math.abs(f.state().elapsed + f.state().stepCarry - .05) < 1e-8);
+    assert.ok(Math.abs(f.state().elapsed + f.state().stepCarry - .045) < 1e-8);
     assert.equal(f.frames.size, 1);
   } finally { f.dispose(); }
 });
@@ -1320,5 +1320,86 @@ test('TC-3D-016 clear-60 QA records the new target and isolates mode changes int
     assert.match(p.text.textContent, /buffer 800×1100/);
     assert.ok(Math.abs(f.window.__coffeeSliceDebug.readPerformance().fps - 60) < 1e-8);
     assert.equal(f.frames.size, 1);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-017 hidden return and reload share the same half-speed boundary, endpoint and once-only lifecycle', () => {
+  for (const seconds of [0, .01, 29.9, 30, 30.1, 7200]) {
+    const initialEngine = createEngine(); initialEngine.upgrade('counter-a'); initialEngine.advance(16.137); initialEngine.setRecipe('counter-a', 'latte');
+    const initial = initialEngine.snapshot(), f = fixture({ initial, now: 100000 });
+    try {
+      f.document.hidden = true; f.document.emit('visibilitychange');
+      const hiddenRaw = f.memory.getItem(SAVE_KEY), hidden = f.state();
+      f.clock.now += seconds * 1000; f.clock.performance += seconds * 1000;
+      f.document.hidden = false; f.document.emit('visibilitychange');
+      const expected = createEngine(hidden); expected.advance(Math.min(seconds, 7200) / 2);
+      assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(expected.snapshot()), `hidden ${seconds}s`);
+      const reloaded = fixture({ raw: hiddenRaw, now: f.clock.now });
+      try { assert.deepEqual(omitPauseClaims(reloaded.state()), omitPauseClaims(f.state()), `reload matches hidden at ${seconds}s`); }
+      finally { reloaded.dispose(); }
+      const once = f.state(), onceRaw = f.memory.getItem(SAVE_KEY);
+      f.window.emit('pageshow', { persisted: true }); f.document.emit('visibilitychange');
+      assert.deepEqual(f.state(), once); assert.equal(f.memory.getItem(SAVE_KEY), onceRaw); assert.equal(f.frames.size, 1);
+      const reopened = fixture({ raw: onceRaw, now: f.clock.now });
+      try { assert.deepEqual(reopened.state(), once); } finally { reopened.dispose(); }
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-017 failed hidden anchor write and concurrent window publish no credit and remain frozen until reload', () => {
+  for (const mode of ['failure', 'conflict']) {
+    const initial = createInitialState(); initial.manager.carrying = 570; initial.totalEarned = 570;
+    Object.assign(initial.manager, { phase: 'depositing', target: 2, timer: .55 });
+    const f = fixture({ initial, now: 100000 });
+    try {
+      f.document.hidden = true; f.document.emit('visibilitychange');
+      const before = f.state();
+      if (mode === 'failure') f.storageControl.writeUnavailable = true;
+      else { const foreign = JSON.parse(f.memory.getItem(SAVE_KEY)); foreign.recordChangeTag = 'hidden-foreign'; f.memory.setItem(SAVE_KEY, JSON.stringify(foreign)); }
+      const protectedRaw = f.memory.getItem(SAVE_KEY);
+      f.clock.now += 29900; f.clock.performance += 29900;
+      f.document.hidden = false; f.document.emit('visibilitychange');
+      assert.equal(f.state().paused, true); assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(before));
+      assert.equal(f.memory.getItem(SAVE_KEY), protectedRaw); assert.equal(f.element('#reload').hidden, false);
+      assert.doesNotMatch(f.element('#toast').textContent, /离线经营存入/);
+      const frozen = f.state(); f.tick(1); f.window.emit('pageshow', { persisted: true });
+      assert.deepEqual(f.state(), frozen); assert.equal(f.frames.size, 1);
+      f.storageControl.writeUnavailable = false; f.click('#settings'); f.click('#reload');
+      const expected = createEngine(before); expected.advance(15.45);
+      assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(expected.snapshot())); assert.equal(f.state().paused, false);
+      const once = f.state(); f.click('#reload'); assert.deepEqual(f.state(), once);
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-017 failed hide save retains visible tail and only credits the true hidden interval on successful return', () => {
+  const f = fixture({ now: 100000, renderMode: 'low-power' });
+  try {
+    f.tick(4.025); f.storageControl.writeUnavailable = true;
+    const durable = f.memory.getItem(SAVE_KEY);
+    f.document.hidden = true; f.document.emit('visibilitychange');
+    const live = f.state(); assert.equal(f.memory.getItem(SAVE_KEY), durable);
+    assert.ok(Math.abs(live.elapsed + live.stepCarry - 4.025) < 1e-9);
+    f.clock.now += 29900; f.clock.performance += 29900; f.storageControl.writeUnavailable = false;
+    f.document.hidden = false; f.document.emit('visibilitychange');
+    const expected = createEngine(live); expected.advance(14.95);
+    assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(expected.snapshot()));
+    assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, f.state()); assert.equal(f.state().paused, false);
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-017 clock rollback hidden cycles cannot reclaim time before the durable future anchor', () => {
+  const state = createInitialState(), raw = JSON.stringify({ schemaVersion: 1, offlinePolicyVersion: 2, savedAt: 140000, recordChangeTag: 'future-anchor', state });
+  const f = fixture({ raw, now: 100000 });
+  try {
+    f.document.hidden = true; f.document.emit('visibilitychange');
+    f.clock.now = 130000; f.clock.performance += 30000;
+    f.document.hidden = false; f.document.emit('visibilitychange');
+    assert.deepEqual(f.state(), state); assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).savedAt, 140000);
+    f.document.hidden = true; f.document.emit('visibilitychange');
+    f.clock.now = 140020; f.clock.performance += 10020;
+    f.document.hidden = false; f.document.emit('visibilitychange');
+    assert.equal(f.state().elapsed, 0); assert.equal(f.state().stepCarry, .01);
+    const once = f.state(); f.window.emit('pageshow', { persisted: true }); assert.deepEqual(f.state(), once);
   } finally { f.dispose(); }
 });
