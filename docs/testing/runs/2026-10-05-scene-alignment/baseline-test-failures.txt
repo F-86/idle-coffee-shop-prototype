@@ -1,0 +1,151 @@
+BJS - [21:41:27]: Babylon.js v9.29.0 - Null engine
+BJS - [21:41:27]: Babylon.js v9.29.0 - Null engine
+BJS - [21:41:27]: Babylon.js v9.29.0 - Null engine
+BJS - [21:41:27]: Babylon.js v9.29.0 - Null engine
+BJS - [21:41:27]: Babylon.js v9.29.0 - Null engine
+BJS - [21:41:27]: Babylon.js v9.29.0 - Null engine
+BJS - [21:41:28]: Babylon.js v9.29.0 - Null engine
+✖ TC-3D-018 vault plaque stays close without covering its icon at 1280×900, DPR 1 (projection only) (268.377093ms)
+✖ TC-3D-018 vault plaque stays close without covering its icon at 1280×900, DPR 1.75 (projection only) (200.560496ms)
+✖ TC-3D-018 vault plaque stays close without covering its icon at 390×844, DPR 1 (projection only) (155.483931ms)
+✖ TC-3D-018 vault plaque stays close without covering its icon at 390×844, DPR 1.75 (projection only) (156.875132ms)
+✖ TC-3D-018 vault plaque stays close without covering its icon at 844×390, DPR 1 (projection only) (165.94546ms)
+✖ TC-3D-018 vault plaque stays close without covering its icon at 844×390, DPR 1.75 (projection only) (181.92911ms)
+✖ TC-3D-018 full-width departure corners are filled and meet without overlapping top surfaces (geometry/rays only) (122.3282ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 0
+ℹ fail 7
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1620.180765
+
+✖ failing tests:
+
+test at tests/coffee-scene.test.mjs:1147:5
+✖ TC-3D-018 vault plaque stays close without covering its icon at 1280×900, DPR 1 (projection only) (268.377093ms)
+  AssertionError [ERR_ASSERTION]: initial: 24.454311794996613 CSS px is compact, at most 10% of the vault silhouette height
+      at TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/coffee-scene.test.mjs:1160:18)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.start (node:internal/test_runner/test:1242:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+      at run (node:internal/test_runner/harness:398:12)
+      at test (node:internal/test_runner/harness:407:12)
+      at file:///workspace/scratch/44e846662812/mellow-bean/tests/coffee-scene.test.mjs:1147:5 {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/coffee-scene.test.mjs:1147:5
+✖ TC-3D-018 vault plaque stays close without covering its icon at 1280×900, DPR 1.75 (projection only) (200.560496ms)
+  AssertionError [ERR_ASSERTION]: initial: 24.45431140399012 CSS px is compact, at most 10% of the vault silhouette height
+      at TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/coffee-scene.test.mjs:1160:18)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/coffee-scene.test.mjs:1147:5
+✖ TC-3D-018 vault plaque stays close without covering its icon at 390×844, DPR 1 (projection only) (155.483931ms)
+  AssertionError [ERR_ASSERTION]: initial: 22.932709801598833 CSS px is compact, at most 10% of the vault silhouette height
+      at TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/coffee-scene.test.mjs:1160:18)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/coffee-scene.test.mjs:1147:5
+✖ TC-3D-018 vault plaque stays close without covering its icon at 390×844, DPR 1.75 (projection only) (156.875132ms)
+  AssertionError [ERR_ASSERTION]: initial: 22.932709588384512 CSS px is compact, at most 10% of the vault silhouette height
+      at TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/coffee-scene.test.mjs:1160:18)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/coffee-scene.test.mjs:1147:5
+✖ TC-3D-018 vault plaque stays close without covering its icon at 844×390, DPR 1 (projection only) (165.94546ms)
+  AssertionError [ERR_ASSERTION]: initial: 17.855001583388628 CSS px is compact, at most 10% of the vault silhouette height
+      at TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/coffee-scene.test.mjs:1160:18)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/coffee-scene.test.mjs:1147:5
+✖ TC-3D-018 vault plaque stays close without covering its icon at 844×390, DPR 1.75 (projection only) (181.92911ms)
+  AssertionError [ERR_ASSERTION]: initial: 17.855000309552338 CSS px is compact, at most 10% of the vault silhouette height
+      at TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/coffee-scene.test.mjs:1160:18)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/coffee-scene.test.mjs:1176:1
+✖ TC-3D-018 full-width departure corners are filled and meet without overlapping top surfaces (geometry/rays only) (122.3282ms)
+  AssertionError [ERR_ASSERTION]: screen-left outside bend reaches the full width of the B side aisle
+      at TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/coffee-scene.test.mjs:1183:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

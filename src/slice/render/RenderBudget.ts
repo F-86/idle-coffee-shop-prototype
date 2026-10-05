@@ -1,9 +1,10 @@
 /** Presentation choices never change the simulation step or saved business state. */
-export type RenderMode = 'smooth' | 'balanced' | 'low-power';
+export type RenderMode = 'smooth' | 'clear-60' | 'balanced' | 'low-power';
 export const RENDER_MODE_KEY = 'mellow-bean-render-mode-v1';
 export const DEFAULT_RENDER_MODE: RenderMode = 'smooth';
 export const RENDER_MODES = {
   smooth: { fps: null, maxDpr: 2, maxPixels: 8_000_000 },
+  'clear-60': { fps: 60, maxDpr: 2, maxPixels: 8_000_000 },
   balanced: { fps: 60, maxDpr: 1.5, maxPixels: 4_500_000 },
   'low-power': { fps: 30, maxDpr: 1, maxPixels: 2_000_000 },
 } as const;
@@ -22,7 +23,7 @@ export function renderPixelRatio(width: number, height: number, devicePixelRatio
   return Math.min(dpr, budget.maxDpr, Math.sqrt(budget.maxPixels / pixels));
 }
 
-/** Smooth follows display RAF; explicit lower-power modes skip redundant refreshes. */
+/** Smooth follows display RAF; explicit capped modes skip redundant refreshes. */
 export class RenderBudget {
   private deadline = 0;
   private last = 0;

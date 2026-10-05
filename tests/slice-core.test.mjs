@@ -10,7 +10,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
     throw error;
   }
 } });
-const { createEngine, createInitialState, recipes, MAX_LEVEL, INITIAL_WALLET, counterBrewSeconds, counterPrice, managerCapacity, managerSpeed, STEP_SECONDS, WORLD, MANAGER_ROUTE_VERSION } = await import('../src/slice/core/engine.ts');
+const { createEngine, createInitialState, recipes, MAX_LEVEL, INITIAL_WALLET, counterBrewSeconds, counterPrice, managerCapacity, managerSpeed, STEP_SECONDS, WORLD, MANAGER_ROUTE_VERSION, ECONOMY_VERSION, COFFEE_MAX_LEVEL, COFFEE_UPGRADE_CONFIG, coffeePrice, coffeeBrewSeconds } = await import('../src/slice/core/engine.ts');
 const { LocalSaveRepository, SAVE_KEY, validateState, createMemoryStorage } = await import('../src/slice/core/persistence.ts');
 const { InMemorySaveRepository, GuestAuthProvider } = await import('../src/slice/core/sync.ts');
 
@@ -221,7 +221,10 @@ test('TC-3D-004 authentic legacy archives migrate offline only once and retain r
   const source = legacyState({ target: 1, x: 3, carrying: 600 }); source.stepCarry = .027; source.eventSequence = 42;
   const raw = rawEnvelope(source), memory = createMemoryStorage(); memory.setItem(SAVE_KEY, raw);
   const immediate = new LocalSaveRepository(memory).load(1000);
-  assert.equal(immediate.status, 'loaded'); assert.equal(immediate.state.managerRouteVersion, 2); assert.equal(memory.getItem(SAVE_KEY), raw);
+  assert.equal(immediate.status, 'loaded'); assert.equal(immediate.state.managerRouteVersion, 2);
+  assert.equal(JSON.parse(memory.getItem(SAVE_KEY)).offlinePolicyVersion, 3);
+  assert.deepEqual(JSON.parse(memory.getItem(SAVE_KEY)).state, immediate.state);
+  memory.setItem(SAVE_KEY, raw); // Exercise failure/retry from authentic pre-policy bytes.
   const expected = createEngine(immediate.state); expected.advance(60);
   const unavailable = { ...memory, setItem() { throw Error('quota'); } };
   const failed = new LocalSaveRepository(unavailable).load(121000);
@@ -368,12 +371,12 @@ test('TC-3D-004 strict validation catches enums, non-finite values, bounds and b
   assert.equal(validateState(createInitialState()).ok, true);
 });
 
-test('TC-3D-004 offline close-loop income is bounded and claimed only once', () => {
+test('TC-3D-004 offline close-loop income has no gameplay cap and is claimed only once', () => {
   const engine = createEngine();
-  const result = engine.applyOffline(100_000, 'claim-1');
-  assert.equal(result.accepted, true); assert.equal(result.seconds, 7200); assert.ok(result.amount > 0);
+  const result = engine.applyOffline(7201, 'claim-1');
+  assert.equal(result.accepted, true); assert.equal(result.seconds, 7201); assert.ok(result.amount > 0);
   const snapshot = engine.snapshot();
-  assert.equal(engine.applyOffline(100_000, 'claim-1').accepted, false);
+  assert.equal(engine.applyOffline(7201, 'claim-1').accepted, false);
   assert.deepEqual(engine.snapshot(), snapshot);
   engine.applyOffline(60, 'claim-2');
   const afterSecond = engine.snapshot();
@@ -406,13 +409,13 @@ test('TC-3D-004 overlapping reload endpoints and backwards clocks never reclaim 
   const storage = createMemoryStorage(), repo = new LocalSaveRepository(storage);
   repo.save(createInitialState(), 1000);
   const first = new LocalSaveRepository(storage).load(121000);
-  assert.equal(first.state.elapsed, 60);
+  assert.equal(first.state.elapsed, 96);
   const older = new LocalSaveRepository(storage);
   const backwards = older.load(91000);
-  assert.equal(backwards.state.elapsed, 60);
+  assert.equal(backwards.state.elapsed, 96);
   older.save(backwards.state, 91000);
   const second = new LocalSaveRepository(storage).load(151000);
-  assert.equal(second.state.elapsed, 75);
+  assert.equal(second.state.elapsed, 120);
   assert.equal(second.offline.seconds, 30);
 });
 
@@ -470,4 +473,202 @@ test('TC-3D-005 opaque CAS tags, idempotent retry and offline two-client conflic
   const lost = await repo.save('guest', eb.snapshot(), b.recordChangeTag, 'op-b'); assert.equal(lost.status, 'conflict');
   assert.deepEqual((await repo.load('guest')).state, won.state);
   assert.equal((await repo.save('guest', eb.snapshot(), a.recordChangeTag, 'op-1')).status, 'operation-mismatch');
+});
+
+
+test('TC-3D-019 repository blocks writes across unresolved load failures and permits only verified recovery', () => {
+  const initial = withPendingCash(300, 270), memory = createMemoryStorage();
+  const control = { read: false, write: false };
+  const storage = { getItem(key) { if (control.read) throw Error('read unavailable'); return memory.getItem(key); }, setItem(key, value) { if (control.write) throw Error('quota'); memory.setItem(key, value); }, removeItem: key => memory.removeItem(key) };
+  const repo = new LocalSaveRepository(storage); assert.equal(repo.save(initial, 100000).ok, true);
+  const durable = memory.getItem(SAVE_KEY);
+  control.write = true; assert.equal(repo.load(130000).status, 'offline-save-failed');
+  control.write = false;
+  assert.equal(repo.save(createInitialState(), 130000).ok, false, 'settlement failure remains a write barrier');
+  control.read = true;
+  for (let i = 0; i < 2; i++) assert.equal(repo.load(130000).status, 'unavailable');
+  assert.equal(repo.inspect().rawText, durable, 'read failures do not replace the known CAS bytes');
+  control.read = false;
+  assert.equal(repo.save(createInitialState(), 130000).status, 'unavailable');
+  assert.equal(memory.getItem(SAVE_KEY), durable);
+  const recovered = repo.load(130000);
+  assert.equal(recovered.status, 'loaded'); assert.ok(recovered.state.totalEarned >= 570);
+  const claimed = memory.getItem(SAVE_KEY);
+  assert.deepEqual(repo.load(130000).state, recovered.state); assert.equal(memory.getItem(SAVE_KEY), claimed);
+  assert.equal(repo.save(recovered.state, 129000).ok, true);
+  assert.equal(JSON.parse(memory.getItem(SAVE_KEY)).savedAt, 130000, 'backwards clock cannot rewind the recovered anchor');
+});
+
+test('TC-3D-019 missing saves are distinct from first-launch empty storage and need explicit reset before writing', () => {
+  const memory = createMemoryStorage(), repo = new LocalSaveRepository(memory);
+  assert.equal(repo.load(1000).status, 'new'); assert.equal(repo.save(withPendingCash(), 1000).ok, true);
+  memory.removeItem(SAVE_KEY);
+  assert.equal(repo.load(1000).status, 'missing'); assert.equal(repo.save(createInitialState(), 1000).status, 'missing');
+  assert.equal(memory.getItem(SAVE_KEY), null);
+  assert.equal(repo.reset({ confirmProtected: true }).ok, true); assert.equal(repo.save(createInitialState(), 1000).ok, true);
+  const missing = new LocalSaveRepository(createMemoryStorage());
+  assert.equal(missing.load(1000, { allowNew: false }).status, 'missing');
+  assert.equal(missing.save(createInitialState(), 1000).ok, false);
+});
+
+
+test('TC-3D-019 initial read outage cannot silently initialize an empty recovery and reset retains CAS/backup protection', () => {
+  const memory = createMemoryStorage(); let blocked = true;
+  const repo = new LocalSaveRepository({ ...memory, getItem(key) { if (blocked) throw Error('read unavailable'); return memory.getItem(key); } });
+  assert.equal(repo.load(1000).status, 'unavailable'); blocked = false;
+  assert.equal(repo.load(1000).status, 'missing'); assert.equal(repo.save(createInitialState(), 1000).ok, false);
+  assert.equal(repo.reset().status, 'missing', 'unresolved missing data also requires explicit reset confirmation');
+  const winner = rawEnvelope(withPendingCash(), 1000, 'new-client'); memory.setItem(SAVE_KEY, winner);
+  assert.equal(repo.reset({ confirmProtected: true }).status, 'conflict'); assert.equal(memory.getItem(SAVE_KEY), winner);
+  assert.equal(repo.load(1000).status, 'loaded'); assert.equal(repo.save(withPendingCash(), 1000).ok, true);
+});
+
+// TC-3D-023 recipe upgrades. Fixtures keep the real money ledger valid; no
+// production helper computes an expected upgrade fee or recipe multiplier.
+function coffeeFixture(wallet = 200_000) {
+  const state = createInitialState(); state.wallet = wallet; state.totalEarned = wallet - INITIAL_WALLET;
+  return state;
+}
+
+test('TC-3D-023 coffee Lv1 preserves every previous counter and manager parameter', () => {
+  assert.equal(ECONOMY_VERSION, 2); assert.equal(COFFEE_MAX_LEVEL, 10);
+  assert.equal(Object.isFrozen(COFFEE_UPGRADE_CONFIG), true); assert.equal(Object.isFrozen(COFFEE_UPGRADE_CONFIG.baseCosts), true);
+  assert.deepEqual(createInitialState().coffeeLevels, { espresso: 1, latte: 1 });
+  for (const recipe of recipes) for (let level = 1; level <= MAX_LEVEL; level++) for (const id of ['counter-a', 'counter-b']) {
+    assert.equal(coffeePrice(recipe.id, 1), recipe.price);
+    assert.equal(coffeeBrewSeconds(recipe.id, 1), recipe.brewSeconds);
+    assert.equal(counterPrice(recipe.id, level, id, 1), Math.round(recipe.price * (1 + .12 * (level - 1)) * (id === 'counter-b' && recipe.id === 'latte' ? 1.12 : 1)));
+    assert.equal(counterBrewSeconds(recipe.id, level, id, 1), recipe.brewSeconds / (1 + .045 * (level - 1)) * (id === 'counter-a' && recipe.id === 'espresso' ? .75 : 1));
+    assert.equal(managerSpeed(level), 2.6 + .18 * (level - 1)); assert.equal(managerCapacity(level), 1200 + 180 * (level - 1));
+  }
+  const engine = createEngine(); assert.equal(engine.quote('counter-a').cost, 800); assert.equal(engine.managerQuote().cost, 1000);
+});
+
+test('TC-3D-023 independent coffee purchases charge exact integer cents and affect only the selected recipe', () => {
+  const engine = createEngine(coffeeFixture()), before = engine.snapshot();
+  assert.deepEqual(engine.coffeeQuote('espresso'), { level: 1, nextLevel: 2, cost: 1200, beforePrice: 110, afterPrice: 119, beforeSeconds: 3.6, afterSeconds: 3.6 / 1.025, capped: false });
+  assert.equal(engine.coffeeQuote('latte').cost, 2000);
+  assert.equal(engine.upgradeCoffee('espresso'), true);
+  assert.deepEqual(engine.state.coffeeLevels, { espresso: 2, latte: 1 });
+  assert.equal(engine.state.wallet, before.wallet - 1200); assert.equal(engine.state.spend, 1200);
+  assert.deepEqual(engine.state.counters, before.counters); assert.deepEqual(engine.state.manager, before.manager);
+  assert.equal(engine.quote('counter-a').beforePrice, 119); assert.equal(engine.quote('counter-b').beforePrice, 246);
+  assert.deepEqual(engine.drainEvents().map(({ type, amount, recipeId }) => ({ type, amount, recipeId })), [{ type: 'coffee-upgraded', amount: 1200, recipeId: 'espresso' }]);
+  assert.equal(engine.upgradeCoffee('latte'), true);
+  assert.deepEqual(engine.state.coffeeLevels, { espresso: 2, latte: 2 });
+  assert.equal(engine.state.spend, 3200); assert.equal(engine.quote('counter-b').beforePrice, 267);
+  assert.equal(validateState(engine.snapshot()).ok, true); assert.equal(assets(engine.state), INITIAL_WALLET + engine.state.totalEarned);
+});
+
+test('TC-3D-023 coffee costs, maximum, insufficient wallet and repeated calls never double-charge', () => {
+  for (const recipe of recipes) {
+    const engine = createEngine(coffeeFixture()), beforeWallet = engine.state.wallet;
+    let spent = 0;
+    for (let level = 1; level < 10; level++) {
+      const fee = Math.round((recipe.id === 'espresso' ? 1200 : 2000) * 1.55 ** (level - 1));
+      assert.equal(engine.coffeeQuote(recipe.id).cost, fee); assert.equal(engine.upgradeCoffee(recipe.id), true); spent += fee;
+      assert.equal(engine.state.coffeeLevels[recipe.id], level + 1);
+      assert.equal(engine.state.wallet, beforeWallet - spent); assert.equal(engine.state.spend, spent);
+      assert.equal(coffeePrice(recipe.id, level + 1), Math.round(recipe.price * (1 + .08 * level)));
+      assert.equal(coffeeBrewSeconds(recipe.id, level + 1), recipe.brewSeconds / (1 + .025 * level));
+    }
+    const capped = engine.snapshot(), quote = engine.coffeeQuote(recipe.id);
+    assert.equal(quote.capped, true); assert.equal(quote.cost, 0); assert.equal(quote.nextLevel, 10);
+    assert.equal(quote.beforePrice, quote.afterPrice); assert.equal(quote.beforeSeconds, quote.afterSeconds);
+    for (let i = 0; i < 30; i++) assert.equal(engine.upgradeCoffee(recipe.id), false);
+    assert.deepEqual(engine.snapshot(), capped); assert.equal(validateState(capped).ok, true);
+  }
+  const exact = createEngine(); assert.equal(exact.upgradeCoffee('espresso'), true); assert.equal(exact.state.wallet, 0);
+  const zero = exact.snapshot(); assert.equal(exact.upgradeCoffee('espresso'), false); assert.deepEqual(exact.snapshot(), zero);
+  const poor = createEngine(withPendingCash(20_000, 20_000)), initial = poor.snapshot();
+  assert.equal(poor.upgradeCoffee('latte'), false, 'pending cash is not spendable');
+  for (const bad of ['mocha', '__proto__', 'constructor', '', null, undefined]) { assert.equal(poor.coffeeQuote(bad).capped, true); assert.equal(poor.upgradeCoffee(bad), false); }
+  assert.deepEqual(poor.snapshot(), initial);
+});
+
+test('TC-3D-023 shared coffee levels improve both equipped counters with one purchase and survive recipe switches', () => {
+  for (const recipe of recipes) {
+    const engine = createEngine(coffeeFixture());
+    for (const counter of engine.state.counters) engine.setRecipe(counter.id, recipe.id);
+    const beforeWallet = engine.state.wallet;
+    assert.equal(engine.upgradeCoffee(recipe.id), true);
+    assert.equal(engine.state.wallet, beforeWallet - (recipe.id === 'espresso' ? 1200 : 2000));
+    const basePrice = Math.round(recipe.price * 1.08), baseSeconds = recipe.brewSeconds / 1.025;
+    for (const counter of engine.state.counters) {
+      const quote = engine.quote(counter.id);
+      assert.equal(quote.beforePrice, Math.round(basePrice * (counter.id === 'counter-b' && recipe.id === 'latte' ? 1.12 : 1)));
+      assert.equal(quote.beforeSeconds, baseSeconds * (counter.id === 'counter-a' && recipe.id === 'espresso' ? .75 : 1));
+      assert.equal(engine.upgrade(counter.id), true);
+      assert.equal(engine.quote(counter.id).beforePrice, Math.round(basePrice * 1.12 * (counter.id === 'counter-b' && recipe.id === 'latte' ? 1.12 : 1)));
+      assert.equal(engine.quote(counter.id).beforeSeconds, baseSeconds / 1.045 * (counter.id === 'counter-a' && recipe.id === 'espresso' ? .75 : 1));
+    }
+    const after = engine.state.wallet;
+    engine.setRecipe('counter-a', recipe.id === 'espresso' ? 'latte' : 'espresso'); engine.setRecipe('counter-a', recipe.id);
+    assert.equal(engine.state.coffeeLevels[recipe.id], 2); assert.equal(engine.state.wallet, after);
+    assert.equal(assets(engine.state), INITIAL_WALLET + engine.state.totalEarned);
+  }
+});
+
+test('TC-3D-023 upgrading a brewing recipe preserves its price and duration through sale and upgrades subsequent cups', () => {
+  const engine = createEngine(coffeeFixture()); engine.setRecipe('counter-b', 'espresso');
+  until(engine, state => state.counters.every(counter => !!counter.brew), 1200);
+  const before = engine.state.counters.map(counter => structuredClone(counter.brew));
+  assert.equal(engine.upgradeCoffee('espresso'), true); assert.equal(engine.upgrade('counter-a'), true);
+  assert.deepEqual(engine.state.counters.map(counter => counter.brew), before);
+  const snapshot = engine.snapshot(), storage = createMemoryStorage(), repo = new LocalSaveRepository(storage);
+  assert.equal(repo.save(snapshot, 100000).ok, true);
+  const loaded = new LocalSaveRepository(storage).load(100000); assert.deepEqual(loaded.state, snapshot);
+  const restored = createEngine(loaded.state), served = new Set(), next = new Set();
+  for (let tick = 0; tick < 1600 && (served.size < 2 || next.size < 2); tick++) {
+    restored.advance(.05);
+    for (const event of restored.drainEvents()) if (event.type === 'served' && event.amount === before[event.counterId === 'counter-a' ? 0 : 1].price) served.add(event.counterId);
+    for (let i = 0; i < 2; i++) {
+      const counter = restored.state.counters[i], brew = counter.brew;
+      if (brew && brew.customerId !== before[i].customerId) {
+        assert.equal(brew.price, Math.round(119 * (counter.id === 'counter-a' ? 1.12 : 1)));
+        assert.equal(brew.duration, 3.6 / 1.025 / (counter.id === 'counter-a' ? 1.045 : 1) * (counter.id === 'counter-a' ? .75 : 1)); next.add(counter.id);
+      }
+    }
+  }
+  assert.equal(served.size, 2); assert.equal(next.size, 2); assert.equal(validateState(restored.snapshot()).ok, true);
+});
+
+test('TC-3D-023 economy1 migration adds only Lv1 coffee progress and rejects malformed, downgraded or future progression', () => {
+  const engine = createEngine(); engine.advance(16.137); const current = engine.snapshot();
+  const legacy = structuredClone(current); legacy.economyVersion = 1; delete legacy.coffeeLevels;
+  const raw = structuredClone(legacy), checked = validateState(legacy);
+  assert.equal(checked.ok, true); assert.deepEqual(legacy, raw); assert.deepEqual(checked.state, current);
+  assert.deepEqual(createEngine(legacy).snapshot(), current); assert.deepEqual(validateState(checked.state).state, current);
+  const memory = createMemoryStorage(); memory.setItem(SAVE_KEY, JSON.stringify({ schemaVersion: 1, offlinePolicyVersion: 3, savedAt: 100000, recordChangeTag: 'pre-coffee', state: legacy }));
+  const repo = new LocalSaveRepository(memory), loaded = repo.load(100000);
+  assert.equal(loaded.status, 'loaded'); assert.deepEqual(loaded.state, current); assert.equal(repo.save(loaded.state, 100000).ok, true);
+  assert.equal(JSON.parse(memory.getItem(SAVE_KEY)).state.economyVersion, 2);
+  for (const levels of [undefined, null, [], {}, { espresso: 1 }, { espresso: 1, latte: 1, mocha: 1 }, { espresso: 0, latte: 1 }, { espresso: 11, latte: 1 }, { espresso: 1.1, latte: 1 }, { espresso: '2', latte: 1 }, { espresso: Infinity, latte: 1 }, { espresso: 1, latte: NaN }]) {
+    const bad = createInitialState(); bad.coffeeLevels = levels;
+    assert.equal(validateState(bad).ok, false, JSON.stringify(levels)); assert.throws(() => createEngine(bad));
+  }
+  for (const version of [0, 1, '2', 2.5, 3, 999]) {
+    const bad = createInitialState(); bad.economyVersion = version;
+    assert.equal(validateState(bad).ok, false); assert.throws(() => createEngine(bad));
+    const storage = createMemoryStorage(), raw = rawEnvelope(bad); storage.setItem(SAVE_KEY, raw);
+    const repo = new LocalSaveRepository(storage), loaded = repo.load(1000);
+    assert.equal(loaded.status, typeof version === 'number' && version >= 3 ? 'future' : 'corrupt');
+    assert.equal(repo.save(loaded.state, 1000).ok, false); assert.equal(storage.getItem(SAVE_KEY), raw);
+  }
+});
+
+test('TC-3D-023 sync adapter preserves recipe progress under CAS, replay and changed-operation protection', async () => {
+  const repository = new InMemorySaveRepository(), engine = createEngine(coffeeFixture()); engine.upgradeCoffee('latte');
+  const state = engine.snapshot(), saved = await repository.save('coffee-user', state, null, 'coffee-create');
+  assert.equal(saved.status, 'saved'); assert.deepEqual(saved.state.coffeeLevels, { espresso: 1, latte: 2 });
+  assert.deepEqual(await repository.save('coffee-user', state, null, 'coffee-create'), saved);
+  engine.upgradeCoffee('espresso');
+  assert.equal((await repository.save('coffee-user', engine.snapshot(), null, 'coffee-create')).status, 'operation-mismatch');
+  const conflict = await repository.save('coffee-user', engine.snapshot(), null, 'coffee-stale');
+  assert.equal(conflict.status, 'conflict'); assert.deepEqual(conflict.state, state);
+  const next = await repository.save('coffee-user', engine.snapshot(), saved.recordChangeTag, 'coffee-next');
+  assert.equal(next.status, 'saved'); assert.deepEqual((await repository.load('coffee-user')).state, engine.snapshot());
+  const future = engine.snapshot(); future.economyVersion = 3;
+  assert.equal((await repository.save('coffee-user', future, next.recordChangeTag, 'coffee-future')).status, 'invalid-state');
+  assert.deepEqual((await repository.load('coffee-user')).state, engine.snapshot());
 });

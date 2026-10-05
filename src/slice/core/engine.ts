@@ -1,14 +1,31 @@
 import type { RouteObserver, RouteTraceEvent } from './routeTrace';
-import type { Counter, CounterId, CounterQuote, Customer, Recipe, RecipeId, SliceEngine, SliceEvent, SliceState } from './types';
+import type { Counter, CounterId, CounterQuote, CoffeeQuote, Customer, OfflineJob, OfflinePolicyVersion, Recipe, RecipeId, SliceEngine, SliceEvent, SliceState } from './types';
 
 /** Draft balance for this small playable slice, expressed in cents and metres. */
 export const STEP_SECONDS = .05;
 export const MAX_LEVEL = 20;
+export const ECONOMY_VERSION = 2;
+/** Temporary feature values, not a settled balance design. */
+export const COFFEE_UPGRADE_CONFIG = Object.freeze({
+  maxLevel: 10, pricePerLevel: .08, speedPerLevel: .025, costGrowth: 1.55,
+  baseCosts: Object.freeze({ espresso: 1200, latte: 2000 })
+});
+export const COFFEE_MAX_LEVEL = COFFEE_UPGRADE_CONFIG.maxLevel;
 export const INITIAL_WALLET = 1200;
 export const QUEUE_CAPACITY = 8;
 export const INVITE_COOLDOWN_SECONDS = 18;
-export const OFFLINE_CAP_SECONDS = 7200;
-export const OFFLINE_EFFICIENCY = .5;
+export const OFFLINE_EFFICIENCY = .8;
+export const LEGACY_OFFLINE_CAP_SECONDS = 7200;
+/** Existing save-schema precision limit, not an offline gameplay cap. */
+export const MAX_ELAPSED_SECONDS = 4e9;
+export function offlineWallSeconds(seconds: number, policy: OfflinePolicyVersion = 3): number {
+  if (!Number.isFinite(seconds) || seconds < 0 || policy === 1 && seconds < 30) return 0;
+  return policy === 3 ? seconds : Math.min(LEGACY_OFFLINE_CAP_SECONDS, seconds);
+}
+/** Uniform 80% for new intervals; old outstanding intervals retain their own rules once. */
+export function offlineEffectiveSeconds(seconds: number, policy: OfflinePolicyVersion = 3): number {
+  return offlineWallSeconds(seconds, policy) * (policy === 3 ? OFFLINE_EFFICIENCY : .5);
+}
 export const MANAGER_ROUTE_VERSION = 2;
 export const CUSTOMER_ROUTE_VERSION = 3;
 export const CUSTOMER_SPEED = 2.5;
@@ -19,12 +36,28 @@ export const recipes: readonly Recipe[] = Object.freeze([
 ]);
 export const recipeById = Object.freeze(Object.fromEntries(recipes.map(recipe => [recipe.id, recipe])) as Record<RecipeId, Recipe>);
 export const counterAffinities = Object.freeze({ 'counter-a': '浓缩制作时间 −25%', 'counter-b': '拿铁杯价 +12%' });
-export const counterPrice = (recipe: RecipeId, level: number, id?: CounterId): number => Math.round(recipeById[recipe].price * (1 + .12 * (level - 1)) * (id === 'counter-b' && recipe === 'latte' ? 1.12 : 1));
-export const counterBrewSeconds = (recipe: RecipeId, level: number, id?: CounterId): number => recipeById[recipe].brewSeconds / (1 + .045 * (level - 1)) * (id === 'counter-a' && recipe === 'espresso' ? .75 : 1);
+export const coffeePrice = (recipe: RecipeId, level = 1): number => Math.round(recipeById[recipe].price * (1 + COFFEE_UPGRADE_CONFIG.pricePerLevel * (level - 1)));
+export const coffeeBrewSeconds = (recipe: RecipeId, level = 1): number => recipeById[recipe].brewSeconds / (1 + COFFEE_UPGRADE_CONFIG.speedPerLevel * (level - 1));
+export const counterPrice = (recipe: RecipeId, level: number, id?: CounterId, coffeeLevel = 1): number => Math.round(coffeePrice(recipe, coffeeLevel) * (1 + .12 * (level - 1)) * (id === 'counter-b' && recipe === 'latte' ? 1.12 : 1));
+export const counterBrewSeconds = (recipe: RecipeId, level: number, id?: CounterId, coffeeLevel = 1): number => coffeeBrewSeconds(recipe, coffeeLevel) / (1 + .045 * (level - 1)) * (id === 'counter-a' && recipe === 'espresso' ? .75 : 1);
 export const managerSpeed = (level: number): number => 2.6 + .18 * (level - 1);
 export const managerCapacity = (level: number): number => 1200 + 180 * (level - 1);
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const roundTime = (value: number): number => Math.round(value * 1e9) / 1e9;
+
+/** Only legacy economy1 can omit recipe levels. Never downgrade or repair malformed progression. */
+export function migrateCoffeeEconomy(state: { economyVersion: number; coffeeLevels?: Record<RecipeId, number> }): void {
+  if (state.economyVersion === 1) {
+    if (state.coffeeLevels !== undefined) throw new Error('Legacy economy cannot contain coffee levels.');
+    state.coffeeLevels = { espresso: 1, latte: 1 };
+    state.economyVersion = ECONOMY_VERSION;
+    return;
+  }
+  if (state.economyVersion !== ECONOMY_VERSION) throw new Error('Unsupported economy version.');
+  const levels = state.coffeeLevels;
+  if (!levels || typeof levels !== 'object' || Array.isArray(levels) || Object.keys(levels).sort().join() !== 'espresso,latte' ||
+    recipes.some(recipe => !Number.isInteger(levels[recipe.id]) || levels[recipe.id] < 1 || levels[recipe.id] > COFFEE_MAX_LEVEL)) throw new Error('Invalid coffee levels.');
+}
 
 /** Narrow route migration, not an economy/schema migration. External states must be validated first. */
 export function migrateManagerRoute(state: SliceState): void {
@@ -62,7 +95,7 @@ export function migrateCustomerRoutes(state: SliceState): void {
 
 export function createInitialState(): SliceState {
   return {
-    schemaVersion: 1, economyVersion: 1, managerRouteVersion: MANAGER_ROUTE_VERSION, customerRouteVersion: CUSTOMER_ROUTE_VERSION, elapsed: 0, wallet: INITIAL_WALLET,
+    schemaVersion: 1, economyVersion: ECONOMY_VERSION, coffeeLevels: { espresso: 1, latte: 1 }, managerRouteVersion: MANAGER_ROUTE_VERSION, customerRouteVersion: CUSTOMER_ROUTE_VERSION, elapsed: 0, wallet: INITIAL_WALLET,
     totalEarned: 0, totalServed: 0, spend: 0, nextCustomerId: 1,
     arrivalTimer: 0, inviteCooldown: 0, paused: false, stepCarry: 0, eventSequence: 0, offlineClaimIds: [],
     counters: [
@@ -76,6 +109,7 @@ export function createInitialState(): SliceState {
 
 export function createEngine(initial: SliceState = createInitialState(), observeRoute?: RouteObserver): SliceEngine {
   const state = clone(initial);
+  migrateCoffeeEconomy(state);
   migrateManagerRoute(state);
   migrateCustomerRoutes(state);
   state.stepCarry ??= 0;
@@ -221,7 +255,7 @@ export function createEngine(initial: SliceState = createInitialState(), observe
           if (i === 0 && customer.phase === 'queue' && reached && customer.z === WORLD.serviceZ && !counter.brew) {
             customer.phase = 'serving'; customer.timer = 0;
             traceCustomer('phase', customer);
-            counter.brew = { recipe: counter.recipe, customerId: customer.id, elapsed: 0, duration: counterBrewSeconds(counter.recipe, counter.level, counter.id), price: counterPrice(counter.recipe, counter.level, counter.id) };
+            counter.brew = { recipe: counter.recipe, customerId: customer.id, elapsed: 0, duration: counterBrewSeconds(counter.recipe, counter.level, counter.id, state.coffeeLevels[counter.recipe]), price: counterPrice(counter.recipe, counter.level, counter.id, state.coffeeLevels[counter.recipe]) };
           }
         } else if (customer.phase === 'receiving') {
           customer.timer = roundTime(customer.timer + STEP_SECONDS);
@@ -351,14 +385,23 @@ export function createEngine(initial: SliceState = createInitialState(), observe
     if (!counter) return { cost: 0, beforePrice: 0, afterPrice: 0, beforeSeconds: 0, afterSeconds: 0, paybackSeconds: 0, capped: true };
     const capped = counter.level >= MAX_LEVEL, nextLevel = Math.min(MAX_LEVEL, counter.level + 1);
     const cost = capped ? 0 : Math.round(800 * 1.16 ** (counter.level - 1));
-    const beforePrice = counterPrice(counter.recipe, counter.level, counter.id), afterPrice = counterPrice(counter.recipe, nextLevel, counter.id);
-    const beforeSeconds = counterBrewSeconds(counter.recipe, counter.level, counter.id), afterSeconds = counterBrewSeconds(counter.recipe, nextLevel, counter.id);
+    const beforePrice = counterPrice(counter.recipe, counter.level, counter.id, state.coffeeLevels[counter.recipe]), afterPrice = counterPrice(counter.recipe, nextLevel, counter.id, state.coffeeLevels[counter.recipe]);
+    const beforeSeconds = counterBrewSeconds(counter.recipe, counter.level, counter.id, state.coffeeLevels[counter.recipe]), afterSeconds = counterBrewSeconds(counter.recipe, nextLevel, counter.id, state.coffeeLevels[counter.recipe]);
     // Departure starts on the payment tick. Later guests wait the remaining
     // fixed steps needed for one queue-gap of sideways clearance.
     const clearanceSeconds = (Math.ceil(WORLD.queueGap / (CUSTOMER_SPEED * STEP_SECONDS)) - 1) * STEP_SECONDS;
     const turnoverSeconds = .7 + WORLD.queueGap / CUSTOMER_SPEED + clearanceSeconds;
     const incremental = afterPrice / (afterSeconds + turnoverSeconds) - beforePrice / (beforeSeconds + turnoverSeconds);
     return { cost, beforePrice, afterPrice, beforeSeconds, afterSeconds, paybackSeconds: capped ? 0 : cost / Math.max(.001, incremental), capped };
+  }
+  function coffeeQuote(recipe: RecipeId): CoffeeQuote {
+    if (!Object.hasOwn(recipeById, recipe)) return { level: 0, nextLevel: 0, cost: 0, beforePrice: 0, afterPrice: 0, beforeSeconds: 0, afterSeconds: 0, capped: true };
+    const level = state.coffeeLevels[recipe], capped = level >= COFFEE_MAX_LEVEL, nextLevel = Math.min(COFFEE_MAX_LEVEL, level + 1);
+    return { level, nextLevel, capped,
+      cost: capped ? 0 : Math.round(COFFEE_UPGRADE_CONFIG.baseCosts[recipe] * COFFEE_UPGRADE_CONFIG.costGrowth ** (level - 1)),
+      beforePrice: coffeePrice(recipe, level), afterPrice: coffeePrice(recipe, nextLevel),
+      beforeSeconds: coffeeBrewSeconds(recipe, level), afterSeconds: coffeeBrewSeconds(recipe, nextLevel)
+    };
   }
   function managerQuote() {
     const capped = state.manager.level >= MAX_LEVEL;
@@ -379,6 +422,12 @@ export function createEngine(initial: SliceState = createInitialState(), observe
       state.wallet -= offer.cost; state.spend += offer.cost; counter.level++;
       emit('upgraded', { counterId: id, amount: offer.cost }); return true;
     },
+    upgradeCoffee(recipe) {
+      const offer = coffeeQuote(recipe);
+      if (offer.capped || state.wallet < offer.cost) return false;
+      state.wallet -= offer.cost; state.spend += offer.cost; state.coffeeLevels[recipe]++;
+      emit('coffee-upgraded', { recipeId: recipe, amount: offer.cost }); return true;
+    },
     upgradeManager() {
       const offer = managerQuote();
       if (offer.capped || state.wallet < offer.cost) return false;
@@ -390,7 +439,7 @@ export function createEngine(initial: SliceState = createInitialState(), observe
       if (!counter || !Object.hasOwn(recipeById, recipe) || counter.recipe === recipe) return false;
       counter.recipe = recipe; emit('recipe-changed', { counterId: id }); return true;
     },
-    togglePause() { state.paused = !state.paused; }, quote, managerQuote,
+    togglePause() { state.paused = !state.paused; }, quote, managerQuote, coffeeQuote,
     drainEvents() { const result = events; events = []; return result; },
     snapshot() {
       const snapshot = clone(state);
@@ -399,15 +448,45 @@ export function createEngine(initial: SliceState = createInitialState(), observe
       snapshot.stepCarry = Math.round((snapshot.stepCarry ?? 0) * 1e12) / 1e12;
       return snapshot;
     },
-    applyOffline(seconds, claimId) {
-      if (typeof claimId !== 'string' || !claimId || claimId.length > 256 || claimId === state.lastOfflineClaimId || state.offlineClaimIds!.includes(claimId) || !Number.isFinite(seconds) || seconds < 0) return { accepted: false, amount: 0, seconds: 0 };
-      const bounded = Math.min(OFFLINE_CAP_SECONDS, seconds), before = state.wallet;
+    beginOffline,
+    applyOffline(seconds, claimId, policy = 3) {
+      const job = beginOffline(seconds, claimId, policy);
+      job.advance(Number.MAX_SAFE_INTEGER);
+      return job.result();
+    }
+  };
+  function beginOffline(seconds: number, claimId: string, policy: OfflinePolicyVersion = 3): OfflineJob {
+    const effective = state.paused ? 0 : offlineEffectiveSeconds(seconds, policy);
+    const valid = typeof claimId === 'string' && !!claimId && claimId.length <= 256 && claimId !== state.lastOfflineClaimId && !state.offlineClaimIds!.includes(claimId) && Number.isFinite(seconds) && seconds >= 0 && [1, 2, 3].includes(policy) && effective + state.elapsed <= MAX_ELAPSED_SECONDS;
+    const total = (state.stepCarry ?? 0) + effective;
+    const steps = valid && !state.paused ? Math.floor((total + 1e-12) / STEP_SECONDS) : 0;
+    const carry = total - steps * STEP_SECONDS;
+    let completed = 0, done = !valid;
+    const beforeWallet = state.wallet, beforeEarned = state.totalEarned;
+    function finish() {
+      if (done) return;
+      if (!state.paused) state.stepCarry = Math.abs(carry) < 1e-12 ? 0 : Math.max(0, carry);
       state.lastOfflineClaimId = claimId;
       state.offlineClaimIds!.push(claimId);
       if (state.offlineClaimIds!.length > 256) state.offlineClaimIds!.shift();
-      silent = true;
-      try { advance(bounded * OFFLINE_EFFICIENCY); } finally { silent = false; }
-      return { accepted: true, amount: state.wallet - before, seconds: bounded };
+      done = true;
     }
-  };
+    if (valid && !steps) finish();
+    return {
+      get accepted() { return valid; }, get done() { return done; },
+      get totalSeconds() { return effective; },
+      get completedSeconds() { return done ? effective : completed * STEP_SECONDS; },
+      advance(maxSteps) {
+        if (done || !Number.isSafeInteger(maxSteps) || maxSteps <= 0) return;
+        const end = Math.min(steps, completed + maxSteps);
+        silent = true;
+        try { while (completed < end) { tick(); completed++; } } finally { silent = false; }
+        if (completed === steps) finish();
+      },
+      result() {
+        if (!valid || !done) return { accepted: false, amount: 0, seconds: 0 };
+        return { accepted: true, amount: state.wallet - beforeWallet, seconds: offlineWallSeconds(seconds, policy), effectiveSeconds: effective, awaySeconds: seconds, policyVersion: policy, generatedAmount: state.totalEarned - beforeEarned, pendingCash: state.counters.reduce((sum, counter) => sum + counter.pendingCash, 0), carrying: state.manager.carrying };
+      }
+    };
+  }
 }

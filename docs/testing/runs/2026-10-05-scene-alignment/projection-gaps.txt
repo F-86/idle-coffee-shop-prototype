@@ -1,0 +1,6 @@
+BJS - [21:42:51]: Babylon.js v9.29.0 - Null engine
+{"viewport":[1280,900],"gapCssPx":12.252236029470225,"iconHeightCssPx":139.42138313519683,"ratio":0.08787917429845922}
+BJS - [21:42:51]: Babylon.js v9.29.0 - Null engine
+{"viewport":[390,844],"gapCssPx":11.489874034660318,"iconHeightCssPx":130.74627776203369,"ratio":0.08787916743276317}
+BJS - [21:42:51]: Babylon.js v9.29.0 - Null engine
+{"viewport":[844,390],"gapCssPx":8.945813607692514,"iconHeightCssPx":101.79671879819853,"ratio":0.08787919407723412}

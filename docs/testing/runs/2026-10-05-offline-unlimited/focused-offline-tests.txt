@@ -1,0 +1,36 @@
+✔ TC-3D-020 v3 is continuous 80% at every former threshold, with no gameplay duration cap (1.781982ms)
+✔ TC-3D-020 exact boundary settlements equal ordinary simulation at 80%, including fixed-step carry (4278.211745ms)
+✔ TC-3D-020 a real 24-hour interval completes 69,120 seconds of ordinary simulation without a two-hour cap (17609.779205ms)
+✔ TC-3D-020 arbitrary job batches and randomized partitions preserve every simulated field (229.033145ms)
+✔ TC-3D-020 short partitions and reloads conserve fractional time through claim-history eviction (111.123128ms)
+✔ TC-3D-020 saved v3 short intervals settle once, while zero and rollback loads are byte-preserving (27.264151ms)
+✔ TC-3D-020 in-flight production retains full prices and frozen recipe/duration snapshots (1.695521ms)
+✔ TC-3D-020 manager collection only moves existing cash; it is not reported as newly generated income (5.350752ms)
+✔ TC-3D-020 every legacy anchor uses its own policy once, then all subsequent short gaps use v3 (6189.354804ms)
+✔ TC-3D-020 zero, short, paused and rollback migrations never stamp policy or anchors before a successful write (19.895754ms)
+✔ TC-3D-020 unsupported versions fail closed; future-time migration never moves the anchor backwards (6.468128ms)
+✔ TC-3D-020 paused v3 archives preserve all business state and consume each real interval once (1.117587ms)
+✔ TC-3D-020 numeric-limit refusal never truncates a gap, consumes its endpoint, or modifies the original bytes (0.991828ms)
+✔ TC-3D-020 integer-money overflow refuses the whole candidate in synchronous and asynchronous settlement (1.11912ms)
+✔ TC-3D-020 deferred settlement yields bounded batches, exposes read-only progress, then commits exactly once (5.822573ms)
+✔ TC-3D-020 cancellation and thrown callbacks retain the complete unpaid interval and permit clean retry (36.066134ms)
+✔ TC-3D-020 aborting or throwing from the final progress callback still prevents the commit (2.309828ms)
+✔ TC-3D-020 interrupted legacy async migration never exposes v3 before successful settlement (23.521069ms)
+✔ TC-3D-020 late work cannot overwrite a newer load, settlement, explicit reset, or another writer (12.714069ms)
+✔ TC-3D-020 overlapping finish calls cannot commit twice or cancel the active owner (4.737904ms)
+✔ TC-3D-020 final write failure and compare-before-write races preserve source bytes and full unpaid time (9.831707ms)
+✔ TC-3D-020 zero and short legacy migration CAS conflicts cannot stamp the losing candidate (9.60854ms)
+✔ TC-3D-020 live hidden settlement respects later durable anchors, cancellation and concurrent writers (3.779898ms)
+✔ TC-3D-020 maximum storage tags and rejected duplicate claims never discard an unpaid endpoint (4.757235ms)
+✔ TC-3D-020 exact live sources may retry zero, sub-step and paused write failures without authorizing other saves (9.352553ms)
+✔ TC-3D-020 cancellation of a 10ms live gap preserves its source and fractional carry for exact retry (1.766137ms)
+✔ TC-3D-020 live CAS conflict stays latched even if another actor later restores the old bytes (5.445534ms)
+✔ TC-3D-020 generated live claim collisions and failed reads never grant exact-source retry authority (1.411221ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 28
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 28767.638878

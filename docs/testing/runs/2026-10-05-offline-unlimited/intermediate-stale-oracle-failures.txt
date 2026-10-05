@@ -1,0 +1,2506 @@
+TAP version 13
+# BJS - [23:17:34]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:35]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:35]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:36]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:36]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:36]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:36]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:36]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:37]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:37]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:37]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:37]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:37]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:38]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:38]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:38]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:38]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:38]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:38]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:38]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:39]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:39]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:39]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:39]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:39]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:39]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:39]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:39]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:39]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:40]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:40]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:40]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:40]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:41]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:41]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:41]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:41]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:41]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:41]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:41]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:42]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:42]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:42]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:42]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:42]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:42]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:42]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:42]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:42]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:43]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:43]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:43]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:43]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:43]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:43]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:44]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:44]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:44]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:44]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:44]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:44]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:44]: Babylon.js v9.29.0 - Null engine
+# BJS - [23:17:45]: Babylon.js v9.29.0 - Null engine
+# Subtest: TC-3D-006 original reusable geometry presents snapshots without changing business state
+ok 1 - TC-3D-006 original reusable geometry presents snapshots without changing business state
+  ---
+  duration_ms: 809.007505
+  type: 'test'
+  ...
+# Subtest: TC-3D-006 all physical room controls dispatch detail actions without mutating economy
+ok 2 - TC-3D-006 all physical room controls dispatch detail actions without mutating economy
+  ---
+  duration_ms: 168.308118
+  type: 'test'
+  ...
+# Subtest: TC-3D-006 panning, long holds, cancelled and secondary pointers cannot become taps
+ok 3 - TC-3D-006 panning, long holds, cancelled and secondary pointers cannot become taps
+  ---
+  duration_ms: 171.82991
+  type: 'test'
+  ...
+# Subtest: TC-3D-001 cups, brew progress, table money, manager cart and machine upgrades are state-driven
+ok 4 - TC-3D-001 cups, brew progress, table money, manager cart and machine upgrades are state-driven
+  ---
+  duration_ms: 232.954734
+  type: 'test'
+  ...
+# Subtest: TC-3D-006 pause freezes animation, disposal removes listeners and late input is harmless
+ok 5 - TC-3D-006 pause freezes animation, disposal removes listeners and late input is harmless
+  ---
+  duration_ms: 231.47824
+  type: 'test'
+  ...
+# Subtest: TC-3D-006 physical 1280×900 at DPR 1: close room, shared anchors and reachable controls (projection only)
+ok 6 - TC-3D-006 physical 1280×900 at DPR 1: close room, shared anchors and reachable controls (projection only)
+  ---
+  duration_ms: 180.803095
+  type: 'test'
+  ...
+# Subtest: TC-3D-006 physical 1280×900 at DPR 1.75: close room, shared anchors and reachable controls (projection only)
+ok 7 - TC-3D-006 physical 1280×900 at DPR 1.75: close room, shared anchors and reachable controls (projection only)
+  ---
+  duration_ms: 141.679192
+  type: 'test'
+  ...
+# Subtest: TC-3D-006 captured drag is bounded and scene surfaces fill 1280×900 (ray coverage only)
+ok 8 - TC-3D-006 captured drag is bounded and scene surfaces fill 1280×900 (ray coverage only)
+  ---
+  duration_ms: 210.348445
+  type: 'test'
+  ...
+# Subtest: TC-3D-006 physical 390×844 at DPR 1: close room, shared anchors and reachable controls (projection only)
+ok 9 - TC-3D-006 physical 390×844 at DPR 1: close room, shared anchors and reachable controls (projection only)
+  ---
+  duration_ms: 198.205019
+  type: 'test'
+  ...
+# Subtest: TC-3D-006 physical 390×844 at DPR 1.75: close room, shared anchors and reachable controls (projection only)
+ok 10 - TC-3D-006 physical 390×844 at DPR 1.75: close room, shared anchors and reachable controls (projection only)
+  ---
+  duration_ms: 210.617005
+  type: 'test'
+  ...
+# Subtest: TC-3D-006 captured drag is bounded and scene surfaces fill 390×844 (ray coverage only)
+ok 11 - TC-3D-006 captured drag is bounded and scene surfaces fill 390×844 (ray coverage only)
+  ---
+  duration_ms: 204.162106
+  type: 'test'
+  ...
+# Subtest: TC-3D-006 physical 844×390 at DPR 1: close room, shared anchors and reachable controls (projection only)
+ok 12 - TC-3D-006 physical 844×390 at DPR 1: close room, shared anchors and reachable controls (projection only)
+  ---
+  duration_ms: 203.558033
+  type: 'test'
+  ...
+# Subtest: TC-3D-006 physical 844×390 at DPR 1.75: close room, shared anchors and reachable controls (projection only)
+ok 13 - TC-3D-006 physical 844×390 at DPR 1.75: close room, shared anchors and reachable controls (projection only)
+  ---
+  duration_ms: 218.699833
+  type: 'test'
+  ...
+# Subtest: TC-3D-006 captured drag is bounded and scene surfaces fill 844×390 (ray coverage only)
+ok 14 - TC-3D-006 captured drag is bounded and scene surfaces fill 844×390 (ray coverage only)
+  ---
+  duration_ms: 191.083101
+  type: 'test'
+  ...
+# Subtest: TC-3D-006 cancellation, capture loss and unrelated pointers preserve one drag owner
+ok 15 - TC-3D-006 cancellation, capture loss and unrelated pointers preserve one drag owner
+  ---
+  duration_ms: 122.138468
+  type: 'test'
+  ...
+# Subtest: TC-3D-006 wall menus remain global recipe boards while each counter selector follows its recipe
+ok 16 - TC-3D-006 wall menus remain global recipe boards while each counter selector follows its recipe
+  ---
+  duration_ms: 114.456825
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 actual control polygon accepts a 44px circle at 1280×900, DPR 1 (geometry only)
+ok 17 - TC-3D-008 actual control polygon accepts a 44px circle at 1280×900, DPR 1 (geometry only)
+  ---
+  duration_ms: 122.138608
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 actual control polygon accepts a 44px circle at 1280×900, DPR 1.75 (geometry only)
+ok 18 - TC-3D-008 actual control polygon accepts a 44px circle at 1280×900, DPR 1.75 (geometry only)
+  ---
+  duration_ms: 130.671706
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 actual control polygon accepts a 44px circle at 390×844, DPR 1 (geometry only)
+ok 19 - TC-3D-008 actual control polygon accepts a 44px circle at 390×844, DPR 1 (geometry only)
+  ---
+  duration_ms: 115.712221
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 actual control polygon accepts a 44px circle at 390×844, DPR 1.75 (geometry only)
+ok 20 - TC-3D-008 actual control polygon accepts a 44px circle at 390×844, DPR 1.75 (geometry only)
+  ---
+  duration_ms: 103.889805
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 actual control polygon accepts a 44px circle at 844×390, DPR 1 (geometry only)
+ok 21 - TC-3D-008 actual control polygon accepts a 44px circle at 844×390, DPR 1 (geometry only)
+  ---
+  duration_ms: 120.738964
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 actual control polygon accepts a 44px circle at 844×390, DPR 1.75 (geometry only)
+ok 22 - TC-3D-008 actual control polygon accepts a 44px circle at 844×390, DPR 1.75 (geometry only)
+  ---
+  duration_ms: 120.247522
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 every label is lit opaque depth-tested ink on a mounted non-billboard scene slab
+ok 23 - TC-3D-008 every label is lit opaque depth-tested ink on a mounted non-billboard scene slab
+  ---
+  duration_ms: 118.714616
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 front solid blocks pointer and keyboard; removing it restores real mesh picking
+ok 24 - TC-3D-008 front solid blocks pointer and keyboard; removing it restores real mesh picking
+  ---
+  duration_ms: 103.293223
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 pointer start and release require the same visible physical mesh, exactly once
+ok 25 - TC-3D-008 pointer start and release require the same visible physical mesh, exactly once
+  ---
+  duration_ms: 135.987836
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 opening a modal cancels captured input; every interaction stays suspended until close
+ok 26 - TC-3D-008 opening a modal cancels captured input; every interaction stays suspended until close
+  ---
+  duration_ms: 116.202683
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 keyboard cycles every embodied control, preserves physical focus and is inert after disposal
+ok 27 - TC-3D-008 keyboard cycles every embodied control, preserves physical focus and is inert after disposal
+  ---
+  duration_ms: 118.421293
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 side-front upgrade plaques remain hittable while a customer occupies the service point
+ok 28 - TC-3D-008 side-front upgrade plaques remain hittable while a customer occupies the service point
+  ---
+  duration_ms: 131.402741
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 small trolley cash table stays visible while manager turns without orbiting into furniture
+ok 29 - TC-3D-008 small trolley cash table stays visible while manager turns without orbiting into furniture
+  ---
+  duration_ms: 161.756557
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 world-oriented trolley clears wall, counters and baristas throughout the service route
+ok 30 - TC-3D-008 world-oriented trolley clears wall, counters and baristas throughout the service route
+  ---
+  duration_ms: 569.907256
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 small pending cash stays physically visible beside its flat amount tag
+ok 31 - TC-3D-008 small pending cash stays physically visible beside its flat amount tag
+  ---
+  duration_ms: 110.146404
+  type: 'test'
+  ...
+# Subtest: TC-3D-009 refined physical layout at 1280×900, DPR 1: vault left and independent front controls (geometry only)
+ok 32 - TC-3D-009 refined physical layout at 1280×900, DPR 1: vault left and independent front controls (geometry only)
+  ---
+  duration_ms: 143.443485
+  type: 'test'
+  ...
+# Subtest: TC-3D-009 refined physical layout at 1280×900, DPR 1.75: vault left and independent front controls (geometry only)
+ok 33 - TC-3D-009 refined physical layout at 1280×900, DPR 1.75: vault left and independent front controls (geometry only)
+  ---
+  duration_ms: 144.276624
+  type: 'test'
+  ...
+# Subtest: TC-3D-009 refined physical layout at 390×844, DPR 1: vault left and independent front controls (geometry only)
+ok 34 - TC-3D-009 refined physical layout at 390×844, DPR 1: vault left and independent front controls (geometry only)
+  ---
+  duration_ms: 125.972718
+  type: 'test'
+  ...
+# Subtest: TC-3D-009 refined physical layout at 390×844, DPR 1.75: vault left and independent front controls (geometry only)
+ok 35 - TC-3D-009 refined physical layout at 390×844, DPR 1.75: vault left and independent front controls (geometry only)
+  ---
+  duration_ms: 134.803726
+  type: 'test'
+  ...
+# Subtest: TC-3D-009 refined physical layout at 844×390, DPR 1: vault left and independent front controls (geometry only)
+ok 36 - TC-3D-009 refined physical layout at 844×390, DPR 1: vault left and independent front controls (geometry only)
+  ---
+  duration_ms: 143.052225
+  type: 'test'
+  ...
+# Subtest: TC-3D-009 refined physical layout at 844×390, DPR 1.75: vault left and independent front controls (geometry only)
+ok 37 - TC-3D-009 refined physical layout at 844×390, DPR 1.75: vault left and independent front controls (geometry only)
+  ---
+  duration_ms: 142.70519
+  type: 'test'
+  ...
+# Subtest: TC-3D-009 vault owns manager level affordance and no removed scene action survives
+ok 38 - TC-3D-009 vault owns manager level affordance and no removed scene action survives
+  ---
+  duration_ms: 119.435995
+  type: 'test'
+  ...
+# Subtest: TC-3D-009 pending money tag shares the banknote cluster and cannot become a raised register
+ok 39 - TC-3D-009 pending money tag shares the banknote cluster and cannot become a raised register
+  ---
+  duration_ms: 119.599401
+  type: 'test'
+  ...
+# Subtest: TC-3D-010 rendered manager follows direct snapshots through B → A → vault and the deposit
+ok 40 - TC-3D-010 rendered manager follows direct snapshots through B → A → vault and the deposit
+  ---
+  duration_ms: 120.046888
+  type: 'test'
+  ...
+# Subtest: TC-3D-009 receipt ink fits long exact amounts without cropping or abbreviation (canvas-context unit check)
+ok 41 - TC-3D-009 receipt ink fits long exact amounts without cropping or abbreviation (canvas-context unit check)
+  ---
+  duration_ms: 140.763618
+  type: 'test'
+  ...
+# Subtest: TC-3D-010 continuous floor and wall carry aligned matte patterns with joined room surfaces
+ok 42 - TC-3D-010 continuous floor and wall carry aligned matte patterns with joined room surfaces
+  ---
+  duration_ms: 127.52375
+  type: 'test'
+  ...
+# Subtest: TC-3D-010 pattern ink uses equal floor-axis strokes and diffuse contrast without self-light
+ok 43 - TC-3D-010 pattern ink uses equal floor-axis strokes and diffuse contrast without self-light
+  ---
+  duration_ms: 113.493139
+  type: 'test'
+  ...
+# Subtest: TC-3D-010 physical manager plaque clears the entire vault silhouette at 1280×900, DPR 1 (projection only)
+ok 44 - TC-3D-010 physical manager plaque clears the entire vault silhouette at 1280×900, DPR 1 (projection only)
+  ---
+  duration_ms: 130.432889
+  type: 'test'
+  ...
+# Subtest: TC-3D-010 physical manager plaque clears the entire vault silhouette at 1280×900, DPR 1.75 (projection only)
+ok 45 - TC-3D-010 physical manager plaque clears the entire vault silhouette at 1280×900, DPR 1.75 (projection only)
+  ---
+  duration_ms: 122.177465
+  type: 'test'
+  ...
+# Subtest: TC-3D-010 physical manager plaque clears the entire vault silhouette at 390×844, DPR 1 (projection only)
+ok 46 - TC-3D-010 physical manager plaque clears the entire vault silhouette at 390×844, DPR 1 (projection only)
+  ---
+  duration_ms: 115.744519
+  type: 'test'
+  ...
+# Subtest: TC-3D-010 physical manager plaque clears the entire vault silhouette at 390×844, DPR 1.75 (projection only)
+ok 47 - TC-3D-010 physical manager plaque clears the entire vault silhouette at 390×844, DPR 1.75 (projection only)
+  ---
+  duration_ms: 114.411146
+  type: 'test'
+  ...
+# Subtest: TC-3D-010 physical manager plaque clears the entire vault silhouette at 844×390, DPR 1 (projection only)
+ok 48 - TC-3D-010 physical manager plaque clears the entire vault silhouette at 844×390, DPR 1 (projection only)
+  ---
+  duration_ms: 114.033154
+  type: 'test'
+  ...
+# Subtest: TC-3D-010 physical manager plaque clears the entire vault silhouette at 844×390, DPR 1.75 (projection only)
+ok 49 - TC-3D-010 physical manager plaque clears the entire vault silhouette at 844×390, DPR 1.75 (projection only)
+  ---
+  duration_ms: 120.373521
+  type: 'test'
+  ...
+# Subtest: TC-3D-010 real core sweep collects visible B cash then A cash, and only deposits at the same vault
+ok 50 - TC-3D-010 real core sweep collects visible B cash then A cash, and only deposits at the same vault
+  ---
+  duration_ms: 346.488713
+  type: 'test'
+  ...
+# Subtest: TC-3D-011 static work is frozen while live actors, cups, cash parents and physical controls stay correct
+ok 51 - TC-3D-011 static work is frozen while live actors, cups, cash parents and physical controls stay correct
+  ---
+  duration_ms: 135.698708
+  type: 'test'
+  ...
+# Subtest: TC-3D-013 side aisles join a separate return lane ending beyond the entrance, with no obsolete arrows
+ok 52 - TC-3D-013 side aisles join a separate return lane ending beyond the entrance, with no obsolete arrows
+  ---
+  duration_ms: 108.755022
+  type: 'test'
+  ...
+# Subtest: TC-3D-011 moving contact disks remain above the physical rug/arrow surfaces
+ok 53 - TC-3D-011 moving contact disks remain above the physical rug/arrow surfaces
+  ---
+  duration_ms: 129.945038
+  type: 'test'
+  ...
+# Subtest: TC-3D-011 cached shadow bounds cover static furniture and upgrades invalidate once (NullEngine math)
+ok 54 - TC-3D-011 cached shadow bounds cover static furniture and upgrades invalidate once (NullEngine math)
+  ---
+  duration_ms: 131.686968
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 renderer pairs Babylon frame boundaries and changes quality without rebuilding the scene
+ok 55 - TC-3D-012 renderer pairs Babylon frame boundaries and changes quality without rebuilding the scene
+  ---
+  duration_ms: 124.203125
+  type: 'test'
+  ...
+# Subtest: TC-3D-014 QA identity reads actual customer mesh and CSS projection without changing render objects
+ok 56 - TC-3D-014 QA identity reads actual customer mesh and CSS projection without changing render objects
+  ---
+  duration_ms: 141.741785
+  type: 'test'
+  ...
+# Subtest: TC-3D-018 vault plaque stays close without covering its icon at 1280×900, DPR 1 (projection only)
+ok 57 - TC-3D-018 vault plaque stays close without covering its icon at 1280×900, DPR 1 (projection only)
+  ---
+  duration_ms: 108.346265
+  type: 'test'
+  ...
+# Subtest: TC-3D-018 vault plaque stays close without covering its icon at 1280×900, DPR 1.75 (projection only)
+ok 58 - TC-3D-018 vault plaque stays close without covering its icon at 1280×900, DPR 1.75 (projection only)
+  ---
+  duration_ms: 132.112231
+  type: 'test'
+  ...
+# Subtest: TC-3D-018 vault plaque stays close without covering its icon at 390×844, DPR 1 (projection only)
+ok 59 - TC-3D-018 vault plaque stays close without covering its icon at 390×844, DPR 1 (projection only)
+  ---
+  duration_ms: 128.616882
+  type: 'test'
+  ...
+# Subtest: TC-3D-018 vault plaque stays close without covering its icon at 390×844, DPR 1.75 (projection only)
+ok 60 - TC-3D-018 vault plaque stays close without covering its icon at 390×844, DPR 1.75 (projection only)
+  ---
+  duration_ms: 130.597203
+  type: 'test'
+  ...
+# Subtest: TC-3D-018 vault plaque stays close without covering its icon at 844×390, DPR 1 (projection only)
+ok 61 - TC-3D-018 vault plaque stays close without covering its icon at 844×390, DPR 1 (projection only)
+  ---
+  duration_ms: 126.07347
+  type: 'test'
+  ...
+# Subtest: TC-3D-018 vault plaque stays close without covering its icon at 844×390, DPR 1.75 (projection only)
+ok 62 - TC-3D-018 vault plaque stays close without covering its icon at 844×390, DPR 1.75 (projection only)
+  ---
+  duration_ms: 160.605136
+  type: 'test'
+  ...
+# Subtest: TC-3D-018 full-width departure corners are filled and meet without overlapping top surfaces (geometry/rays only)
+ok 63 - TC-3D-018 full-width departure corners are filled and meet without overlapping top surfaces (geometry/rays only)
+  ---
+  duration_ms: 138.045983
+  type: 'test'
+  ...
+# Subtest: TC-3D-011 customer route geometry separates the trunk, full queues and local exits
+ok 64 - TC-3D-011 customer route geometry separates the trunk, full queues and local exits
+  ---
+  duration_ms: 5.144451
+  type: 'test'
+  ...
+# Subtest: TC-3D-011 invitation batches arrive in distinct positions on the entry approach
+ok 65 - TC-3D-011 invitation batches arrive in distinct positions on the entry approach
+  ---
+  duration_ms: 1.619606
+  type: 'test'
+  ...
+# Subtest: TC-3D-011 live paths remain continuous and clear through full queues, upgrades and eventual disappearance
+ok 66 - TC-3D-011 live paths remain continuous and clear through full queues, upgrades and eventual disappearance
+  ---
+  duration_ms: 1823.65635
+  type: 'test'
+  ...
+# Subtest: TC-3D-011 saving and reloading each inbound and outbound leg resumes exact positions, events and ledgers
+ok 67 - TC-3D-011 saving and reloading each inbound and outbound leg resumes exact positions, events and ledgers
+  ---
+  duration_ms: 75.975843
+  type: 'test'
+  ...
+# Subtest: TC-3D-011 route validation fails closed on corrupt legs, coordinates, flags and future versions
+ok 68 - TC-3D-011 route validation fails closed on corrupt legs, coordinates, flags and future versions
+  ---
+  duration_ms: 1.680488
+  type: 'test'
+  ...
+# Subtest: TC-3D-011 legacy customers retain coordinates and finish once while new guests follow separated routes
+ok 69 - TC-3D-011 legacy customers retain coordinates and finish once while new guests follow separated routes
+  ---
+  duration_ms: 104.424482
+  type: 'test'
+  ...
+# Subtest: TC-3D-011 legacy stationary phases and frozen brew receipts survive migration without repair or recredit
+ok 70 - TC-3D-011 legacy stationary phases and frozen brew receipts survive migration without repair or recredit
+  ---
+  duration_ms: 1.29103
+  type: 'test'
+  ...
+# Subtest: TC-3D-011 customer-route offline migration remains once-only and respects failure, pause and CAS boundaries
+ok 71 - TC-3D-011 customer-route offline migration remains once-only and respects failure, pause and CAS boundaries
+  ---
+  duration_ms: 14.450096
+  type: 'test'
+  ...
+# Subtest: TC-3D-011 draft full-load payback includes the physical sideways-clearance wait
+ok 72 - TC-3D-011 draft full-load payback includes the physical sideways-clearance wait
+  ---
+  duration_ms: 0.500025
+  type: 'test'
+  ...
+# Subtest: TC-3D-013 parallel return lane clears full queue tails and continues beyond the entrance boundary
+ok 73 - TC-3D-013 parallel return lane clears full queue tails and continues beyond the entrance boundary
+  ---
+  duration_ms: 176.042494
+  type: 'test'
+  ...
+# Subtest: TC-3D-013 crossing and merge right-of-way remains collision-free, continuous and reloadable
+ok 74 - TC-3D-013 crossing and merge right-of-way remains collision-free, continuous and reloadable
+  ---
+  duration_ms: 21.028972
+  type: 'test'
+  ...
+# Subtest: TC-3D-013 v2 in-flight legs extend without migration teleport, economic changes or early disappearance
+ok 75 - TC-3D-013 v2 in-flight legs extend without migration teleport, economic changes or early disappearance
+  ---
+  duration_ms: 349.337979
+  type: 'test'
+  ...
+# Subtest: TC-3D-013 maximum-level sustained batches clear all junctions without overlap or permanent waiting
+ok 76 - TC-3D-013 maximum-level sustained batches clear all junctions without overlap or permanent waiting
+  ---
+  duration_ms: 2654.708126
+  type: 'test'
+  ...
+# Subtest: TC-3D-013 accepted close v2 turns separate continuously instead of freezing or teleporting
+ok 77 - TC-3D-013 accepted close v2 turns separate continuously instead of freezing or teleporting
+  ---
+  duration_ms: 1.30465
+  type: 'test'
+  ...
+# Subtest: TC-3D-015 rendered cadence uses caller monotonic timestamps and nearest-rank percentiles
+ok 78 - TC-3D-015 rendered cadence uses caller monotonic timestamps and nearest-rank percentiles
+  ---
+  duration_ms: 1.526095
+  type: 'test'
+  ...
+# Subtest: TC-3D-015 rolling window excludes old intervals while lifetime aggregates retain stalls
+ok 79 - TC-3D-015 rolling window excludes old intervals while lifetime aggregates retain stalls
+  ---
+  duration_ms: 0.491422
+  type: 'test'
+  ...
+# Subtest: TC-3D-015 a long foreground stall is retained whole and never mistaken for hidden time
+ok 80 - TC-3D-015 a long foreground stall is retained whole and never mistaken for hidden time
+  ---
+  duration_ms: 0.346373
+  type: 'test'
+  ...
+# Subtest: TC-3D-015 fixed rings stay bounded at high refresh and expose capacity truncation
+ok 81 - TC-3D-015 fixed rings stay bounded at high refresh and expose capacity truncation
+  ---
+  duration_ms: 6.946382
+  type: 'test'
+  ...
+# Subtest: TC-3D-015 read snapshots cannot mutate retained diagnostics
+ok 82 - TC-3D-015 read snapshots cannot mutate retained diagnostics
+  ---
+  duration_ms: 11.331124
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 30Hz presents constant-speed manager/customer motion between 20Hz ticks
+ok 83 - TC-3D-012 30Hz presents constant-speed manager/customer motion between 20Hz ticks
+  ---
+  duration_ms: 5.791327
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 60Hz presents constant-speed manager/customer motion between 20Hz ticks
+ok 84 - TC-3D-012 60Hz presents constant-speed manager/customer motion between 20Hz ticks
+  ---
+  duration_ms: 0.630983
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 90Hz presents constant-speed manager/customer motion between 20Hz ticks
+ok 85 - TC-3D-012 90Hz presents constant-speed manager/customer motion between 20Hz ticks
+  ---
+  duration_ms: 0.841701
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 120Hz presents constant-speed manager/customer motion between 20Hz ticks
+ok 86 - TC-3D-012 120Hz presents constant-speed manager/customer motion between 20Hz ticks
+  ---
+  duration_ms: 0.438913
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 144Hz presents constant-speed manager/customer motion between 20Hz ticks
+ok 87 - TC-3D-012 144Hz presents constant-speed manager/customer motion between 20Hz ticks
+  ---
+  duration_ms: 4.466806
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 240Hz presents constant-speed manager/customer motion between 20Hz ticks
+ok 88 - TC-3D-012 240Hz presents constant-speed manager/customer motion between 20Hz ticks
+  ---
+  duration_ms: 3.068614
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 multi-step stalls interpolate the final adjacent ticks, never the entire stalled path
+ok 89 - TC-3D-012 multi-step stalls interpolate the final adjacent ticks, never the entire stalled path
+  ---
+  duration_ms: 2.074493
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 pause freezes pose; replacement and offline reset never blend old routes
+ok 90 - TC-3D-012 pause freezes pose; replacement and offline reset never blend old routes
+  ---
+  duration_ms: 19.128722
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 invite identities spawn on their own route, and phase/cup changes remain atomic
+ok 91 - TC-3D-012 invite identities spawn on their own route, and phase/cup changes remain atomic
+  ---
+  duration_ms: 81.438993
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 quality modes and irregular frame subdivision produce the same authoritative save
+ok 92 - TC-3D-012 quality modes and irregular frame subdivision produce the same authoritative save
+  ---
+  duration_ms: 102.548936
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 max-level actors stay continuous through turns, stops and handoffs at 144Hz
+ok 93 - TC-3D-012 max-level actors stay continuous through turns, stops and handoffs at 144Hz
+  ---
+  duration_ms: 352.008282
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 removed departure finishes its final interpolated leg instead of freezing ahead of its follower
+ok 94 - TC-3D-012 removed departure finishes its final interpolated leg instead of freezing ahead of its follower
+  ---
+  duration_ms: 0.875673
+  type: 'test'
+  ...
+# (node:28) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: TC-3D-008 REQ-3D-015 full-viewport scene has no webpage frame or page scroll (static contract)
+ok 95 - TC-3D-008 REQ-3D-015 full-viewport scene has no webpage frame or page scroll (static contract)
+  ---
+  duration_ms: 9.720041
+  type: 'test'
+  ...
+# Subtest: TC-3D-009 REQ-3D-016 permanent HUD contains only a noninteractive ¥ amount and accessible settings (static contract)
+ok 96 - TC-3D-009 REQ-3D-016 permanent HUD contains only a noninteractive ¥ amount and accessible settings (static contract)
+  ---
+  duration_ms: 2.135175
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 REQ-3D-013 all rendered amounts use ¥ with two fractional digits (app harness)
+ok 97 - TC-3D-008 REQ-3D-013 all rendered amounts use ¥ with two fractional digits (app harness)
+  ---
+  duration_ms: 37.785766
+  type: 'test'
+  ...
+# Subtest: TC-3D-009 REQ-3D-016 scene actions and HUD settings open the correct details without hidden DOM anchors (app harness)
+ok 98 - TC-3D-009 REQ-3D-016 scene actions and HUD settings open the correct details without hidden DOM anchors (app harness)
+  ---
+  duration_ms: 8.148467
+  type: 'test'
+  ...
+# Subtest: TC-3D-009 REQ-3D-016 removed pause/manager/settings scene routes and pause hotkeys cannot alter play (app harness)
+ok 99 - TC-3D-009 REQ-3D-016 removed pause/manager/settings scene routes and pause hotkeys cannot alter play (app harness)
+  ---
+  duration_ms: 11.563786
+  type: 'test'
+  ...
+# Subtest: TC-3D-009 REQ-3D-016 only HUD settings remains outside the closed native operation dialog (static contract)
+ok 100 - TC-3D-009 REQ-3D-016 only HUD settings remains outside the closed native operation dialog (static contract)
+  ---
+  duration_ms: 0.859158
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 REQ-3D-015 modal close/backdrop restore canvas focus and reject background scene actions (app harness)
+ok 101 - TC-3D-008 REQ-3D-015 modal close/backdrop restore canvas focus and reject background scene actions (app harness)
+  ---
+  duration_ms: 16.720424
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 REQ-3D-014 scene keyboard access is provided on the real canvas with instructions (static contract)
+ok 102 - TC-3D-008 REQ-3D-014 scene keyboard access is provided on the real canvas with instructions (static contract)
+  ---
+  duration_ms: 0.773769
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 REQ-3D-014 actual canvas keys select, pan and activate scene objects once, with modal/modifier guards (app harness)
+ok 103 - TC-3D-008 REQ-3D-014 actual canvas keys select, pan and activate scene objects once, with modal/modifier guards (app harness)
+  ---
+  duration_ms: 14.021408
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 REQ-3D-015 dialog recipe/upgrade/navigation routes preserve core rules and visible close focus (app harness)
+ok 104 - TC-3D-008 REQ-3D-015 dialog recipe/upgrade/navigation routes preserve core rules and visible close focus (app harness)
+  ---
+  duration_ms: 8.219054
+  type: 'test'
+  ...
+# Subtest: TC-3D-009 REQ-3D-017 manager grade, efficiency and upgrade belong to the vault and preserve the core quote (app harness)
+ok 105 - TC-3D-009 REQ-3D-017 manager grade, efficiency and upgrade belong to the vault and preserve the core quote (app harness)
+  ---
+  duration_ms: 18.952055
+  type: 'test'
+  ...
+# Subtest: TC-3D-009 REQ-3D-016 HUD settings uses the same modal input guard and restores its own visible focus (app harness)
+ok 106 - TC-3D-009 REQ-3D-016 HUD settings uses the same modal input guard and restores its own visible focus (app harness)
+  ---
+  duration_ms: 10.622183
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 REQ-3D-015 post-dialog navigation survives native asynchronous close-event ordering (app harness)
+ok 107 - TC-3D-008 REQ-3D-015 post-dialog navigation survives native asynchronous close-event ordering (app harness)
+  ---
+  duration_ms: 7.073554
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 REQ-3D-015 a stale queued close cannot dismantle a newly reopened native dialog (app harness)
+ok 108 - TC-3D-008 REQ-3D-015 a stale queued close cannot dismantle a newly reopened native dialog (app harness)
+  ---
+  duration_ms: 28.698154
+  type: 'test'
+  ...
+# Subtest: TC-3D-009 REQ-3D-016 physical invite remains cooldown/conflict guarded without duplicate DOM handlers (app harness)
+ok 109 - TC-3D-009 REQ-3D-016 physical invite remains cooldown/conflict guarded without duplicate DOM handlers (app harness)
+  ---
+  duration_ms: 6.179483
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 REQ-3D-015 modal controls maintain 44px targets, safe-area and dynamic viewport hooks (static contract)
+ok 110 - TC-3D-008 REQ-3D-015 modal controls maintain 44px targets, safe-area and dynamic viewport hooks (static contract)
+  ---
+  duration_ms: 1.600488
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 REQ-3D-006 HUD settings preserve manual save and export, with corrupt bytes protected (app harness)
+ok 111 - TC-3D-008 REQ-3D-006 HUD settings preserve manual save and export, with corrupt bytes protected (app harness)
+  ---
+  duration_ms: 27.045919
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 REQ-3D-015 names and save feedback are transient; unreadable startup stays protected without exporting a fake shop (app harness)
+ok 112 - TC-3D-008 REQ-3D-015 names and save feedback are transient; unreadable startup stays protected without exporting a fake shop (app harness)
+  ---
+  duration_ms: 14.702867
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 REQ-3D-006 external save conflict freezes and blocks removed pause routes and purchases (app harness)
+ok 113 - TC-3D-008 REQ-3D-006 external save conflict freezes and blocks removed pause routes and purchases (app harness)
+  ---
+  duration_ms: 6.558035
+  type: 'test'
+  ...
+# Subtest: TC-3D-010 legacy raw route saves resume once, finish their current sweep and persist the real B-first route (app harness)
+ok 114 - TC-3D-010 legacy raw route saves resume once, finish their current sweep and persist the real B-first route (app harness)
+  ---
+  duration_ms: 160.744153
+  type: 'test'
+  ...
+# Subtest: TC-3D-010 failed legacy-route offline settlement preserves bytes and freezes migrated assets until successful reload (app harness)
+ok 115 - TC-3D-010 failed legacy-route offline settlement preserves bytes and freezes migrated assets until successful reload (app harness)
+  ---
+  duration_ms: 1269.508082
+  type: 'test'
+  ...
+# Subtest: TC-3D-010 migration persists before a hidden first frame and BFCache/repeated saves cannot remap or claim twice (app harness)
+ok 116 - TC-3D-010 migration persists before a hidden first frame and BFCache/repeated saves cannot remap or claim twice (app harness)
+  ---
+  duration_ms: 18.983162
+  type: 'test'
+  ...
+# Subtest: TC-3D-009 REQ-3D-016 valid previous paused saves resume current play without paused-interval income on boot (app harness)
+ok 117 - TC-3D-009 REQ-3D-016 valid previous paused saves resume current play without paused-interval income on boot (app harness)
+  ---
+  duration_ms: 24.496228
+  type: 'test'
+  ...
+# Subtest: TC-3D-009 REQ-3D-016 reading a valid external paused save resumes only current play after conflict recovery (app harness)
+ok 118 - TC-3D-009 REQ-3D-016 reading a valid external paused save resumes only current play after conflict recovery (app harness)
+  ---
+  duration_ms: 6.056678
+  type: 'test'
+  ...
+# Subtest: TC-3D-009 REQ-3D-006 failed offline writes or a concurrent claim keep paused valid saves conflict-protected (app harness)
+ok 119 - TC-3D-009 REQ-3D-006 failed offline writes or a concurrent claim keep paused valid saves conflict-protected (app harness)
+  ---
+  duration_ms: 15.169702
+  type: 'test'
+  ...
+# Subtest: TC-3D-009 REQ-3D-006 bad, future and foreign saves preserve source bytes through HUD settings and reload (app harness)
+ok 120 - TC-3D-009 REQ-3D-006 bad, future and foreign saves preserve source bytes through HUD settings and reload (app harness)
+  ---
+  duration_ms: 32.551756
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 REQ-3D-004 hidden/BFCache resume applies elapsed time only once and retains one RAF owner (app harness)
+ok 121 - TC-3D-008 REQ-3D-004 hidden/BFCache resume applies elapsed time only once and retains one RAF owner (app harness)
+  ---
+  duration_ms: 15.19465
+  type: 'test'
+  ...
+# Subtest: TC-3D-008 REQ-3D-004 final disposal removes UI listeners, observer and RAF; late scene actions are harmless (app harness)
+ok 122 - TC-3D-008 REQ-3D-004 final disposal removes UI listeners, observer and RAF; late scene actions are harmless (app harness)
+  ---
+  duration_ms: 9.231955
+  type: 'test'
+  ...
+# Subtest: TC-3D-011 explicit low-power app submits budgeted renders and keeps authoritative elapsed time
+ok 123 - TC-3D-011 explicit low-power app submits budgeted renders and keeps authoritative elapsed time
+  ---
+  duration_ms: 14.058493
+  type: 'test'
+  ...
+# Subtest: TC-3D-011 sub-frame visibility and BFCache saves settle visible time once without extra renders
+ok 124 - TC-3D-011 sub-frame visibility and BFCache saves settle visible time once without extra renders
+  ---
+  duration_ms: 8.503093
+  type: 'test'
+  ...
+# Subtest: TC-3D-011 delayed duplicate pageshow preserves the newly visible tail
+ok 125 - TC-3D-011 delayed duplicate pageshow preserves the newly visible tail
+  ---
+  duration_ms: 7.719179
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 default app draws every display frame using interpolated poses, without extra RAF owners
+ok 126 - TC-3D-012 default app draws every display frame using interpolated poses, without extra RAF owners
+  ---
+  duration_ms: 9.618729
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 quality selection changes renderer/budget, persists separately, and preserves economy
+ok 127 - TC-3D-012 quality selection changes renderer/budget, persists separately, and preserves economy
+  ---
+  duration_ms: 6.546557
+  type: 'test'
+  ...
+# Subtest: TC-3D-014 QA panel/debug are absent by default and explicit opt-in leaves saves and one-RAF timing unchanged
+ok 128 - TC-3D-014 QA panel/debug are absent by default and explicit opt-in leaves saves and one-RAF timing unchanged
+  ---
+  duration_ms: 44.904625
+  type: 'test'
+  ...
+# Error: WebGL unavailable in test fixture
+#     at new FakeScene (file:///workspace/scratch/44e846662812/mellow-bean/tests/fullscreen-ui.test.mjs:156:73)
+#     at evalmachine.<anonymous>:189:11
+#     at Script.runInContext (node:vm:149:12)
+#     at Script.runInNewContext (node:vm:154:17)
+#     at runInNewContext (node:vm:310:38)
+#     at fixture (file:///workspace/scratch/44e846662812/mellow-bean/tests/fullscreen-ui.test.mjs:191:3)
+#     at TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/fullscreen-ui.test.mjs:1089:23)
+#     at async Test.run (node:internal/test_runner/test:1389:7)
+#     at async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+# Subtest: TC-3D-014 QA sessions reset on reload/new shop and report missing renderer honestly (app harness)
+ok 129 - TC-3D-014 QA sessions reset on reload/new shop and report missing renderer honestly (app harness)
+  ---
+  duration_ms: 12.704739
+  type: 'test'
+  ...
+# Subtest: TC-3D-014 legacy-route actors are visibly marked rather than misreported as early new-route exits
+ok 130 - TC-3D-014 legacy-route actors are visibly marked rather than misreported as early new-route exits
+  ---
+  duration_ms: 3.373655
+  type: 'test'
+  ...
+# Subtest: TC-3D-015 performance panel is idle while closed, 1Hz when open, and leaves business state/save unchanged
+ok 131 - TC-3D-015 performance panel is idle while closed, 1Hz when open, and leaves business state/save unchanged
+  ---
+  duration_ms: 33.48767
+  type: 'test'
+  ...
+# Error: WebGL unavailable in test fixture
+#     at new FakeScene (file:///workspace/scratch/44e846662812/mellow-bean/tests/fullscreen-ui.test.mjs:156:73)
+#     at evalmachine.<anonymous>:189:11
+#     at Script.runInContext (node:vm:149:12)
+#     at Script.runInNewContext (node:vm:154:17)
+#     at runInNewContext (node:vm:310:38)
+#     at fixture (file:///workspace/scratch/44e846662812/mellow-bean/tests/fullscreen-ui.test.mjs:191:3)
+#     at TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/fullscreen-ui.test.mjs:1249:23)
+#     at Test.runInAsyncScope (node:async_hooks:227:14)
+#     at Test.run (node:internal/test_runner/test:1382:25)
+#     at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+# Subtest: TC-3D-015 counts rendered frames only, with no hidden/BFCache/mode/resize/reload cross-segment gap
+ok 132 - TC-3D-015 counts rendered frames only, with no hidden/BFCache/mode/resize/reload cross-segment gap
+  ---
+  duration_ms: 16.094989
+  type: 'test'
+  ...
+# Subtest: TC-3D-015 frozen results are stable and restart clears only diagnostics
+ok 133 - TC-3D-015 frozen results are stable and restart clears only diagnostics
+  ---
+  duration_ms: 5.257391
+  type: 'test'
+  ...
+# Subtest: TC-3D-015 visible-but-unfocused pages cannot contaminate foreground timing
+ok 134 - TC-3D-015 visible-but-unfocused pages cannot contaminate foreground timing
+  ---
+  duration_ms: 5.871208
+  type: 'test'
+  ...
+# Subtest: TC-3D-015 observed focus loss excludes its gap even when lifecycle events are missing
+ok 135 - TC-3D-015 observed focus loss excludes its gap even when lifecycle events are missing
+  ---
+  duration_ms: 3.909465
+  type: 'test'
+  ...
+# Subtest: TC-3D-015 context loss invalidates measurements even when the scene object survives
+ok 136 - TC-3D-015 context loss invalidates measurements even when the scene object survives
+  ---
+  duration_ms: 3.661019
+  type: 'test'
+  ...
+# Subtest: TC-3D-015 unavailable renderer never reports fake FPS; collapsed route panel skips pose/DOM capture
+ok 137 - TC-3D-015 unavailable renderer never reports fake FPS; collapsed route panel skips pose/DOM capture
+  ---
+  duration_ms: 9.966373
+  type: 'test'
+  ...
+# Subtest: TC-3D-016 four native quality buttons expose selection, clear labels and a roomy two-column layout
+ok 138 - TC-3D-016 four native quality buttons expose selection, clear labels and a roomy two-column layout
+  ---
+  duration_ms: 0.671965
+  type: 'test'
+  ...
+# Subtest: TC-3D-016 clear-60 renders 60 of 120Hz with continuous poses and identical saved progression
+ok 139 - TC-3D-016 clear-60 renders 60 of 120Hz with continuous poses and identical saved progression
+  ---
+  duration_ms: 23.429378
+  type: 'test'
+  ...
+# Subtest: TC-3D-016 existing preferences and two-counter saves survive clear-60 selection and reload
+ok 140 - TC-3D-016 existing preferences and two-counter saves survive clear-60 selection and reload
+  ---
+  duration_ms: 57.874088
+  type: 'test'
+  ...
+# Subtest: TC-3D-016 clear-60 QA records the new target and isolates mode changes into fresh segments
+ok 141 - TC-3D-016 clear-60 QA records the new target and isolates mode changes into fresh segments
+  ---
+  duration_ms: 9.450644
+  type: 'test'
+  ...
+# Subtest: TC-3D-019 failed latest-save reads retain the 570-earned frozen shop and cannot overwrite it after storage recovers
+ok 142 - TC-3D-019 failed latest-save reads retain the 570-earned frozen shop and cannot overwrite it after storage recovers
+  ---
+  duration_ms: 30.19729
+  type: 'test'
+  ...
+# Subtest: TC-3D-019 corrupt, future and missing reloads preserve current progress; only confirmed new-shop can replace it
+ok 143 - TC-3D-019 corrupt, future and missing reloads preserve current progress; only confirmed new-shop can replace it
+  ---
+  duration_ms: 59.200536
+  type: 'test'
+  ...
+# Subtest: TC-3D-019 startup read failure stays protected until a successful read, while a verified empty first launch starts normally
+ok 144 - TC-3D-019 startup read failure stays protected until a successful read, while a verified empty first launch starts normally
+  ---
+  duration_ms: 23.534437
+  type: 'test'
+  ...
+# Subtest: TC-3D-019 cancelled reload, failed reset and a new concurrent save never release recovery protection
+ok 145 - TC-3D-019 cancelled reload, failed reset and a new concurrent save never release recovery protection
+  ---
+  duration_ms: 19.099728
+  type: 'test'
+  ...
+# Subtest: TC-3D-019 startup outage followed by missing data needs explicit new-shop, never automatic recovery
+ok 146 - TC-3D-019 startup outage followed by missing data needs explicit new-shop, never automatic recovery
+  ---
+  duration_ms: 5.476132
+  type: 'test'
+  ...
+# Subtest: TC-3D-019 shutdown after failed recovery never writes prior or fallback state
+ok 147 - TC-3D-019 shutdown after failed recovery never writes prior or fallback state
+  ---
+  duration_ms: 39.650708
+  type: 'test'
+  ...
+# Subtest: TC-3D-019 protected raw export survives a later read outage and clears after recovery
+ok 148 - TC-3D-019 protected raw export survives a later read outage and clears after recovery
+  ---
+  duration_ms: 17.601765
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 unlimited 80% loading stays responsive, exposes only committed assets, and accounts visible work time
+ok 149 - TC-3D-020 unlimited 80% loading stays responsive, exposes only committed assets, and accounts visible work time
+  ---
+  duration_ms: 2767.341457
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 cancel, native close and retry retain original raw and never stamp a partial claim
+ok 150 - TC-3D-020 cancel, native close and retry retain original raw and never stamp a partial claim
+  ---
+  duration_ms: 1256.448908
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 hiding pending work cancels and restarts its unpaid interval once, including BFCache duplicates
+ok 151 - TC-3D-020 hiding pending work cancels and restarts its unpaid interval once, including BFCache duplicates
+  ---
+  duration_ms: 413.849313
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 pending storage conflict, newer read and disposal invalidate all late completion callbacks
+ok 152 - TC-3D-020 pending storage conflict, newer read and disposal invalidate all late completion callbacks
+  ---
+  duration_ms: 11.986905
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 hidden retry retains unsaved source after write failure and cancellation, including sub-tick gaps
+ok 153 - TC-3D-020 hidden retry retains unsaved source after write failure and cancellation, including sub-tick gaps
+  ---
+  duration_ms: 15.067999
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 legacy policy is explained only for its one-time settled interval
+ok 154 - TC-3D-020 legacy policy is explained only for its one-time settled interval
+  ---
+  duration_ms: 524.353548
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 settlement details retain fractional away and effective duration
+ok 155 - TC-3D-020 settlement details retain fractional away and effective duration
+  ---
+  duration_ms: 6.001124
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 v3 is continuous 80% at every former threshold, with no gameplay duration cap
+ok 156 - TC-3D-020 v3 is continuous 80% at every former threshold, with no gameplay duration cap
+  ---
+  duration_ms: 4.219213
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 exact boundary settlements equal ordinary simulation at 80%, including fixed-step carry
+not ok 157 - TC-3D-020 exact boundary settlements equal ordinary simulation at 80%, including fixed-step carry
+  ---
+  duration_ms: 3007.366374
+  type: 'test'
+  location: '/workspace/scratch/44e846662812/mellow-bean/tests/offline-policy.test.mjs:58:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    7200s boundary
+    + actual - expected
+    ... Skipped lines
+
+      {
+        arrivalTimer: 0.5,
+        counters: [
+          {
+            brew: {
+    ...
+        spend: 800,
+    +   stepCarry: 0.037,
+    -   stepCarry: 0.036999999999,
+        totalEarned: 359898,
+        totalServed: 1464,
+        wallet: 359560
+      }
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    schemaVersion: 1
+    economyVersion: 1
+    managerRouteVersion: 2
+    customerRouteVersion: 3
+    elapsed: 5776.1
+    wallet: 359560
+    totalEarned: 359898
+    totalServed: 1464
+    spend: 800
+    nextCustomerId: 1481
+    arrivalTimer: 0.5
+    inviteCooldown: 0
+    paused: false
+    stepCarry: 0.036999999999
+    eventSequence: 6478
+    counters:
+      0:
+        id: 'counter-a'
+        x: 0
+        level: 2
+        recipe: 'latte'
+        pendingCash: 0
+        brewed: 744
+        brew:
+          recipe: 'latte'
+          customerId: 1465
+          elapsed: 5.35
+          duration: 6.507177033492823
+          price: 246
+      1:
+        id: 'counter-b'
+        x: 5
+        level: 1
+        recipe: 'latte'
+        pendingCash: 246
+        brewed: 720
+        brew:
+          recipe: 'latte'
+          customerId: 1466
+          elapsed: 1.75
+          duration: 6.8
+          price: 246
+    customers:
+      0:
+        id: 1463
+        x: -5.525
+        z: 7.4
+        phase: 'leaving'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: true
+        skin: 4
+        routeLeg: 2
+      1:
+        id: 1464
+        x: 6.6
+        z: 5.625
+        phase: 'leaving'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: true
+        skin: 5
+        routeLeg: 1
+      2:
+        id: 1465
+        x: 0
+        z: 1.5
+        phase: 'serving'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 0
+      3:
+        id: 1466
+        x: 5
+        z: 1.5
+        phase: 'serving'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 1
+      4:
+        id: 1467
+        x: 0
+        z: 2.2199999999999998
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 2
+      5:
+        id: 1468
+        x: 5
+        z: 2.2199999999999998
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 3
+      6:
+        id: 1469
+        x: 0
+        z: 2.94
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 4
+      7:
+        id: 1470
+        x: 5
+        z: 2.94
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 5
+      8:
+        id: 1471
+        x: 0
+        z: 3.66
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 0
+      9:
+        id: 1472
+        x: 5
+        z: 3.66
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 1
+      10:
+        id: 1473
+        x: 0
+        z: 4.38
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 2
+      11:
+        id: 1474
+        x: 5
+        z: 4.38
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 3
+      12:
+        id: 1475
+        x: 0
+        z: 5.1
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 4
+      13:
+        id: 1476
+        x: 5
+        z: 5.1
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 5
+      14:
+        id: 1477
+        x: 0
+        z: 5.82
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 0
+      15:
+        id: 1478
+        x: 5
+        z: 5.82
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 1
+      16:
+        id: 1479
+        x: 0
+        z: 6.54
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 2
+      17:
+        id: 1480
+        x: -6.625
+        z: 5
+        phase: 'entering'
+        counterId: 'counter-b'
+        timer: 0
+        routeLeg: 0
+        hasCup: false
+        skin: 3
+    manager:
+      x: 4.939999999999997
+      z: -1.7
+      carrying: 492
+      phase: 'moving'
+      target: 2
+      timer: 0
+      level: 1
+  actual:
+    schemaVersion: 1
+    economyVersion: 1
+    managerRouteVersion: 2
+    customerRouteVersion: 3
+    elapsed: 5776.1
+    wallet: 359560
+    totalEarned: 359898
+    totalServed: 1464
+    spend: 800
+    nextCustomerId: 1481
+    arrivalTimer: 0.5
+    inviteCooldown: 0
+    paused: false
+    stepCarry: 0.037
+    eventSequence: 6478
+    counters:
+      0:
+        id: 'counter-a'
+        x: 0
+        level: 2
+        recipe: 'latte'
+        pendingCash: 0
+        brewed: 744
+        brew:
+          recipe: 'latte'
+          customerId: 1465
+          elapsed: 5.35
+          duration: 6.507177033492823
+          price: 246
+      1:
+        id: 'counter-b'
+        x: 5
+        level: 1
+        recipe: 'latte'
+        pendingCash: 246
+        brewed: 720
+        brew:
+          recipe: 'latte'
+          customerId: 1466
+          elapsed: 1.75
+          duration: 6.8
+          price: 246
+    customers:
+      0:
+        id: 1463
+        x: -5.525
+        z: 7.4
+        phase: 'leaving'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: true
+        skin: 4
+        routeLeg: 2
+      1:
+        id: 1464
+        x: 6.6
+        z: 5.625
+        phase: 'leaving'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: true
+        skin: 5
+        routeLeg: 1
+      2:
+        id: 1465
+        x: 0
+        z: 1.5
+        phase: 'serving'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 0
+      3:
+        id: 1466
+        x: 5
+        z: 1.5
+        phase: 'serving'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 1
+      4:
+        id: 1467
+        x: 0
+        z: 2.2199999999999998
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 2
+      5:
+        id: 1468
+        x: 5
+        z: 2.2199999999999998
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 3
+      6:
+        id: 1469
+        x: 0
+        z: 2.94
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 4
+      7:
+        id: 1470
+        x: 5
+        z: 2.94
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 5
+      8:
+        id: 1471
+        x: 0
+        z: 3.66
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 0
+      9:
+        id: 1472
+        x: 5
+        z: 3.66
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 1
+      10:
+        id: 1473
+        x: 0
+        z: 4.38
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 2
+      11:
+        id: 1474
+        x: 5
+        z: 4.38
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 3
+      12:
+        id: 1475
+        x: 0
+        z: 5.1
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 4
+      13:
+        id: 1476
+        x: 5
+        z: 5.1
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 5
+      14:
+        id: 1477
+        x: 0
+        z: 5.82
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 0
+      15:
+        id: 1478
+        x: 5
+        z: 5.82
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 1
+      16:
+        id: 1479
+        x: 0
+        z: 6.54
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 2
+      17:
+        id: 1480
+        x: -6.625
+        z: 5
+        phase: 'entering'
+        counterId: 'counter-b'
+        timer: 0
+        routeLeg: 0
+        hasCup: false
+        skin: 3
+    manager:
+      x: 4.939999999999997
+      z: -1.7
+      carrying: 492
+      phase: 'moving'
+      target: 2
+      timer: 0
+      level: 1
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/offline-policy.test.mjs:64:53)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+  ...
+# Subtest: TC-3D-020 a real 24-hour interval completes 69,120 seconds of ordinary simulation without a two-hour cap
+not ok 158 - TC-3D-020 a real 24-hour interval completes 69,120 seconds of ordinary simulation without a two-hour cap
+  ---
+  duration_ms: 18510.535406
+  type: 'test'
+  location: '/workspace/scratch/44e846662812/mellow-bean/tests/offline-policy.test.mjs:72:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    ... Skipped lines
+
+      {
+        arrivalTimer: 1.85,
+        counters: [
+          {
+            brew: {
+    ...
+        spend: 800,
+    +   stepCarry: 0.036999999997,
+    -   stepCarry: 0.036999999982,
+        totalEarned: 4319514,
+        totalServed: 17560,
+        wallet: 4318930
+      }
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    schemaVersion: 1
+    economyVersion: 1
+    managerRouteVersion: 2
+    customerRouteVersion: 3
+    elapsed: 69136.1
+    wallet: 4318930
+    totalEarned: 4319514
+    totalServed: 17560
+    spend: 800
+    nextCustomerId: 17576
+    arrivalTimer: 1.85
+    inviteCooldown: 0
+    paused: false
+    stepCarry: 0.036999999982
+    eventSequence: 77529
+    counters:
+      0:
+        id: 'counter-a'
+        x: 0
+        level: 2
+        recipe: 'latte'
+        pendingCash: 246
+        brewed: 8920
+        brew:
+          recipe: 'latte'
+          customerId: 17562
+          elapsed: 1.35
+          duration: 6.507177033492823
+          price: 246
+      1:
+        id: 'counter-b'
+        x: 5
+        level: 1
+        recipe: 'latte'
+        pendingCash: 246
+        brewed: 8640
+        brew:
+          recipe: 'latte'
+          customerId: 17561
+          elapsed: 1.75
+          duration: 6.8
+          price: 246
+    customers:
+      0:
+        id: 17559
+        x: 6.6
+        z: 5.625
+        phase: 'leaving'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: true
+        skin: 2
+        routeLeg: 1
+      1:
+        id: 17560
+        x: 1.6
+        z: 4.625
+        phase: 'leaving'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: true
+        skin: 3
+        routeLeg: 1
+      2:
+        id: 17561
+        x: 5
+        z: 1.5
+        phase: 'serving'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 4
+      3:
+        id: 17562
+        x: 0
+        z: 1.5
+        phase: 'serving'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 5
+      4:
+        id: 17563
+        x: 5
+        z: 2.2199999999999998
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 0
+      5:
+        id: 17564
+        x: 0
+        z: 2.2199999999999998
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 1
+      6:
+        id: 17565
+        x: 0
+        z: 2.94
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 2
+      7:
+        id: 17566
+        x: 5
+        z: 2.94
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 3
+      8:
+        id: 17567
+        x: 0
+        z: 3.66
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 4
+      9:
+        id: 17568
+        x: 5
+        z: 3.66
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 5
+      10:
+        id: 17569
+        x: 0
+        z: 4.38
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 0
+      11:
+        id: 17570
+        x: 5
+        z: 4.38
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 1
+      12:
+        id: 17571
+        x: 0
+        z: 5.1
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 2
+      13:
+        id: 17572
+        x: 5
+        z: 5.1
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 3
+      14:
+        id: 17573
+        x: 0
+        z: 5.82
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 4
+      15:
+        id: 17574
+        x: 5
+        z: 6.949999999999999
+        phase: 'entering'
+        counterId: 'counter-b'
+        timer: 0
+        routeLeg: 3
+        hasCup: false
+        skin: 5
+      16:
+        id: 17575
+        x: -6
+        z: 7.75
+        phase: 'entering'
+        counterId: 'counter-b'
+        timer: 0
+        routeLeg: 1
+        hasCup: false
+        skin: 0
+    manager:
+      x: 5.459999999999996
+      z: -1.7
+      carrying: 492
+      phase: 'moving'
+      target: 2
+      timer: 0
+      level: 1
+  actual:
+    schemaVersion: 1
+    economyVersion: 1
+    managerRouteVersion: 2
+    customerRouteVersion: 3
+    elapsed: 69136.1
+    wallet: 4318930
+    totalEarned: 4319514
+    totalServed: 17560
+    spend: 800
+    nextCustomerId: 17576
+    arrivalTimer: 1.85
+    inviteCooldown: 0
+    paused: false
+    stepCarry: 0.036999999997
+    eventSequence: 77529
+    counters:
+      0:
+        id: 'counter-a'
+        x: 0
+        level: 2
+        recipe: 'latte'
+        pendingCash: 246
+        brewed: 8920
+        brew:
+          recipe: 'latte'
+          customerId: 17562
+          elapsed: 1.35
+          duration: 6.507177033492823
+          price: 246
+      1:
+        id: 'counter-b'
+        x: 5
+        level: 1
+        recipe: 'latte'
+        pendingCash: 246
+        brewed: 8640
+        brew:
+          recipe: 'latte'
+          customerId: 17561
+          elapsed: 1.75
+          duration: 6.8
+          price: 246
+    customers:
+      0:
+        id: 17559
+        x: 6.6
+        z: 5.625
+        phase: 'leaving'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: true
+        skin: 2
+        routeLeg: 1
+      1:
+        id: 17560
+        x: 1.6
+        z: 4.625
+        phase: 'leaving'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: true
+        skin: 3
+        routeLeg: 1
+      2:
+        id: 17561
+        x: 5
+        z: 1.5
+        phase: 'serving'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 4
+      3:
+        id: 17562
+        x: 0
+        z: 1.5
+        phase: 'serving'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 5
+      4:
+        id: 17563
+        x: 5
+        z: 2.2199999999999998
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 0
+      5:
+        id: 17564
+        x: 0
+        z: 2.2199999999999998
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 1
+      6:
+        id: 17565
+        x: 0
+        z: 2.94
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 2
+      7:
+        id: 17566
+        x: 5
+        z: 2.94
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 3
+      8:
+        id: 17567
+        x: 0
+        z: 3.66
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 4
+      9:
+        id: 17568
+        x: 5
+        z: 3.66
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 5
+      10:
+        id: 17569
+        x: 0
+        z: 4.38
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 0
+      11:
+        id: 17570
+        x: 5
+        z: 4.38
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 1
+      12:
+        id: 17571
+        x: 0
+        z: 5.1
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 2
+      13:
+        id: 17572
+        x: 5
+        z: 5.1
+        phase: 'queue'
+        counterId: 'counter-b'
+        timer: 0
+        hasCup: false
+        skin: 3
+      14:
+        id: 17573
+        x: 0
+        z: 5.82
+        phase: 'queue'
+        counterId: 'counter-a'
+        timer: 0
+        hasCup: false
+        skin: 4
+      15:
+        id: 17574
+        x: 5
+        z: 6.949999999999999
+        phase: 'entering'
+        counterId: 'counter-b'
+        timer: 0
+        routeLeg: 3
+        hasCup: false
+        skin: 5
+      16:
+        id: 17575
+        x: -6
+        z: 7.75
+        phase: 'entering'
+        counterId: 'counter-b'
+        timer: 0
+        routeLeg: 1
+        hasCup: false
+        skin: 0
+    manager:
+      x: 5.459999999999996
+      z: -1.7
+      carrying: 492
+      phase: 'moving'
+      target: 2
+      timer: 0
+      level: 1
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/offline-policy.test.mjs:85:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: TC-3D-020 arbitrary job batches and randomized partitions preserve every simulated field
+ok 159 - TC-3D-020 arbitrary job batches and randomized partitions preserve every simulated field
+  ---
+  duration_ms: 242.669386
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 short partitions and reloads conserve fractional time through claim-history eviction
+ok 160 - TC-3D-020 short partitions and reloads conserve fractional time through claim-history eviction
+  ---
+  duration_ms: 117.049511
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 saved v3 short intervals settle once, while zero and rollback loads are byte-preserving
+ok 161 - TC-3D-020 saved v3 short intervals settle once, while zero and rollback loads are byte-preserving
+  ---
+  duration_ms: 16.093327
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 in-flight production retains full prices and frozen recipe/duration snapshots
+ok 162 - TC-3D-020 in-flight production retains full prices and frozen recipe/duration snapshots
+  ---
+  duration_ms: 1.252522
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 manager collection only moves existing cash; it is not reported as newly generated income
+ok 163 - TC-3D-020 manager collection only moves existing cash; it is not reported as newly generated income
+  ---
+  duration_ms: 4.159262
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 every legacy anchor uses its own policy once, then all subsequent short gaps use v3
+ok 164 - TC-3D-020 every legacy anchor uses its own policy once, then all subsequent short gaps use v3
+  ---
+  duration_ms: 5693.547433
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 zero, short, paused and rollback migrations never stamp policy or anchors before a successful write
+ok 165 - TC-3D-020 zero, short, paused and rollback migrations never stamp policy or anchors before a successful write
+  ---
+  duration_ms: 19.871824
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 unsupported versions fail closed; future-time migration never moves the anchor backwards
+ok 166 - TC-3D-020 unsupported versions fail closed; future-time migration never moves the anchor backwards
+  ---
+  duration_ms: 6.387518
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 paused v3 archives preserve all business state and consume each real interval once
+ok 167 - TC-3D-020 paused v3 archives preserve all business state and consume each real interval once
+  ---
+  duration_ms: 0.951467
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 numeric-limit refusal never truncates a gap, consumes its endpoint, or modifies the original bytes
+ok 168 - TC-3D-020 numeric-limit refusal never truncates a gap, consumes its endpoint, or modifies the original bytes
+  ---
+  duration_ms: 0.929714
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 integer-money overflow refuses the whole candidate in synchronous and asynchronous settlement
+ok 169 - TC-3D-020 integer-money overflow refuses the whole candidate in synchronous and asynchronous settlement
+  ---
+  duration_ms: 0.957566
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 deferred settlement yields bounded batches, exposes read-only progress, then commits exactly once
+ok 170 - TC-3D-020 deferred settlement yields bounded batches, exposes read-only progress, then commits exactly once
+  ---
+  duration_ms: 5.043518
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 cancellation and thrown callbacks retain the complete unpaid interval and permit clean retry
+ok 171 - TC-3D-020 cancellation and thrown callbacks retain the complete unpaid interval and permit clean retry
+  ---
+  duration_ms: 34.508271
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 aborting or throwing from the final progress callback still prevents the commit
+ok 172 - TC-3D-020 aborting or throwing from the final progress callback still prevents the commit
+  ---
+  duration_ms: 2.293353
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 interrupted legacy async migration never exposes v3 before successful settlement
+ok 173 - TC-3D-020 interrupted legacy async migration never exposes v3 before successful settlement
+  ---
+  duration_ms: 26.554037
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 late work cannot overwrite a newer load, settlement, explicit reset, or another writer
+ok 174 - TC-3D-020 late work cannot overwrite a newer load, settlement, explicit reset, or another writer
+  ---
+  duration_ms: 8.299315
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 overlapping finish calls cannot commit twice or cancel the active owner
+ok 175 - TC-3D-020 overlapping finish calls cannot commit twice or cancel the active owner
+  ---
+  duration_ms: 4.666168
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 final write failure and compare-before-write races preserve source bytes and full unpaid time
+ok 176 - TC-3D-020 final write failure and compare-before-write races preserve source bytes and full unpaid time
+  ---
+  duration_ms: 11.941797
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 zero and short legacy migration CAS conflicts cannot stamp the losing candidate
+ok 177 - TC-3D-020 zero and short legacy migration CAS conflicts cannot stamp the losing candidate
+  ---
+  duration_ms: 8.048106
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 live hidden settlement respects later durable anchors, cancellation and concurrent writers
+ok 178 - TC-3D-020 live hidden settlement respects later durable anchors, cancellation and concurrent writers
+  ---
+  duration_ms: 4.002065
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 maximum storage tags and rejected duplicate claims never discard an unpaid endpoint
+ok 179 - TC-3D-020 maximum storage tags and rejected duplicate claims never discard an unpaid endpoint
+  ---
+  duration_ms: 5.339064
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 exact live sources may retry zero, sub-step and paused write failures without authorizing other saves
+ok 180 - TC-3D-020 exact live sources may retry zero, sub-step and paused write failures without authorizing other saves
+  ---
+  duration_ms: 9.838039
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 cancellation of a 10ms live gap preserves its source and fractional carry for exact retry
+not ok 181 - TC-3D-020 cancellation of a 10ms live gap preserves its source and fractional carry for exact retry
+  ---
+  duration_ms: 2.332824
+  type: 'test'
+  location: '/workspace/scratch/44e846662812/mellow-bean/tests/offline-policy.test.mjs:420:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+
+    + 21.15
+    - 21.150000000000002
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 21.150000000000002
+  actual: 21.15
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean/tests/offline-policy.test.mjs:430:10)
+    async Test.run (node:internal/test_runner/test:1389:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: TC-3D-020 live CAS conflict stays latched even if another actor later restores the old bytes
+ok 182 - TC-3D-020 live CAS conflict stays latched even if another actor later restores the old bytes
+  ---
+  duration_ms: 3.598245
+  type: 'test'
+  ...
+# Subtest: TC-3D-020 generated live claim collisions and failed reads never grant exact-source retry authority
+ok 183 - TC-3D-020 generated live claim collisions and failed reads never grant exact-source retry authority
+  ---
+  duration_ms: 1.349379
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 smooth follows every 30Hz display refresh with equal time intervals
+ok 184 - TC-3D-012 smooth follows every 30Hz display refresh with equal time intervals
+  ---
+  duration_ms: 1.509841
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 explicit clear-60 on 30Hz drops renders without losing time
+ok 185 - TC-3D-012 explicit clear-60 on 30Hz drops renders without losing time
+  ---
+  duration_ms: 0.239301
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 explicit balanced on 30Hz drops renders without losing time
+ok 186 - TC-3D-012 explicit balanced on 30Hz drops renders without losing time
+  ---
+  duration_ms: 1.306213
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 explicit low-power on 30Hz drops renders without losing time
+ok 187 - TC-3D-012 explicit low-power on 30Hz drops renders without losing time
+  ---
+  duration_ms: 0.19915
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 smooth follows every 60Hz display refresh with equal time intervals
+ok 188 - TC-3D-012 smooth follows every 60Hz display refresh with equal time intervals
+  ---
+  duration_ms: 0.283448
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 explicit clear-60 on 60Hz drops renders without losing time
+ok 189 - TC-3D-012 explicit clear-60 on 60Hz drops renders without losing time
+  ---
+  duration_ms: 0.144038
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 explicit balanced on 60Hz drops renders without losing time
+ok 190 - TC-3D-012 explicit balanced on 60Hz drops renders without losing time
+  ---
+  duration_ms: 0.122926
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 explicit low-power on 60Hz drops renders without losing time
+ok 191 - TC-3D-012 explicit low-power on 60Hz drops renders without losing time
+  ---
+  duration_ms: 0.134714
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 smooth follows every 90Hz display refresh with equal time intervals
+ok 192 - TC-3D-012 smooth follows every 90Hz display refresh with equal time intervals
+  ---
+  duration_ms: 0.303218
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 explicit clear-60 on 90Hz drops renders without losing time
+ok 193 - TC-3D-012 explicit clear-60 on 90Hz drops renders without losing time
+  ---
+  duration_ms: 0.182926
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 explicit balanced on 90Hz drops renders without losing time
+ok 194 - TC-3D-012 explicit balanced on 90Hz drops renders without losing time
+  ---
+  duration_ms: 0.161734
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 explicit low-power on 90Hz drops renders without losing time
+ok 195 - TC-3D-012 explicit low-power on 90Hz drops renders without losing time
+  ---
+  duration_ms: 0.090717
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 smooth follows every 120Hz display refresh with equal time intervals
+ok 196 - TC-3D-012 smooth follows every 120Hz display refresh with equal time intervals
+  ---
+  duration_ms: 0.17882
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 explicit clear-60 on 120Hz drops renders without losing time
+ok 197 - TC-3D-012 explicit clear-60 on 120Hz drops renders without losing time
+  ---
+  duration_ms: 2.15852
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 explicit balanced on 120Hz drops renders without losing time
+ok 198 - TC-3D-012 explicit balanced on 120Hz drops renders without losing time
+  ---
+  duration_ms: 0.097077
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 explicit low-power on 120Hz drops renders without losing time
+ok 199 - TC-3D-012 explicit low-power on 120Hz drops renders without losing time
+  ---
+  duration_ms: 0.096646
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 smooth follows every 144Hz display refresh with equal time intervals
+ok 200 - TC-3D-012 smooth follows every 144Hz display refresh with equal time intervals
+  ---
+  duration_ms: 0.144308
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 explicit clear-60 on 144Hz drops renders without losing time
+ok 201 - TC-3D-012 explicit clear-60 on 144Hz drops renders without losing time
+  ---
+  duration_ms: 3.543572
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 explicit balanced on 144Hz drops renders without losing time
+ok 202 - TC-3D-012 explicit balanced on 144Hz drops renders without losing time
+  ---
+  duration_ms: 0.082354
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 explicit low-power on 144Hz drops renders without losing time
+ok 203 - TC-3D-012 explicit low-power on 144Hz drops renders without losing time
+  ---
+  duration_ms: 0.061142
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 smooth follows every 240Hz display refresh with equal time intervals
+ok 204 - TC-3D-012 smooth follows every 240Hz display refresh with equal time intervals
+  ---
+  duration_ms: 0.180212
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 explicit clear-60 on 240Hz drops renders without losing time
+ok 205 - TC-3D-012 explicit clear-60 on 240Hz drops renders without losing time
+  ---
+  duration_ms: 0.085419
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 explicit balanced on 240Hz drops renders without losing time
+ok 206 - TC-3D-012 explicit balanced on 240Hz drops renders without losing time
+  ---
+  duration_ms: 0.064307
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 explicit low-power on 240Hz drops renders without losing time
+ok 207 - TC-3D-012 explicit low-power on 240Hz drops renders without losing time
+  ---
+  duration_ms: 0.056565
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 delayed/duplicate/invalid RAFs never replay; reset excludes hidden time
+ok 208 - TC-3D-012 delayed/duplicate/invalid RAFs never replay; reset excludes hidden time
+  ---
+  duration_ms: 0.090798
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 changing quality preserves exactly one pending visible tail
+ok 209 - TC-3D-012 changing quality preserves exactly one pending visible tail
+  ---
+  duration_ms: 0.11928
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 crisp default restores Retina samples, explicit modes bound large buffers
+ok 210 - TC-3D-012 crisp default restores Retina samples, explicit modes bound large buffers
+  ---
+  duration_ms: 0.221444
+  type: 'test'
+  ...
+# Subtest: TC-3D-012 malformed/blocked preferences select smooth without touching the game save
+ok 211 - TC-3D-012 malformed/blocked preferences select smooth without touching the game save
+  ---
+  duration_ms: 0.192781
+  type: 'test'
+  ...
+# Subtest: TC-3D-016 clear-60 keeps exactly the smooth resolution budgets at every viewport
+ok 212 - TC-3D-016 clear-60 keeps exactly the smooth resolution budgets at every viewport
+  ---
+  duration_ms: 0.647007
+  type: 'test'
+  ...
+# Subtest: TC-3D-016 clear-60 switches preserve pending time and never replay slow or hidden frames
+ok 213 - TC-3D-016 clear-60 switches preserve pending time and never replay slow or hidden frames
+  ---
+  duration_ms: 0.174934
+  type: 'test'
+  ...
+# Subtest: TC-3D-014 trace is explicitly opt-in; detached/throwing observers cannot change snapshots, business events or saves
+ok 214 - TC-3D-014 trace is explicitly opt-in; detached/throwing observers cannot change snapshots, business events or saves
+  ---
+  duration_ms: 195.701742
+  type: 'test'
+  ...
+# Subtest: TC-3D-014 real fixed-step paths remain complete across one stalled frame, 20Hz and 144Hz
+ok 215 - TC-3D-014 real fixed-step paths remain complete across one stalled frame, 20Hz and 144Hz
+  ---
+  duration_ms: 124.397325
+  type: 'test'
+  ...
+# Subtest: TC-3D-014 crossing endpoints count once; despawn records actual endpoint before delayed presentation disposal
+ok 216 - TC-3D-014 crossing endpoints count once; despawn records actual endpoint before delayed presentation disposal
+  ---
+  duration_ms: 1.482489
+  type: 'test'
+  ...
+# Subtest: TC-3D-014 manager logs real B→A→vault transfers while return passage and empty stops create no money
+ok 217 - TC-3D-014 manager logs real B→A→vault transfers while return passage and empty stops create no money
+  ---
+  duration_ms: 2.848452
+  type: 'test'
+  ...
+# Subtest: TC-3D-014 bounded record, sticky customer identity, isolated readers, and explicit reset prevent stale IDs
+ok 218 - TC-3D-014 bounded record, sticky customer identity, isolated readers, and explicit reset prevent stale IDs
+  ---
+  duration_ms: 181.185652
+  type: 'test'
+  ...
+# Subtest: TC-3D-014 two same-step transitions keep real order and pre-movement transition coordinates
+ok 219 - TC-3D-014 two same-step transitions keep real order and pre-movement transition coordinates
+  ---
+  duration_ms: 0.810785
+  type: 'test'
+  ...
+# Subtest: TC-3D-001 real manager route collects nearest B, farther A, then deposits at the shared vault
+ok 220 - TC-3D-001 real manager route collects nearest B, farther A, then deposits at the shared vault
+  ---
+  duration_ms: 21.630409
+  type: 'test'
+  ...
+# Subtest: TC-3D-001 B-first collection preserves per-counter half-bag limits at every manager level
+ok 221 - TC-3D-001 B-first collection preserves per-counter half-bag limits at every manager level
+  ---
+  duration_ms: 15.49276
+  type: 'test'
+  ...
+# Subtest: TC-3D-003 real route keeps identical state and cash-event order under split advance
+ok 222 - TC-3D-003 real route keeps identical state and cash-event order under split advance
+  ---
+  duration_ms: 37.57355
+  type: 'test'
+  ...
+# Subtest: TC-3D-004 route resumes exactly after saving each moving, collecting and depositing leg
+ok 223 - TC-3D-004 route resumes exactly after saving each moving, collecting and depositing leg
+  ---
+  duration_ms: 40.631829
+  type: 'test'
+  ...
+# Subtest: TC-3D-004 explicit legacy migration preserves in-flight stops, timers, assets and once-only versioning
+ok 224 - TC-3D-004 explicit legacy migration preserves in-flight stops, timers, assets and once-only versioning
+  ---
+  duration_ms: 10.031551
+  type: 'test'
+  ...
+# Subtest: TC-3D-004 legacy migration leaves active customers and frozen brew snapshots untouched
+ok 225 - TC-3D-004 legacy migration leaves active customers and frozen brew snapshots untouched
+  ---
+  duration_ms: 0.652656
+  type: 'test'
+  ...
+# Subtest: TC-3D-004 a migrated sweep resumes without repeating stops after every in-flight save/reload
+ok 226 - TC-3D-004 a migrated sweep resumes without repeating stops after every in-flight save/reload
+  ---
+  duration_ms: 84.063226
+  type: 'test'
+  ...
+# Subtest: TC-3D-004 new route validator rejects off-stop actions, invalid segments and migration/version misuse
+ok 227 - TC-3D-004 new route validator rejects off-stop actions, invalid segments and migration/version misuse
+  ---
+  duration_ms: 1.156016
+  type: 'test'
+  ...
+# Subtest: TC-3D-004 authentic legacy archives migrate offline only once and retain retries/CAS protection
+ok 228 - TC-3D-004 authentic legacy archives migrate offline only once and retain retries/CAS protection
+  ---
+  duration_ms: 50.04735
+  type: 'test'
+  ...
+# Subtest: TC-3D-001 cash stays conserved through visible customer and manager phases
+ok 229 - TC-3D-001 cash stays conserved through visible customer and manager phases
+  ---
+  duration_ms: 42.49309
+  type: 'test'
+  ...
+# Subtest: TC-3D-003 fixed-step advance is independent of frame partition and save round trips
+ok 230 - TC-3D-003 fixed-step advance is independent of frame partition and save round trips
+  ---
+  duration_ms: 77.847078
+  type: 'test'
+  ...
+# Subtest: TC-3D-002 recipes and upgrades affect the next brew only
+ok 231 - TC-3D-002 recipes and upgrades affect the next brew only
+  ---
+  duration_ms: 1.207984
+  type: 'test'
+  ...
+# Subtest: TC-3D-002 original counter affinities create a meaningful recipe tradeoff
+ok 232 - TC-3D-002 original counter affinities create a meaningful recipe tradeoff
+  ---
+  duration_ms: 77.20257
+  type: 'test'
+  ...
+# Subtest: TC-3D-003 repeated input is bounded by cooldown, capacity, cost and maximum level
+ok 233 - TC-3D-003 repeated input is bounded by cooldown, capacity, cost and maximum level
+  ---
+  duration_ms: 731.002399
+  type: 'test'
+  ...
+# Subtest: TC-3D-003 paused time and invalid deltas cannot create progress
+ok 234 - TC-3D-003 paused time and invalid deltas cannot create progress
+  ---
+  duration_ms: 0.282446
+  type: 'test'
+  ...
+# Subtest: TC-3D-004 corrupt and future saves preserve original bytes and reject autosave
+ok 235 - TC-3D-004 corrupt and future saves preserve original bytes and reject autosave
+  ---
+  duration_ms: 0.461888
+  type: 'test'
+  ...
+# Subtest: TC-3D-004 strict validation catches enums, non-finite values, bounds and broken ledgers
+ok 236 - TC-3D-004 strict validation catches enums, non-finite values, bounds and broken ledgers
+  ---
+  duration_ms: 0.357119
+  type: 'test'
+  ...
+# Subtest: TC-3D-004 offline close-loop income has no gameplay cap and is claimed only once
+ok 237 - TC-3D-004 offline close-loop income has no gameplay cap and is claimed only once
+  ---
+  duration_ms: 1446.838807
+  type: 'test'
+  ...
+# Subtest: TC-3D-004 paused offline, storage errors and another client cannot overwrite valid progress
+ok 238 - TC-3D-004 paused offline, storage errors and another client cannot overwrite valid progress
+  ---
+  duration_ms: 0.516961
+  type: 'test'
+  ...
+# Subtest: TC-3D-004 overlapping reload endpoints and backwards clocks never reclaim the same interval
+ok 239 - TC-3D-004 overlapping reload endpoints and backwards clocks never reclaim the same interval
+  ---
+  duration_ms: 18.129863
+  type: 'test'
+  ...
+# Subtest: TC-3D-004 failed offline anchor writes grant no income and remain retryable
+ok 240 - TC-3D-004 failed offline anchor writes grant no income and remain retryable
+  ---
+  duration_ms: 21.202815
+  type: 'test'
+  ...
+# Subtest: TC-3D-004 save validator accepts every live phase under mixed deterministic actions
+ok 241 - TC-3D-004 save validator accepts every live phase under mixed deterministic actions
+  ---
+  duration_ms: 225.020621
+  type: 'test'
+  ...
+# Subtest: TC-3D-001 capped production exposes a real transport bottleneck removable by manager upgrades
+ok 242 - TC-3D-001 capped production exposes a real transport bottleneck removable by manager upgrades
+  ---
+  duration_ms: 272.412982
+  type: 'test'
+  ...
+# Subtest: TC-3D-005 opaque CAS tags, idempotent retry and offline two-client conflict
+ok 243 - TC-3D-005 opaque CAS tags, idempotent retry and offline two-client conflict
+  ---
+  duration_ms: 10.149981
+  type: 'test'
+  ...
+# Subtest: TC-3D-019 repository blocks writes across unresolved load failures and permits only verified recovery
+ok 244 - TC-3D-019 repository blocks writes across unresolved load failures and permits only verified recovery
+  ---
+  duration_ms: 4.803035
+  type: 'test'
+  ...
+# Subtest: TC-3D-019 missing saves are distinct from first-launch empty storage and need explicit reset before writing
+ok 245 - TC-3D-019 missing saves are distinct from first-launch empty storage and need explicit reset before writing
+  ---
+  duration_ms: 0.303699
+  type: 'test'
+  ...
+# Subtest: TC-3D-019 initial read outage cannot silently initialize an empty recovery and reset retains CAS/backup protection
+ok 246 - TC-3D-019 initial read outage cannot silently initialize an empty recovery and reset retains CAS/backup protection
+  ---
+  duration_ms: 0.387325
+  type: 'test'
+  ...
+1..246
+# tests 246
+# suites 0
+# pass 243
+# fail 3
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 27970.419101

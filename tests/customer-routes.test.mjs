@@ -233,7 +233,10 @@ test('TC-3D-011 legacy stationary phases and frozen brew receipts survive migrat
 
 test('TC-3D-011 customer-route offline migration remains once-only and respects failure, pause and CAS boundaries', () => {
   const source = legacyBrewState(), raw = envelope(source), memory = createMemoryStorage(); memory.setItem(SAVE_KEY, raw);
-  const immediate = new LocalSaveRepository(memory).load(1000); assert.equal(immediate.status, 'loaded'); assert.equal(memory.getItem(SAVE_KEY), raw);
+  const immediate = new LocalSaveRepository(memory).load(1000); assert.equal(immediate.status, 'loaded');
+  assert.equal(JSON.parse(memory.getItem(SAVE_KEY)).offlinePolicyVersion, 3);
+  assert.deepEqual(JSON.parse(memory.getItem(SAVE_KEY)).state, immediate.state);
+  memory.setItem(SAVE_KEY, raw); // Exercise failure/retry from authentic pre-policy bytes.
   const failing = { ...memory, setItem() { throw Error('quota'); } };
   const failed = new LocalSaveRepository(failing).load(121000);
   assert.equal(failed.status, 'offline-save-failed'); assert.equal(failed.offline.accepted, false); assert.deepEqual(failed.state, immediate.state); assert.equal(memory.getItem(SAVE_KEY), raw);

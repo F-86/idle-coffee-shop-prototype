@@ -1,0 +1,451 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> idle-coffee-shop-prototype@0.2.0 test
+> node --test tests/*.test.mjs
+
+BJS - [09:23:52]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:53]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:53]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:53]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:53]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:54]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:54]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:54]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:54]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:54]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:55]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:55]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:55]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:55]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:55]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:55]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:56]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:56]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:56]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:56]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:56]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:56]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:56]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:57]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:57]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:57]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:57]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:57]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:57]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:58]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:58]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:58]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:58]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:58]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:58]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:59]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:59]: Babylon.js v9.29.0 - Null engine
+BJS - [09:23:59]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:00]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:00]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:00]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:01]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:01]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:01]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:01]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:01]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:02]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:02]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:02]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:02]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:02]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:02]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:03]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:03]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:03]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:03]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:03]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:03]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:04]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:04]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:04]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:04]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:04]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:05]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:05]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:05]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:05]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:05]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:05]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:05]: Babylon.js v9.29.0 - Null engine
+BJS - [09:24:06]: Babylon.js v9.29.0 - Null engine
+✔ TC-3D-006 original reusable geometry presents snapshots without changing business state (845.309695ms)
+✔ TC-3D-006 all physical room controls dispatch detail actions without mutating economy (188.440665ms)
+✔ TC-3D-023 counter coffee left / upgrade right at 1280×900, DPR 1: separate physical targets (projection/input only) (196.295865ms)
+✔ TC-3D-023 counter coffee left / upgrade right at 1280×900, DPR 1.75: separate physical targets (projection/input only) (177.332497ms)
+✔ TC-3D-023 counter coffee left / upgrade right at 390×844, DPR 1: separate physical targets (projection/input only) (162.513682ms)
+✔ TC-3D-023 counter coffee left / upgrade right at 390×844, DPR 1.75: separate physical targets (projection/input only) (172.036026ms)
+✔ TC-3D-023 counter coffee left / upgrade right at 844×390, DPR 1: separate physical targets (projection/input only) (150.924928ms)
+✔ TC-3D-023 counter coffee left / upgrade right at 844×390, DPR 1.75: separate physical targets (projection/input only) (184.728703ms)
+✔ TC-3D-023 each A/B front control respects solid occlusion and a press cannot transfer between coffee and upgrade (157.596516ms)
+✔ TC-3D-023 wall coffee boards independently follow shared levels and only repaint when their level changes (CPU presentation data) (252.850189ms)
+✔ TC-3D-006 panning, long holds, cancelled and secondary pointers cannot become taps (183.442851ms)
+✔ TC-3D-001 cups, brew progress, table money, manager cart and machine upgrades are state-driven (143.026168ms)
+✔ TC-3D-006 pause freezes animation, disposal removes listeners and late input is harmless (180.554829ms)
+✔ TC-3D-006 physical 1280×900 at DPR 1: close room, shared anchors and reachable controls (projection only) (135.374549ms)
+✔ TC-3D-006 physical 1280×900 at DPR 1.75: close room, shared anchors and reachable controls (projection only) (165.640221ms)
+✔ TC-3D-006 captured drag is bounded and scene surfaces fill 1280×900 (ray coverage only) (168.911796ms)
+✔ TC-3D-006 physical 390×844 at DPR 1: close room, shared anchors and reachable controls (projection only) (140.93624ms)
+✔ TC-3D-006 physical 390×844 at DPR 1.75: close room, shared anchors and reachable controls (projection only) (138.617905ms)
+✔ TC-3D-006 captured drag is bounded and scene surfaces fill 390×844 (ray coverage only) (148.740544ms)
+✔ TC-3D-006 physical 844×390 at DPR 1: close room, shared anchors and reachable controls (projection only) (151.122667ms)
+✔ TC-3D-006 physical 844×390 at DPR 1.75: close room, shared anchors and reachable controls (projection only) (165.555166ms)
+✔ TC-3D-006 captured drag is bounded and scene surfaces fill 844×390 (ray coverage only) (148.127213ms)
+✔ TC-3D-006 cancellation, capture loss and unrelated pointers preserve one drag owner (152.514053ms)
+✔ TC-3D-006 wall menus remain global recipe boards while each counter selector follows its recipe (171.090873ms)
+✔ TC-3D-008 actual control polygon accepts a 44px circle at 1280×900, DPR 1 (geometry only) (163.733596ms)
+✔ TC-3D-008 actual control polygon accepts a 44px circle at 1280×900, DPR 1.75 (geometry only) (198.352977ms)
+✔ TC-3D-008 actual control polygon accepts a 44px circle at 390×844, DPR 1 (geometry only) (182.00179ms)
+✔ TC-3D-008 actual control polygon accepts a 44px circle at 390×844, DPR 1.75 (geometry only) (150.619177ms)
+✔ TC-3D-008 actual control polygon accepts a 44px circle at 844×390, DPR 1 (geometry only) (176.73318ms)
+✔ TC-3D-008 actual control polygon accepts a 44px circle at 844×390, DPR 1.75 (geometry only) (161.143474ms)
+✔ TC-3D-008 every label is lit opaque depth-tested ink on a mounted non-billboard scene slab (155.366947ms)
+✔ TC-3D-008 front solid blocks pointer and keyboard; removing it restores real mesh picking (144.83479ms)
+✔ TC-3D-008 pointer start and release require the same visible physical mesh, exactly once (181.595085ms)
+✔ TC-3D-008 opening a modal cancels captured input; every interaction stays suspended until close (148.529885ms)
+✔ TC-3D-008 keyboard cycles every embodied control, preserves physical focus and is inert after disposal (157.98382ms)
+✔ TC-3D-008 side-front upgrade plaques remain hittable while a customer occupies the service point (147.802082ms)
+✔ TC-3D-008 small trolley cash table stays visible while manager turns without orbiting into furniture (223.48267ms)
+✔ TC-3D-008 world-oriented trolley clears wall, counters and baristas throughout the service route (1010.227204ms)
+✔ TC-3D-008 small pending cash stays physically visible beside its flat amount tag (160.706975ms)
+✔ TC-3D-009 refined physical layout at 1280×900, DPR 1: vault left and independent front controls (geometry only) (220.173004ms)
+✔ TC-3D-009 refined physical layout at 1280×900, DPR 1.75: vault left and independent front controls (geometry only) (178.012441ms)
+✔ TC-3D-009 refined physical layout at 390×844, DPR 1: vault left and independent front controls (geometry only) (172.671428ms)
+✔ TC-3D-009 refined physical layout at 390×844, DPR 1.75: vault left and independent front controls (geometry only) (223.994296ms)
+✔ TC-3D-009 refined physical layout at 844×390, DPR 1: vault left and independent front controls (geometry only) (245.611286ms)
+✔ TC-3D-009 refined physical layout at 844×390, DPR 1.75: vault left and independent front controls (geometry only) (243.496647ms)
+✔ TC-3D-009 vault owns manager level affordance and no removed scene action survives (202.865539ms)
+✔ TC-3D-009 pending money tag shares the banknote cluster and cannot become a raised register (189.856633ms)
+✔ TC-3D-010 rendered manager follows direct snapshots through B → A → vault and the deposit (153.072742ms)
+✔ TC-3D-009 receipt ink fits long exact amounts without cropping or abbreviation (canvas-context unit check) (134.619086ms)
+✔ TC-3D-010 continuous floor and wall carry aligned matte patterns with joined room surfaces (140.394661ms)
+✔ TC-3D-010 pattern ink uses equal floor-axis strokes and diffuse contrast without self-light (145.895174ms)
+✔ TC-3D-010 physical manager plaque clears the entire vault silhouette at 1280×900, DPR 1 (projection only) (129.209253ms)
+✔ TC-3D-010 physical manager plaque clears the entire vault silhouette at 1280×900, DPR 1.75 (projection only) (147.463895ms)
+✔ TC-3D-010 physical manager plaque clears the entire vault silhouette at 390×844, DPR 1 (projection only) (157.576255ms)
+✔ TC-3D-010 physical manager plaque clears the entire vault silhouette at 390×844, DPR 1.75 (projection only) (147.53753ms)
+✔ TC-3D-010 physical manager plaque clears the entire vault silhouette at 844×390, DPR 1 (projection only) (156.582103ms)
+✔ TC-3D-010 physical manager plaque clears the entire vault silhouette at 844×390, DPR 1.75 (projection only) (156.856398ms)
+✔ TC-3D-010 real core sweep collects visible B cash then A cash, and only deposits at the same vault (527.47876ms)
+✔ TC-3D-011 static work is frozen while live actors, cups, cash parents and physical controls stay correct (164.763913ms)
+✔ TC-3D-013 side aisles join a separate return lane ending beyond the entrance, with no obsolete arrows (135.191441ms)
+✔ TC-3D-011 moving contact disks remain above the physical rug/arrow surfaces (159.679662ms)
+✔ TC-3D-011 cached shadow bounds cover static furniture and upgrades invalidate once (NullEngine math) (162.545251ms)
+✔ TC-3D-012 renderer pairs Babylon frame boundaries and changes quality without rebuilding the scene (152.772118ms)
+✔ TC-3D-014 QA identity reads actual customer mesh and CSS projection without changing render objects (181.926358ms)
+✔ TC-3D-018 vault plaque stays close without covering its icon at 1280×900, DPR 1 (projection only) (140.382282ms)
+✔ TC-3D-018 vault plaque stays close without covering its icon at 1280×900, DPR 1.75 (projection only) (132.804285ms)
+✔ TC-3D-018 vault plaque stays close without covering its icon at 390×844, DPR 1 (projection only) (140.931602ms)
+✔ TC-3D-018 vault plaque stays close without covering its icon at 390×844, DPR 1.75 (projection only) (125.895538ms)
+✔ TC-3D-018 vault plaque stays close without covering its icon at 844×390, DPR 1 (projection only) (136.740575ms)
+✔ TC-3D-018 vault plaque stays close without covering its icon at 844×390, DPR 1.75 (projection only) (153.479466ms)
+✔ TC-3D-018 full-width departure corners are filled and meet without overlapping top surfaces (geometry/rays only) (196.215986ms)
+✔ TC-3D-011 customer route geometry separates the trunk, full queues and local exits (16.70992ms)
+✔ TC-3D-011 invitation batches arrive in distinct positions on the entry approach (7.431665ms)
+✔ TC-3D-011 live paths remain continuous and clear through full queues, upgrades and eventual disappearance (2040.666376ms)
+✔ TC-3D-011 saving and reloading each inbound and outbound leg resumes exact positions, events and ledgers (55.271546ms)
+✔ TC-3D-011 route validation fails closed on corrupt legs, coordinates, flags and future versions (1.700048ms)
+✔ TC-3D-011 legacy customers retain coordinates and finish once while new guests follow separated routes (94.110381ms)
+✔ TC-3D-011 legacy stationary phases and frozen brew receipts survive migration without repair or recredit (1.117928ms)
+✔ TC-3D-011 customer-route offline migration remains once-only and respects failure, pause and CAS boundaries (26.926483ms)
+✔ TC-3D-011 draft full-load payback includes the physical sideways-clearance wait (0.535929ms)
+✔ TC-3D-013 parallel return lane clears full queue tails and continues beyond the entrance boundary (202.021132ms)
+✔ TC-3D-013 crossing and merge right-of-way remains collision-free, continuous and reloadable (29.763417ms)
+✔ TC-3D-013 v2 in-flight legs extend without migration teleport, economic changes or early disappearance (396.838299ms)
+✔ TC-3D-013 maximum-level sustained batches clear all junctions without overlap or permanent waiting (2555.521962ms)
+✔ TC-3D-013 accepted close v2 turns separate continuously instead of freezing or teleporting (1.989555ms)
+✔ TC-3D-015 rendered cadence uses caller monotonic timestamps and nearest-rank percentiles (1.670193ms)
+✔ TC-3D-015 rolling window excludes old intervals while lifetime aggregates retain stalls (0.744305ms)
+✔ TC-3D-015 a long foreground stall is retained whole and never mistaken for hidden time (0.361065ms)
+✔ TC-3D-015 fixed rings stay bounded at high refresh and expose capacity truncation (12.48641ms)
+✔ TC-3D-015 read snapshots cannot mutate retained diagnostics (0.234865ms)
+✔ TC-3D-012 30Hz presents constant-speed manager/customer motion between 20Hz ticks (5.719168ms)
+✔ TC-3D-012 60Hz presents constant-speed manager/customer motion between 20Hz ticks (0.90712ms)
+✔ TC-3D-012 90Hz presents constant-speed manager/customer motion between 20Hz ticks (0.687589ms)
+✔ TC-3D-012 120Hz presents constant-speed manager/customer motion between 20Hz ticks (0.651284ms)
+✔ TC-3D-012 144Hz presents constant-speed manager/customer motion between 20Hz ticks (2.82649ms)
+✔ TC-3D-012 240Hz presents constant-speed manager/customer motion between 20Hz ticks (1.279933ms)
+✔ TC-3D-012 multi-step stalls interpolate the final adjacent ticks, never the entire stalled path (2.995375ms)
+✔ TC-3D-012 pause freezes pose; replacement and offline reset never blend old routes (14.573913ms)
+✔ TC-3D-012 invite identities spawn on their own route, and phase/cup changes remain atomic (94.29737ms)
+✔ TC-3D-012 quality modes and irregular frame subdivision produce the same authoritative save (128.679983ms)
+✔ TC-3D-012 max-level actors stay continuous through turns, stops and handoffs at 144Hz (294.628278ms)
+✔ TC-3D-012 removed departure finishes its final interpolated leg instead of freezing ahead of its follower (2.831146ms)
+(node:36) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ TC-3D-008 REQ-3D-015 full-viewport scene has no webpage frame or page scroll (static contract) (14.698602ms)
+✔ TC-3D-009 REQ-3D-016 permanent HUD contains only a noninteractive ¥ amount and accessible settings (static contract) (3.520498ms)
+✔ TC-3D-008 REQ-3D-013 all rendered amounts use ¥ with two fractional digits (app harness) (44.609842ms)
+✔ TC-3D-009 REQ-3D-016 scene actions and HUD settings open the correct details without hidden DOM anchors (app harness) (57.735072ms)
+✔ TC-3D-009 REQ-3D-016 removed pause/manager/settings scene routes and pause hotkeys cannot alter play (app harness) (32.183492ms)
+✔ TC-3D-009 REQ-3D-016 only HUD settings remains outside the closed native operation dialog (static contract) (1.091769ms)
+✔ TC-3D-008 REQ-3D-015 modal close/backdrop restore canvas focus and reject background scene actions (app harness) (37.672994ms)
+✔ TC-3D-008 REQ-3D-014 scene keyboard access is provided on the real canvas with instructions (static contract) (0.627177ms)
+✔ TC-3D-008 REQ-3D-014 actual canvas keys select, pan and activate scene objects once, with modal/modifier guards (app harness) (22.243488ms)
+✔ TC-3D-008 REQ-3D-015 dialog recipe/upgrade/navigation routes preserve core rules and visible close focus (app harness) (17.674728ms)
+✔ TC-3D-009 REQ-3D-017 manager grade, efficiency and upgrade belong to the vault and preserve the core quote (app harness) (16.87604ms)
+✔ TC-3D-009 REQ-3D-016 HUD settings uses the same modal input guard and restores its own visible focus (app harness) (12.743589ms)
+✔ TC-3D-008 REQ-3D-015 post-dialog navigation survives native asynchronous close-event ordering (app harness) (18.930103ms)
+✔ TC-3D-008 REQ-3D-015 a stale queued close cannot dismantle a newly reopened native dialog (app harness) (20.2251ms)
+✔ TC-3D-009 REQ-3D-016 physical invite remains cooldown/conflict guarded without duplicate DOM handlers (app harness) (11.120948ms)
+✔ TC-3D-008 REQ-3D-015 modal controls maintain 44px targets, safe-area and dynamic viewport hooks (static contract) (7.165223ms)
+✔ TC-3D-008 REQ-3D-006 HUD settings preserve manual save and export, with corrupt bytes protected (app harness) (42.799407ms)
+✔ TC-3D-008 REQ-3D-015 names and save feedback are transient; unreadable startup stays protected without exporting a fake shop (app harness) (15.712412ms)
+✔ TC-3D-008 REQ-3D-006 external save conflict freezes and blocks removed pause routes and purchases (app harness) (12.199968ms)
+✔ TC-3D-010 legacy raw route saves resume once, finish their current sweep and persist the real B-first route (app harness) (189.096336ms)
+✔ TC-3D-010 failed legacy-route offline settlement preserves bytes and freezes migrated assets until successful reload (app harness) (1201.222711ms)
+✔ TC-3D-010 migration persists before a hidden first frame and BFCache/repeated saves cannot remap or claim twice (app harness) (27.476633ms)
+✔ TC-3D-009 REQ-3D-016 valid previous paused saves resume current play without paused-interval income on boot (app harness) (29.602514ms)
+✔ TC-3D-009 REQ-3D-016 reading a valid external paused save resumes only current play after conflict recovery (app harness) (8.240707ms)
+✔ TC-3D-009 REQ-3D-006 failed offline writes or a concurrent claim keep paused valid saves conflict-protected (app harness) (21.096516ms)
+✔ TC-3D-009 REQ-3D-006 bad, future and foreign saves preserve source bytes through HUD settings and reload (app harness) (50.420729ms)
+✔ TC-3D-008 REQ-3D-004 hidden/BFCache resume applies elapsed time only once and retains one RAF owner (app harness) (14.607094ms)
+✔ TC-3D-008 REQ-3D-004 final disposal removes UI listeners, observer and RAF; late scene actions are harmless (app harness) (5.918981ms)
+✔ TC-3D-011 explicit low-power app submits budgeted renders and keeps authoritative elapsed time (19.637652ms)
+✔ TC-3D-011 sub-frame visibility and BFCache saves settle visible time once without extra renders (16.414284ms)
+✔ TC-3D-011 delayed duplicate pageshow preserves the newly visible tail (7.360778ms)
+✔ TC-3D-012 default app draws every display frame using interpolated poses, without extra RAF owners (6.206825ms)
+✔ TC-3D-012 quality selection changes renderer/budget, persists separately, and preserves economy (11.503035ms)
+✔ TC-3D-014 QA panel/debug are absent by default and explicit opt-in leaves saves and one-RAF timing unchanged (67.618641ms)
+Error: WebGL unavailable in test fixture
+    at new FakeScene (file:///workspace/scratch/44e846662812/mellow-bean-game-panels/tests/fullscreen-ui.test.mjs:166:73)
+    at evalmachine.<anonymous>:259:11
+    at Script.runInContext (node:vm:149:12)
+    at Script.runInNewContext (node:vm:154:17)
+    at runInNewContext (node:vm:310:38)
+    at fixture (file:///workspace/scratch/44e846662812/mellow-bean-game-panels/tests/fullscreen-ui.test.mjs:201:3)
+    at TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean-game-panels/tests/fullscreen-ui.test.mjs:1134:23)
+    at async Test.run (node:internal/test_runner/test:1389:7)
+    at async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+✔ TC-3D-014 QA sessions reset on reload/new shop and report missing renderer honestly (app harness) (42.366674ms)
+✔ TC-3D-014 legacy-route actors are visibly marked rather than misreported as early new-route exits (9.428732ms)
+✔ TC-3D-015 performance panel is idle while closed, 1Hz when open, and leaves business state/save unchanged (47.359585ms)
+Error: WebGL unavailable in test fixture
+    at new FakeScene (file:///workspace/scratch/44e846662812/mellow-bean-game-panels/tests/fullscreen-ui.test.mjs:166:73)
+    at evalmachine.<anonymous>:259:11
+    at Script.runInContext (node:vm:149:12)
+    at Script.runInNewContext (node:vm:154:17)
+    at runInNewContext (node:vm:310:38)
+    at fixture (file:///workspace/scratch/44e846662812/mellow-bean-game-panels/tests/fullscreen-ui.test.mjs:201:3)
+    at TestContext.<anonymous> (file:///workspace/scratch/44e846662812/mellow-bean-game-panels/tests/fullscreen-ui.test.mjs:1294:23)
+    at Test.runInAsyncScope (node:async_hooks:227:14)
+    at Test.run (node:internal/test_runner/test:1382:25)
+    at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+✔ TC-3D-015 counts rendered frames only, with no hidden/BFCache/mode/resize/reload cross-segment gap (29.362811ms)
+✔ TC-3D-015 frozen results are stable and restart clears only diagnostics (7.692179ms)
+✔ TC-3D-015 visible-but-unfocused pages cannot contaminate foreground timing (5.982737ms)
+✔ TC-3D-015 observed focus loss excludes its gap even when lifecycle events are missing (7.071231ms)
+✔ TC-3D-015 context loss invalidates measurements even when the scene object survives (7.38178ms)
+✔ TC-3D-015 unavailable renderer never reports fake FPS; collapsed route panel skips pose/DOM capture (15.615306ms)
+✔ TC-3D-016 four native quality buttons expose selection, clear labels and a roomy two-column layout (0.563111ms)
+✔ TC-3D-016 clear-60 renders 60 of 120Hz with continuous poses and identical saved progression (28.338344ms)
+✔ TC-3D-016 existing preferences and two-counter saves survive clear-60 selection and reload (74.875648ms)
+✔ TC-3D-016 clear-60 QA records the new target and isolates mode changes into fresh segments (10.809377ms)
+✔ TC-3D-019 failed latest-save reads retain the 570-earned frozen shop and cannot overwrite it after storage recovers (24.076837ms)
+✔ TC-3D-019 corrupt, future and missing reloads preserve current progress; only confirmed new-shop can replace it (58.752674ms)
+✔ TC-3D-019 startup read failure stays protected until a successful read, while a verified empty first launch starts normally (29.54709ms)
+✔ TC-3D-019 cancelled reload, failed reset and a new concurrent save never release recovery protection (31.218755ms)
+✔ TC-3D-019 startup outage followed by missing data needs explicit new-shop, never automatic recovery (7.225214ms)
+✔ TC-3D-019 shutdown after failed recovery never writes prior or fallback state (50.056549ms)
+✔ TC-3D-019 protected raw export survives a later read outage and clears after recovery (29.768264ms)
+✔ TC-3D-020 unlimited 80% loading stays responsive, exposes only committed assets, and accounts visible work time (2697.214826ms)
+✔ TC-3D-020 cancel, native close and retry retain original raw and never stamp a partial claim (1654.509505ms)
+✔ TC-3D-020 hiding pending work cancels and restarts its unpaid interval once, including BFCache duplicates (567.339987ms)
+✔ TC-3D-020 pending storage conflict, newer read and disposal invalidate all late completion callbacks (39.416397ms)
+✔ TC-3D-020 hidden retry retains unsaved source after write failure and cancellation, including sub-tick gaps (35.137654ms)
+✔ TC-3D-020 legacy policy settles its old interval once while the result shows only committed money and away time (1330.431693ms)
+✔ TC-3D-020 rounded away-time presentation retains the exact fractional settlement (10.615356ms)
+✔ TC-3D-020 visibility observed before its event cannot discard a completed hidden interval (33.183727ms)
+✔ TC-3D-020 unexplained long foreground RAF gaps freeze without partial simulation or save, until explicit recovery (21.637946ms)
+✔ TC-3D-020 save and every business action guard unclassified foreground time before the next RAF (53.344603ms)
+✔ TC-3D-020 verified 300-second foreground computation tail advances before purchases, recipe changes and invites (3655.912058ms)
+✔ TC-3D-020 system suspension during a pending visible job cannot become verified foreground time (7.088969ms)
+✔ TC-3D-021 portable file controls expose explicit import review and manual sharing (static contract) (0.387576ms)
+✔ TC-3D-021 reading and previewing a verified file freezes without modifying pause, money or durable bytes (34.744005ms)
+✔ TC-3D-021 confirm makes exactly one backup and replacement with a fresh branch and no file-era offline credit (24.431095ms)
+✔ TC-3D-021 cancel, back, close, Escape and native close clear an active review and preserve the current shop (55.078432ms)
+✔ TC-3D-021 late file parsing cannot reopen or replace after cancel, back, close, Escape, hide, storage change or disposal (55.503965ms)
+✔ TC-3D-021 newer file selection wins even when an older valid parse resolves last (34.87345ms)
+✔ TC-3D-021 oversized, malformed, unsupported and read-failing files never become a writable review (52.104659ms)
+✔ TC-3D-021 choosing no file or an invalid replacement discards an older ready review (28.847226ms)
+✔ TC-3D-021 preparing a portable export includes the visible pre-RAF tail and downloads verified unique files (8.632631ms)
+✔ TC-3D-021 share uses verified files, falls back when unsupported, and never downloads after user cancellation (34.904567ms)
+✔ TC-3D-021 import backup failure or a silent storage race preserves current state without replacing foreign bytes (21.65995ms)
+✔ TC-3D-021 corrupt and unreadable startup cannot export placeholder portable progress; corrupt original bytes remain recoverable (30.320502ms)
+✔ TC-3D-021 pending File.text reads cannot revive a preview after close, hide, replacement selection or disposal (37.462281ms)
+✔ TC-3D-021 active review is invalidated by storage, visibility and disposal with no review-dwell earnings (37.373537ms)
+✔ TC-3D-021 asynchronous export generation is discarded after navigation, hide, storage, another file or disposal (70.955095ms)
+✔ TC-3D-021 generation captures one saved snapshot while live play continues, and repeated prepare stays single-flight (10.84911ms)
+✔ TC-3D-021 failed durable save cannot prepare a portable current-progress file (26.358346ms)
+✔ TC-3D-021 a repeated previously imported file warns before an explicit replacement and earns no extra offline credit (31.034791ms)
+✔ TC-3D-022 panel controls keep unique accessible IDs and an enabled styled native file picker (static contract) (2.626598ms)
+✔ TC-3D-022 technical metadata and full ledger are closed disclosures while replacement safeguards remain visible (static contract) (0.776463ms)
+✔ TC-3D-022 selected render mode stays visually and accessibly selected across panel navigation without changing the shop (49.083987ms)
+✔ TC-3D-022 file preview names and focuses the chosen file, permits cancel/reselection, and requires renewed overwrite acknowledgement (30.49789ms)
+✔ TC-3D-022 an older file warns before replacement, equal/newer files clear that warning, and summaries retain hidden metadata (83.171824ms)
+✔ TC-3D-022 blocked save recovery opens its disclosure automatically and retains frozen assets and recovery controls (25.74794ms)
+✔ TC-3D-022 a normal settings save failure exposes backup recovery immediately without replacing durable bytes (5.535501ms)
+✔ TC-3D-022 offline reward shows only the exact credited wallet delta, including zero when sales remain uncollected (15.602566ms)
+✔ TC-3D-022 human away duration floors seconds without changing exact settlement or minute boundaries (42.112097ms)
+✔ TC-3D-022 counter upgrades show real cost and before/after benefits while retaining insufficient-funds and capped behavior (25.804165ms)
+✔ TC-3D-022 manager upgrade shows efficiency, benefit and real cost without bypassing funds or level caps (12.350204ms)
+✔ TC-3D-023 REQ-3D-033 recipe choice, counter upgrades and coffee upgrades have distinct controls (static contract) (0.544623ms)
+✔ TC-3D-023 REQ-3D-033 both counter entrances and both coffee menus open only their own read-only panel (11.424135ms)
+✔ TC-3D-023 REQ-3D-033 hidden and closed recipe/counter/coffee handlers cannot mutate a different panel (8.981416ms)
+✔ TC-3D-023 REQ-3D-033 recipe selection affects only the selected counter and leaves its current brew intact (39.670298ms)
+✔ TC-3D-023 REQ-3D-033 coffee upgrades charge their own quote and cannot upgrade or reassign either counter (29.62791ms)
+✔ TC-3D-023 REQ-3D-033 counter upgrade after coffee upgrades retains independent selected-counter scope (11.735585ms)
+✔ TC-3D-023 REQ-3D-033 a short offline interruption restores the exact recipe/counter/coffee panel (30.354638ms)
+✔ TC-3D-023 REQ-3D-033 save conflict or canceled settlement blocks all split business actions (23.432212ms)
+✔ TC-3D-023 REQ-3D-033 portable preview, cancellation, replacement and recovery retain independent coffee progress (28.236718ms)
+✔ TC-3D-020 v3 is continuous 80% at every former threshold, with no gameplay duration cap (2.112251ms)
+✔ TC-3D-020 exact boundary settlements equal ordinary simulation at 80%, including fixed-step carry (5201.576483ms)
+✔ TC-3D-020 a real 24-hour interval completes 69,120 seconds of ordinary simulation without a two-hour cap (21968.789536ms)
+✔ TC-3D-020 arbitrary job batches and randomized partitions preserve every simulated field (312.984548ms)
+✔ TC-3D-020 short partitions and reloads conserve fractional time through claim-history eviction (119.647209ms)
+✔ TC-3D-020 saved v3 short intervals settle once, while zero and rollback loads are byte-preserving (17.466254ms)
+✔ TC-3D-020 in-flight production retains full prices and frozen recipe/duration snapshots (1.72174ms)
+✔ TC-3D-020 manager collection only moves existing cash; it is not reported as newly generated income (3.732678ms)
+✔ TC-3D-020 every legacy anchor uses its own policy once, then all subsequent short gaps use v3 (6738.824115ms)
+✔ TC-3D-020 zero, short, paused and rollback migrations never stamp policy or anchors before a successful write (23.47917ms)
+✔ TC-3D-020 unsupported versions fail closed; future-time migration never moves the anchor backwards (8.594914ms)
+✔ TC-3D-020 paused v3 archives preserve all business state and consume each real interval once (1.122646ms)
+✔ TC-3D-020 numeric-limit refusal never truncates a gap, consumes its endpoint, or modifies the original bytes (1.315017ms)
+✔ TC-3D-020 integer-money overflow refuses the whole candidate in synchronous and asynchronous settlement (1.659968ms)
+✔ TC-3D-020 deferred settlement yields bounded batches, exposes read-only progress, then commits exactly once (6.895567ms)
+✔ TC-3D-020 cancellation and thrown callbacks retain the complete unpaid interval and permit clean retry (48.090411ms)
+✔ TC-3D-020 aborting or throwing from the final progress callback still prevents the commit (3.529592ms)
+✔ TC-3D-020 interrupted legacy async migration never exposes v3 before successful settlement (29.34669ms)
+✔ TC-3D-020 late work cannot overwrite a newer load, settlement, explicit reset, or another writer (9.713905ms)
+✔ TC-3D-020 overlapping finish calls cannot commit twice or cancel the active owner (5.13685ms)
+✔ TC-3D-020 final write failure and compare-before-write races preserve source bytes and full unpaid time (11.328174ms)
+✔ TC-3D-020 zero and short legacy migration CAS conflicts cannot stamp the losing candidate (10.752824ms)
+✔ TC-3D-020 live hidden settlement respects later durable anchors, cancellation and concurrent writers (4.627571ms)
+✔ TC-3D-020 maximum storage tags and rejected duplicate claims never discard an unpaid endpoint (5.511346ms)
+✔ TC-3D-020 exact live sources may retry zero, sub-step and paused write failures without authorizing other saves (16.977828ms)
+✔ TC-3D-020 cancellation of a 10ms live gap preserves its source and fractional carry for exact retry (2.083428ms)
+✔ TC-3D-020 live CAS conflict stays latched even if another actor later restores the old bytes (3.671407ms)
+✔ TC-3D-020 generated live claim collisions and failed reads never grant exact-source retry authority (1.705767ms)
+✔ TC-3D-023 coffee upgrades use the same prices and durations online and offline with exact 80% settlement (128.496848ms)
+✔ TC-3D-023 failed or cancelled coffee settlement preserves upgraded source and rejects altered retry progress (28.597813ms)
+✔ TC-3D-023 legacy economy migrates independently of one-time legacy offline policy and preserves snapshots (35.477146ms)
+✔ TC-3D-021 file export is detached, deeply frozen, complete and independently SHA-256 verifiable (25.222899ms)
+✔ TC-3D-021 checksum covers exact payload bytes and every metadata field, not parsed JSON (11.679842ms)
+✔ TC-3D-021 parser rejects malformed, raw recovery, future, and extra-key file envelopes (14.470007ms)
+✔ TC-3D-021 signed-but-invalid lineage, schema, policy and timestamps are rejected (131.734131ms)
+✔ TC-3D-021 even a recomputed checksum cannot hide invalid finite values, economy or relationships (138.790519ms)
+✔ TC-3D-021 hostile property names, depth and node budgets fail without prototype pollution (24.789424ms)
+✔ TC-3D-021 256 KiB limit measures UTF-8 bytes and checks the full outer file (40.860669ms)
+✔ TC-3D-021 unavailable WebCrypto fails closed and does not emit unchecked files (16.914759ms)
+✔ TC-3D-021 export filenames are collision-resistant and use only export time and revision (9.316863ms)
+✔ TC-3D-021 durableSnapshot is a detached validated read with no settlement or storage mutation (8.799671ms)
+✔ TC-3D-021 import verifies the full original/raw and unsaved/live backup before fresh replacement (8.866172ms)
+✔ TC-3D-021 import requires closed-other-tabs acknowledgement, initialization and current preview (15.960188ms)
+✔ TC-3D-021 invalid candidate, current live backup, timestamp or fingerprint performs no writes (31.13899ms)
+✔ TC-3D-021 active offline settlement blocks import without touching durable or backup bytes (3.545295ms)
+✔ TC-3D-021 import detects a competing writer before backup and during backup verification (13.487613ms)
+✔ TC-3D-021 backup write rejection, partial write, bad readback and read exceptions never replace the shop (26.189839ms)
+✔ TC-3D-021 local read failures before and after backup never attempt a replacement (9.010981ms)
+✔ TC-3D-021 replacement exceptions/readback races enter uncertainty without blind rollback or saving (10.56567ms)
+✔ TC-3D-021 an uncertain rejected replacement requires rereading before another import attempt (1.144288ms)
+✔ TC-3D-021 failed backup creation cannot unlock a protected corrupt original (0.263478ms)
+✔ TC-3D-021 ordinary legacy saves acquire stable identity and monotonic revisions without lowering time (4.039781ms)
+✔ TC-3D-021 corrupt raw and empty local shops may import only with a verified recovery backup (15.360111ms)
+✔ TC-3D-021 import never replays file-era time, even for stale/future export timestamps or backward local clocks (76.749208ms)
+✔ TC-3D-021 repeated imports are explicit replacements with new identity, no asset merge or repeated file-era rewards (6.000263ms)
+✔ TC-3D-021 portable assets preserve spendable, pending and carried cash without depositing or merging it (2.266873ms)
+✔ TC-3D-021 remembered file fingerprints are deduplicated, capped at 32 and preserved by ordinary saves (14.08868ms)
+✔ TC-3D-021 readImportBackup fails safely for missing, malformed or unreadable backups (1.929334ms)
+✔ TC-3D-021 valid large local revisions remain readable in the import recovery backup (5.399686ms)
+✔ TC-3D-023 v2 files preserve and fingerprint coffee levels through import, reload and backup recovery (77.279178ms)
+✔ TC-3D-023 valid v1 files verify original bytes then migrate once to Lv1 and export v2 (19.55048ms)
+✔ TC-3D-023 mismatched formats, economies, coffee bounds and forged summaries fail even with valid checksums (68.168757ms)
+✔ TC-3D-023 retained pre-coffee recovery backup normalizes liveState for v2 re-export without altering original bytes (6.150981ms)
+✔ TC-3D-012 smooth follows every 30Hz display refresh with equal time intervals (4.598776ms)
+✔ TC-3D-012 explicit clear-60 on 30Hz drops renders without losing time (0.413224ms)
+✔ TC-3D-012 explicit balanced on 30Hz drops renders without losing time (1.286773ms)
+✔ TC-3D-012 explicit low-power on 30Hz drops renders without losing time (0.275426ms)
+✔ TC-3D-012 smooth follows every 60Hz display refresh with equal time intervals (0.520947ms)
+✔ TC-3D-012 explicit clear-60 on 60Hz drops renders without losing time (0.253843ms)
+✔ TC-3D-012 explicit balanced on 60Hz drops renders without losing time (0.21157ms)
+✔ TC-3D-012 explicit low-power on 60Hz drops renders without losing time (0.222616ms)
+✔ TC-3D-012 smooth follows every 90Hz display refresh with equal time intervals (0.460545ms)
+✔ TC-3D-012 explicit clear-60 on 90Hz drops renders without losing time (0.956815ms)
+✔ TC-3D-012 explicit balanced on 90Hz drops renders without losing time (0.290739ms)
+✔ TC-3D-012 explicit low-power on 90Hz drops renders without losing time (0.175084ms)
+✔ TC-3D-012 smooth follows every 120Hz display refresh with equal time intervals (0.266463ms)
+✔ TC-3D-012 explicit clear-60 on 120Hz drops renders without losing time (2.204459ms)
+✔ TC-3D-012 explicit balanced on 120Hz drops renders without losing time (0.141884ms)
+✔ TC-3D-012 explicit low-power on 120Hz drops renders without losing time (0.205961ms)
+✔ TC-3D-012 smooth follows every 144Hz display refresh with equal time intervals (0.190507ms)
+✔ TC-3D-012 explicit clear-60 on 144Hz drops renders without losing time (0.402949ms)
+✔ TC-3D-012 explicit balanced on 144Hz drops renders without losing time (0.148534ms)
+✔ TC-3D-012 explicit low-power on 144Hz drops renders without losing time (0.08573ms)
+✔ TC-3D-012 smooth follows every 240Hz display refresh with equal time intervals (0.479785ms)
+✔ TC-3D-012 explicit clear-60 on 240Hz drops renders without losing time (0.124538ms)
+✔ TC-3D-012 explicit balanced on 240Hz drops renders without losing time (0.160002ms)
+✔ TC-3D-012 explicit low-power on 240Hz drops renders without losing time (0.110898ms)
+✔ TC-3D-012 delayed/duplicate/invalid RAFs never replay; reset excludes hidden time (0.134033ms)
+✔ TC-3D-012 changing quality preserves exactly one pending visible tail (0.147793ms)
+✔ TC-3D-012 crisp default restores Retina samples, explicit modes bound large buffers (1.822603ms)
+✔ TC-3D-012 malformed/blocked preferences select smooth without touching the game save (0.328717ms)
+✔ TC-3D-016 clear-60 keeps exactly the smooth resolution budgets at every viewport (2.312803ms)
+✔ TC-3D-016 clear-60 switches preserve pending time and never replay slow or hidden frames (0.147343ms)
+✔ TC-3D-014 trace is explicitly opt-in; detached/throwing observers cannot change snapshots, business events or saves (211.219847ms)
+✔ TC-3D-014 real fixed-step paths remain complete across one stalled frame, 20Hz and 144Hz (55.312219ms)
+✔ TC-3D-014 crossing endpoints count once; despawn records actual endpoint before delayed presentation disposal (4.019241ms)
+✔ TC-3D-014 manager logs real B→A→vault transfers while return passage and empty stops create no money (3.368368ms)
+✔ TC-3D-014 bounded record, sticky customer identity, isolated readers, and explicit reset prevent stale IDs (175.835015ms)
+✔ TC-3D-014 two same-step transitions keep real order and pre-movement transition coordinates (0.744344ms)
+✔ TC-3D-001 real manager route collects nearest B, farther A, then deposits at the shared vault (40.466363ms)
+✔ TC-3D-001 B-first collection preserves per-counter half-bag limits at every manager level (7.541972ms)
+✔ TC-3D-003 real route keeps identical state and cash-event order under split advance (95.10904ms)
+✔ TC-3D-004 route resumes exactly after saving each moving, collecting and depositing leg (73.258425ms)
+✔ TC-3D-004 explicit legacy migration preserves in-flight stops, timers, assets and once-only versioning (7.421119ms)
+✔ TC-3D-004 legacy migration leaves active customers and frozen brew snapshots untouched (2.750585ms)
+✔ TC-3D-004 a migrated sweep resumes without repeating stops after every in-flight save/reload (58.820837ms)
+✔ TC-3D-004 new route validator rejects off-stop actions, invalid segments and migration/version misuse (1.096817ms)
+✔ TC-3D-004 authentic legacy archives migrate offline only once and retain retries/CAS protection (31.243422ms)
+✔ TC-3D-001 cash stays conserved through visible customer and manager phases (19.726472ms)
+✔ TC-3D-003 fixed-step advance is independent of frame partition and save round trips (57.685593ms)
+✔ TC-3D-002 recipes and upgrades affect the next brew only (7.30947ms)
+✔ TC-3D-002 original counter affinities create a meaningful recipe tradeoff (66.032806ms)
+✔ TC-3D-003 repeated input is bounded by cooldown, capacity, cost and maximum level (692.441886ms)
+✔ TC-3D-003 paused time and invalid deltas cannot create progress (0.301225ms)
+✔ TC-3D-004 corrupt and future saves preserve original bytes and reject autosave (0.55619ms)
+✔ TC-3D-004 strict validation catches enums, non-finite values, bounds and broken ledgers (0.283017ms)
+✔ TC-3D-004 offline close-loop income has no gameplay cap and is claimed only once (1094.513541ms)
+✔ TC-3D-004 paused offline, storage errors and another client cannot overwrite valid progress (0.557673ms)
+✔ TC-3D-004 overlapping reload endpoints and backwards clocks never reclaim the same interval (15.245648ms)
+✔ TC-3D-004 failed offline anchor writes grant no income and remain retryable (24.907393ms)
+✔ TC-3D-004 save validator accepts every live phase under mixed deterministic actions (181.549796ms)
+✔ TC-3D-001 capped production exposes a real transport bottleneck removable by manager upgrades (262.421332ms)
+✔ TC-3D-005 opaque CAS tags, idempotent retry and offline two-client conflict (7.379977ms)
+✔ TC-3D-019 repository blocks writes across unresolved load failures and permits only verified recovery (3.204621ms)
+✔ TC-3D-019 missing saves are distinct from first-launch empty storage and need explicit reset before writing (0.190317ms)
+✔ TC-3D-019 initial read outage cannot silently initialize an empty recovery and reset retains CAS/backup protection (0.341806ms)
+✔ TC-3D-023 coffee Lv1 preserves every previous counter and manager parameter (0.325462ms)
+✔ TC-3D-023 independent coffee purchases charge exact integer cents and affect only the selected recipe (0.435267ms)
+✔ TC-3D-023 coffee costs, maximum, insufficient wallet and repeated calls never double-charge (0.643222ms)
+✔ TC-3D-023 shared coffee levels improve both equipped counters with one purchase and survive recipe switches (0.265771ms)
+✔ TC-3D-023 upgrading a brewing recipe preserves its price and duration through sale and upgrades subsequent cups (2.338862ms)
+✔ TC-3D-023 economy1 migration adds only Lv1 coffee progress and rejects malformed, downgraded or future progression (2.419275ms)
+✔ TC-3D-023 sync adapter preserves recipe progress under CAS, replay and changed-operation protection (0.469419ms)
+ℹ tests 339
+ℹ suites 0
+ℹ pass 339
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 35095.996906
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+npm notice To update run: npm install -g npm@12.2.0
+npm notice

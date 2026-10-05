@@ -1,0 +1,26 @@
+{
+  "node": "v24.19.0",
+  "checkedAt": "2026-10-05T16:15:15.449Z",
+  "newEconomyVersion": 2,
+  "newFormatVersion": 2,
+  "results": [
+    {
+      "revision": "c6f7b95b3a7f66f2f2d0172ba925d3c7a96267ce",
+      "oldValidatorRejectsNewEconomy": true,
+      "oldLocalLoadStatus": "future",
+      "oldAutosaveBlockedRawUnchanged": true,
+      "oldPortableRejectsV2": true,
+      "actualOldWriterV1MigratesInNewRuntime": true,
+      "inFlightSnapshotsAndFingerprintPreserved": true
+    },
+    {
+      "revision": "f9f823e270d7934f6967860ad15b639e0f6af72d",
+      "oldValidatorRejectsNewEconomy": true,
+      "oldLocalLoadStatus": "future",
+      "oldAutosaveBlockedRawUnchanged": true,
+      "oldPortableRejectsV2": true,
+      "actualOldWriterV1MigratesInNewRuntime": true,
+      "inFlightSnapshotsAndFingerprintPreserved": true
+    }
+  ]
+}
