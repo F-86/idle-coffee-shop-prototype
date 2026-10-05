@@ -3437,6 +3437,32 @@ test('TC-3D-026 REQ-3D-036 compact pictured furniture catalogue separates owned 
   } finally { f.dispose(); }
 });
 
+test('TC-3D-029 REQ-3D-039 renovation base styles preserve full labels and wrap the action group', () => {
+  assert.equal(declarations('.renovation-heading', 'flex-wrap')[0], 'wrap');
+  assert.equal(declarations('.renovation-title', 'min-width')[0], '0');
+  assert.equal(declarations('.renovation-finish', 'flex')[0], '0 0 auto');
+  assert.equal(declarations('.renovation-finish', 'margin-left')[0], 'auto');
+  assert.equal(declarations('.renovation-finish button', 'flex')[0], '0 0 auto');
+  assert.equal(declarations('.renovation-finish button', 'white-space')[0], 'nowrap');
+  assert.equal(declarations('.renovation-finish .text-button', 'width')[0], 'auto', 'cancel must not inherit the dialog-wide 100% width');
+  assert.equal(declarations('.renovation-finish .text-button', 'margin')[0], '0', 'cancel must not inherit the dialog action top margin');
+  assert.equal(declarations('.renovation-finish .primary-button', 'min-width')[0], '100px');
+  assert.equal(declarations('.renovation-finish .primary-button', 'min-height')[0], '44px');
+  assert.equal(declarations('.renovation-finish .primary-button', 'width')[0], 'auto');
+  assert.match(html, /class="renovation-finish"><button id="renovation-cancel"[^>]*>取消<\/button><button id="renovation-apply"[^>]*disabled>完成布置<\/button><\/div>/);
+});
+
+test('TC-3D-029 renovation catalog stays compact and movement buttons can wrap without clipping labels', () => {
+  assert.equal(declarations('.catalog-art', 'width')[0], '72px');
+  assert.equal(declarations('.catalog-art', 'height')[0], '54px');
+  assert.equal(declarations('.furniture-controls > div', 'flex-wrap')[0], 'wrap');
+  assert.equal(declarations('.furniture-controls > div', 'max-width')[0], '100%');
+  assert.equal(declarations('.furniture-controls button', 'flex')[0], '0 0 auto');
+  assert.equal(declarations('.furniture-controls button', 'white-space')[0], 'nowrap');
+  assert.equal(declarations('.renovation-panel', 'overflow-y')[0], 'auto', 'short viewports retain access by scrolling');
+  assert.equal(declarations('.furniture-list', 'overflow-x')[0], 'auto', 'catalogue retains its horizontal browsing gesture');
+});
+
 test('TC-3D-026 actual palette pointer handlers drag one new table, defer charge and suppress synthetic click duplication', () => {
   const f = fixture();
   try {

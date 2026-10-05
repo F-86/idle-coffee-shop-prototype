@@ -49,3 +49,5 @@
 当前双门经营与暂停装修：[规格](product/specs/shop-operations-cutaway.md)、[计划](testing/plans/shop-operations-cutaway.md)、[TC-3D-027](testing/cases/slice/TC-3D-027.md)。剖面店外景、画面右入左出、交杯直接到账；HUD持久暂停/清场后装修，完成或取消不自动营业；咖啡与三背景移到底部有图图标栏，装修浮动窄面板。经济4/布局3/文件4，经理/金库/咖啡墙牌旧交互已被本轮替代。
 
 手动原料闭环：[规格](product/specs/manual-ingredient-stock.md)、[计划](testing/plans/manual-ingredient-stock.md)、[TC-3D-028](testing/cases/slice/TC-3D-028.md)。全店共享豆/奶，制作开始原子扣份，玩家主动购买，库存不足停止新制作；旧杯继续、缺料顾客可离店，离线80%同规则。经济5/文件5/离线策略4，旧窗口一次迁移。数值未平衡，未加入自动救济或强制留款。
+
+装修操作行回归：[计划](testing/plans/renovation-action-layout.md)、[TC-3D-029](testing/cases/slice/TC-3D-029.md)、[执行报告](testing/runs/2026-10-05-renovation-action-layout/report.md)。修复完成按钮逐字换行，保持操作组完整，压缩目录高度；真实公开页复测与自动化契约分别记录。
