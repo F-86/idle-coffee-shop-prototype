@@ -471,3 +471,51 @@ test('TC-3D-005 opaque CAS tags, idempotent retry and offline two-client conflic
   assert.deepEqual((await repo.load('guest')).state, won.state);
   assert.equal((await repo.save('guest', eb.snapshot(), a.recordChangeTag, 'op-1')).status, 'operation-mismatch');
 });
+
+
+test('TC-3D-019 repository blocks writes across unresolved load failures and permits only verified recovery', () => {
+  const initial = withPendingCash(300, 270), memory = createMemoryStorage();
+  const control = { read: false, write: false };
+  const storage = { getItem(key) { if (control.read) throw Error('read unavailable'); return memory.getItem(key); }, setItem(key, value) { if (control.write) throw Error('quota'); memory.setItem(key, value); }, removeItem: key => memory.removeItem(key) };
+  const repo = new LocalSaveRepository(storage); assert.equal(repo.save(initial, 100000).ok, true);
+  const durable = memory.getItem(SAVE_KEY);
+  control.write = true; assert.equal(repo.load(130000).status, 'offline-save-failed');
+  control.write = false;
+  assert.equal(repo.save(createInitialState(), 130000).ok, false, 'settlement failure remains a write barrier');
+  control.read = true;
+  for (let i = 0; i < 2; i++) assert.equal(repo.load(130000).status, 'unavailable');
+  assert.equal(repo.inspect().rawText, durable, 'read failures do not replace the known CAS bytes');
+  control.read = false;
+  assert.equal(repo.save(createInitialState(), 130000).status, 'unavailable');
+  assert.equal(memory.getItem(SAVE_KEY), durable);
+  const recovered = repo.load(130000);
+  assert.equal(recovered.status, 'loaded'); assert.ok(recovered.state.totalEarned >= 570);
+  const claimed = memory.getItem(SAVE_KEY);
+  assert.deepEqual(repo.load(130000).state, recovered.state); assert.equal(memory.getItem(SAVE_KEY), claimed);
+  assert.equal(repo.save(recovered.state, 129000).ok, true);
+  assert.equal(JSON.parse(memory.getItem(SAVE_KEY)).savedAt, 130000, 'backwards clock cannot rewind the recovered anchor');
+});
+
+test('TC-3D-019 missing saves are distinct from first-launch empty storage and need explicit reset before writing', () => {
+  const memory = createMemoryStorage(), repo = new LocalSaveRepository(memory);
+  assert.equal(repo.load(1000).status, 'new'); assert.equal(repo.save(withPendingCash(), 1000).ok, true);
+  memory.removeItem(SAVE_KEY);
+  assert.equal(repo.load(1000).status, 'missing'); assert.equal(repo.save(createInitialState(), 1000).status, 'missing');
+  assert.equal(memory.getItem(SAVE_KEY), null);
+  assert.equal(repo.reset({ confirmProtected: true }).ok, true); assert.equal(repo.save(createInitialState(), 1000).ok, true);
+  const missing = new LocalSaveRepository(createMemoryStorage());
+  assert.equal(missing.load(1000, { allowNew: false }).status, 'missing');
+  assert.equal(missing.save(createInitialState(), 1000).ok, false);
+});
+
+
+test('TC-3D-019 initial read outage cannot silently initialize an empty recovery and reset retains CAS/backup protection', () => {
+  const memory = createMemoryStorage(); let blocked = true;
+  const repo = new LocalSaveRepository({ ...memory, getItem(key) { if (blocked) throw Error('read unavailable'); return memory.getItem(key); } });
+  assert.equal(repo.load(1000).status, 'unavailable'); blocked = false;
+  assert.equal(repo.load(1000).status, 'missing'); assert.equal(repo.save(createInitialState(), 1000).ok, false);
+  assert.equal(repo.reset().status, 'missing', 'unresolved missing data also requires explicit reset confirmation');
+  const winner = rawEnvelope(withPendingCash(), 1000, 'new-client'); memory.setItem(SAVE_KEY, winner);
+  assert.equal(repo.reset({ confirmProtected: true }).status, 'conflict'); assert.equal(memory.getItem(SAVE_KEY), winner);
+  assert.equal(repo.load(1000).status, 'loaded'); assert.equal(repo.save(withPendingCash(), 1000).ok, true);
+});

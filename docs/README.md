@@ -27,3 +27,5 @@
 清晰60帧选项：[计划](testing/plans/clear-60.md)、[TC-3D-016](testing/cases/slice/TC-3D-016.md)。显式选择、同smooth清晰度与60fps提交上限，旧默认/偏好/经营存档保持；真机对比与功耗结论分开。
 
 金库间距与地毯接角：[计划](testing/plans/scene-alignment.md)、[TC-3D-018](testing/cases/slice/TC-3D-018.md)。在已验证b1清晰60帧基线上缩小实体牌间距并补齐外拐角；不夹带另一分支离线策略。
+
+存档恢复保护：[计划](testing/plans/save-recovery-safety.md)、[TC-3D-019](testing/cases/slice/TC-3D-019.md)。失败读取不能替换/解锁当前店，存储恢复也不能自行覆盖旧档；缺失需明确新店，原始档与有效当前副本可分别导出。

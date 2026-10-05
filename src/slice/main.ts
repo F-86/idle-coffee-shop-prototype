@@ -35,7 +35,7 @@ root.innerHTML = `
     </div>
     <div id="coffee-panel" class="operation-panel" hidden><div class="coffee-medallion" id="coffee-symbol" aria-hidden="true">☕</div><p id="coffee-detail"></p><p class="detail-note">两款配方已解锁。分配到柜台后，下一杯开始生效。</p><div class="assign-buttons"><button data-assign="counter-a">供给柜台 A</button><button data-assign="counter-b">供给柜台 B</button></div></div>
     <div id="vault-panel" class="operation-panel" hidden><div class="vault-total"><span>已存入金库</span><strong id="vault-total"></strong></div><div class="detail-grid"><span>台面待收<strong id="pending"></strong></span><span>经理运送<strong id="carrying"></strong></span></div><p class="detail-note">钱留在台面，再由经理沿后方通道送回。送到金库才可用于升级。</p><p id="served" class="detail-note"></p><h2 class="manager-heading">收钱经理</h2><div class="detail-grid"><span>收运等级<strong id="manager-rank"></strong></span><span>收运效率<strong id="manager-speed"></strong></span></div><p id="manager-status" class="detail-note"></p><p id="manager-preview"></p><button id="manager-upgrade" class="primary-button"></button></div>
-    <div id="settings-panel" class="operation-panel" hidden><p id="save-status" class="save-status">本地自动保存</p><p class="detail-note">当前只保存到本浏览器，iCloud 尚未配置。</p><div class="settings-grid"><button id="save">保存进度</button><button id="export">导出备份</button><button id="reload" hidden>读取最新档</button><button id="new-shop" hidden>备份并开始新店</button></div><p class="settings-label" id="render-mode-label">画面与流畅度</p><div class="render-mode-picker" role="group" aria-labelledby="render-mode-label" aria-describedby="render-mode-note"><button data-render-mode="smooth">清晰流畅<small>跟随屏幕刷新</small></button><button data-render-mode="clear-60">清晰 60 帧<small>同等清晰度</small></button><button data-render-mode="balanced">平衡<small>较低清晰度 · 最高 60 帧</small></button><button data-render-mode="low-power">省电<small>低清晰度 · 最高 30 帧</small></button></div><p class="detail-note" id="render-mode-note"></p><p class="settings-label">逛逛小店</p><div class="jump-grid"><button data-focus="counter-a-recipe">柜台 A</button><button data-focus="counter-b-recipe">柜台 B</button><button data-focus="menu-espresso">咖啡墙</button><button data-focus="vault">金库</button><button data-focus="invite">入口</button></div><details><summary>怎么玩</summary><p>客人会自动进入、排队和取杯，入口也能招呼客人。柜台升级更快更值钱，在金库里升级经理提高收运。点柜台前脸的配方牌换咖啡，墙上菜单能查看配方或分配到柜台。制作中的那一杯不会被追改。</p><p>离线收益最多结算 2 小时，且只结算一次。此版本没有真实跨设备同步。</p></details></div>
+    <div id="settings-panel" class="operation-panel" hidden><p id="save-status" class="save-status">本地自动保存</p><p class="detail-note">当前只保存到本浏览器，iCloud 尚未配置。</p><div class="settings-grid"><button id="save">保存进度</button><button id="export">导出备份</button><button id="export-current" hidden>导出当前副本</button><button id="reload" hidden>读取最新档</button><button id="new-shop" hidden>备份并开始新店</button></div><p class="settings-label" id="render-mode-label">画面与流畅度</p><div class="render-mode-picker" role="group" aria-labelledby="render-mode-label" aria-describedby="render-mode-note"><button data-render-mode="smooth">清晰流畅<small>跟随屏幕刷新</small></button><button data-render-mode="clear-60">清晰 60 帧<small>同等清晰度</small></button><button data-render-mode="balanced">平衡<small>较低清晰度 · 最高 60 帧</small></button><button data-render-mode="low-power">省电<small>低清晰度 · 最高 30 帧</small></button></div><p class="detail-note" id="render-mode-note"></p><p class="settings-label">逛逛小店</p><div class="jump-grid"><button data-focus="counter-a-recipe">柜台 A</button><button data-focus="counter-b-recipe">柜台 B</button><button data-focus="menu-espresso">咖啡墙</button><button data-focus="vault">金库</button><button data-focus="invite">入口</button></div><details><summary>怎么玩</summary><p>客人会自动进入、排队和取杯，入口也能招呼客人。柜台升级更快更值钱，在金库里升级经理提高收运。点柜台前脸的配方牌换咖啡，墙上菜单能查看配方或分配到柜台。制作中的那一杯不会被追改。</p><p>离线收益最多结算 2 小时，且只结算一次。此版本没有真实跨设备同步。</p></details></div>
   </dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>`;
@@ -93,18 +93,17 @@ const on = (
     ...options,
     signal: listeners.signal,
   });
-let saveBlocked =
-  loaded.protectedRaw ||
-  loaded.status === "conflict" ||
-  loaded.status === "offline-save-failed";
-let conflictBlocked =
-  loaded.status === "conflict" || loaded.status === "offline-save-failed";
+let saveBlocked = loaded.protectedRaw || (loaded.status !== "new" && loaded.status !== "loaded");
+// All unresolved reads freeze play, not only CAS/settlement failures. A fallback
+// initial state is a display placeholder, never authority to replace a save.
+let conflictBlocked = saveBlocked;
+let hasUsableState = ["new", "loaded", "conflict", "offline-save-failed"].includes(loaded.status);
 // A valid old manual-pause save stays paused during repository offline settlement.
-// This no-pause UI resumes only current play after load; conflicts still freeze it.
+// This no-pause UI resumes only current play after verified load/new initialization.
 if (conflictBlocked && !engine.state.paused) engine.togglePause();
 else if (!conflictBlocked && engine.state.paused) engine.togglePause();
-$("#reload").hidden = !conflictBlocked;
-$("#new-shop").hidden = !loaded.protectedRaw;
+$("#reload").hidden = !saveBlocked;
+$("#new-shop").hidden = !loaded.protectedRaw && loaded.status !== "missing";
 let selected: CounterId = "counter-a";
 let panel: "counter" | "coffee" | "vault" | "settings" | null =
     null,
@@ -357,10 +356,19 @@ on($("#manager-upgrade"), "click", () => {
   updateUI();
 });
 on($("#save"), "click", () => save(true));
-on($("#export"), "click", () => {
+function updateBackupControls() {
+  const sourceProtected = repository.inspect().protectedRaw;
+  $("#export").textContent = sourceProtected ? "导出原始档" : "导出备份";
+  $("#export").toggleAttribute("disabled", !sourceProtected && !hasUsableState);
+  $("#export-current").hidden = !sourceProtected || !hasUsableState;
+}
+function exportBackup(original: boolean) {
+  // An unreadable startup has no current shop to export; never label its
+  // placeholder as a recovery backup. A previously valid shop remains exportable.
+  if (!original && !hasUsableState) return;
   try {
     const bytes =
-      saveBlocked && !conflictBlocked
+      original
         ? repository.inspect().rawText
         : JSON.stringify(
             {
@@ -375,20 +383,22 @@ on($("#export"), "click", () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "mellow-bean-local-backup.json";
+    a.download = original ? "mellow-bean-original-save.json" : "mellow-bean-local-backup.json";
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    toast("存档备份已导出");
+    toast(original ? "原始存档已导出" : "当前进度备份已导出");
   } catch {
     toast("备份无法导出，请检查浏览器下载权限");
   }
-});
+}
+on($("#export"), "click", () => exportBackup(repository.inspect().protectedRaw));
+on($("#export-current"), "click", () => exportBackup(false));
 function blockConflict(message: string) {
   saveBlocked = true;
   conflictBlocked = true;
   if (!engine.state.paused) engine.togglePause();
   $("#reload").hidden = false;
-  $("#save-status").textContent = "存档已变化，请读取最新档";
+  $("#save-status").textContent = message;
   toast(message);
   updateUI();
 }
@@ -404,24 +414,30 @@ on($("#reload"), "click", () => {
     )
   )
     return;
-  const recovered = repository.load(Date.now());
+  const recovered = repository.load(Date.now(), { allowNew: false });
+  updateBackupControls();
+  $("#new-shop").hidden = !recovered.protectedRaw && recovered.status !== "missing";
+  $("#new-shop").textContent = recovered.status === "missing" ? "确认开始新店" : "备份并开始新店";
+  // A recovery action may replace current progress only after a complete load,
+  // including its once-only settlement write. Missing/unreadable is not a new shop.
+  if (recovered.status !== "loaded") {
+    blockConflict(recovered.message);
+    return;
+  }
   routeDiagnostics?.reset("save reload");
   performancePanel?.reset("save reload");
   engine = createEngine(recovered.state, routeDiagnostics?.observe);
-  saveBlocked =
-    recovered.protectedRaw ||
-    recovered.status === "conflict" ||
-    recovered.status === "offline-save-failed";
-  conflictBlocked =
-    recovered.status === "conflict" ||
-    recovered.status === "offline-save-failed";
-  if (conflictBlocked && !engine.state.paused) engine.togglePause();
-  else if (!conflictBlocked && engine.state.paused) engine.togglePause();
-  $("#reload").hidden = !conflictBlocked;
-  $("#new-shop").hidden = !recovered.protectedRaw;
-  $("#save-status").textContent = saveBlocked
-    ? "已有存档已保留，自动保存暂停"
-    : "本地存档已恢复";
+  hasUsableState = true;
+  updateBackupControls();
+  saveBlocked = false;
+  conflictBlocked = false;
+  if (engine.state.paused) engine.togglePause();
+  $("#reload").hidden = true;
+  $("#new-shop").hidden = true;
+  $("#save-status").textContent = "本地存档已恢复";
+  lastSave = Date.now();
+  hiddenAt = document.hidden ? Date.now() : null;
+  presentation.reset(engine.state);
   renderBudget.reset(performance.now());
   toast(recovered.message);
   updateUI();
@@ -429,7 +445,7 @@ on($("#reload"), "click", () => {
 on($("#new-shop"), "click", () => {
   if (
     !window.confirm(
-      "会先保留旧存档的完整本地备份，再开始一个新店。建议先导出备份。继续吗？",
+      "会放弃本窗口进度；若存在旧存档，会先保留完整本地备份，再开始新店。建议先导出备份。继续吗？",
     )
   )
     return;
@@ -441,13 +457,18 @@ on($("#new-shop"), "click", () => {
   routeDiagnostics?.reset("new shop");
   performancePanel?.reset("new shop");
   engine = createEngine(undefined, routeDiagnostics?.observe);
+  hasUsableState = true;
+  updateBackupControls();
   saveBlocked = false;
   conflictBlocked = false;
   $("#new-shop").hidden = true;
   $("#reload").hidden = true;
+  hiddenAt = document.hidden ? Date.now() : null;
+  renderBudget.reset(performance.now());
+  presentation.reset(engine.state);
   save();
   updateUI();
-  toast("旧存档已本地备份，新店开始营业");
+  toast(result.backupKey ? "旧存档已本地备份，新店开始营业" : "已确认开始新店");
 });
 function updateRenderModeUI() {
   root.querySelectorAll<HTMLButtonElement>("[data-render-mode]").forEach(button => {
@@ -581,11 +602,11 @@ function resumeVisible() {
     const start = hiddenAt;
     hiddenAt = null;
     const secs = Math.max(0, (Date.now() - start) / 1000);
-    if (secs >= 30) {
+    if (!saveBlocked && secs >= 30) {
       const result = engine.applyOffline(secs, `hidden-${start}`);
       if (result.accepted && result.amount > 0)
         toast(`欢迎回来！离线经营存入 ${money(result.amount)}`);
-    } else engine.advance(secs);
+    } else if (!saveBlocked) engine.advance(secs);
     save();
   } else settleVisibleTail();
   renderBudget.reset(performance.now());
@@ -677,14 +698,10 @@ if (routeDiagnostics)
     configurable: true,
   });
 updateRenderModeUI();
+updateBackupControls();
 updateUI();
 frame = requestAnimationFrame(tick);
 if (loaded.message && loaded.status !== "new" && loaded.status !== "loaded")
   toast(loaded.message);
-if (saveBlocked)
-  $("#save-status").textContent = conflictBlocked
-    ? "存档已变化，请读取最新档"
-    : "旧存档已保留，自动保存暂停";
-else if (loaded.status === "unavailable")
-  $("#save-status").textContent = "浏览器保存不可用，请导出备份";
+if (saveBlocked) $("#save-status").textContent = loaded.message;
 if (import.meta.hot) import.meta.hot.dispose(() => cleanup());

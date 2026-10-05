@@ -56,3 +56,7 @@ REQ-3D-026 → [TC-3D-016](cases/slice/TC-3D-016.md)、[计划](plans/clear-60.m
 ## 金库靠近与地毯完整接角
 
 REQ-3D-028 → [TC-3D-018](cases/slice/TC-3D-018.md)、[计划](plans/scene-alignment.md)。三尺寸/双DPR投影间隔、真实拾取、全宽接角射线与无重叠几何；真实新像素、触控与顾客经过另验。
+
+## 存档恢复失败保护
+
+REQ-3D-029 → [TC-3D-019](cases/slice/TC-3D-019.md)、[计划](plans/save-recovery-safety.md)。570→0丢档链、仓库写屏障、失败/缺失/坏档分流、明确新店、备份/移除失败与CAS、重复恢复/时钟/后台保护；假DOM执行实际handler，不替代真实浏览器验收。
