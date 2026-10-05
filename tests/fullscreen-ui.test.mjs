@@ -19,6 +19,7 @@ const { RouteQAPanel } = await import('../src/slice/qa/RouteQAPanel.ts');
 const { PerformanceQAPanel } = await import('../src/slice/qa/PerformanceQAPanel.ts');
 const { createEngine, createInitialState, recipeById, managerSpeed } = await import('../src/slice/core/engine.ts');
 const { LocalSaveRepository, SAVE_KEY, createMemoryStorage } = await import('../src/slice/core/persistence.ts');
+const { createPortableSave, parsePortableSave, overviewOf, portableFilename, MAX_PORTABLE_BYTES } = await import('../src/slice/core/portableSave.ts');
 
 // These checks inspect actual markup/CSS and execute actual app handlers with a fake
 // DOM/scene and real core/save repository. They are NOT browser/native-dialog/pixel QA.
@@ -50,6 +51,9 @@ class FakeElement {
   disabled = false;
   isConnected = true;
   textContent = '';
+  value = '';
+  checked = false;
+  files = null;
   focused = 0;
   children = [];
   get className() { return this.getAttribute('class') ?? ''; }
@@ -95,7 +99,7 @@ class FakeElement {
   focus() { this.focused++; this.ownerDocument.activeElement = this; }
   getBoundingClientRect() { return { left: 100, right: 500, top: 100, bottom: 650, width: 400, height: 550 }; }
 }
-function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, storageUnavailable = false, readUnavailable = false, writeUnavailable = false, conflictDuringClaim = false, deferDialogClose = false, renderMode, query = '?qa=1', renderUnavailable = false, now = Date.now() } = {}) {
+function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, storageUnavailable = false, readUnavailable = false, writeUnavailable = false, conflictDuringClaim = false, deferDialogClose = false, renderMode, query = '?qa=1', renderUnavailable = false, navigator = {}, portableOverrides = {}, now = Date.now() } = {}) {
   const clock = { now, performance: 0 };
   const nodes = [], closeEvents = [];
   const document = new FakeElement('document', null);
@@ -124,7 +128,13 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   } });
   document.querySelector = selector => selector === '#slice-root' ? root : root.querySelector(selector);
   document.querySelectorAll = selector => root.querySelectorAll(selector);
-  const downloads = [], blobs = [];
+  const downloads = [], blobs = [], revokedUrls = [], storageWrites = [], fileTasks = new Set();
+  const trackFileTask = operation => (...args) => {
+    const task = Promise.resolve().then(() => operation(...args));
+    fileTasks.add(task);
+    task.then(() => fileTasks.delete(task), () => fileTasks.delete(task));
+    return task;
+  };
   document.createElement = tag => { const element = new FakeElement(tag, document); element.click = () => downloads.push(element); return element; };
   const memory = createMemoryStorage();
   if (raw !== undefined) memory.setItem(SAVE_KEY, raw);
@@ -141,7 +151,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
       }
       return memory.getItem(key);
     },
-    setItem(key, value) { if (storageControl.writeUnavailable) throw new Error('writes unavailable'); memory.setItem(key, value); },
+    setItem(key, value) { if (storageControl.writeUnavailable) throw new Error('writes unavailable'); memory.setItem(key, value); storageWrites.push({ key, value }); },
     removeItem(key) { if (storageControl.writeUnavailable || storageControl.removeUnavailable) throw new Error('writes unavailable'); memory.removeItem(key); },
   };
   const window = new FakeElement('window', document);
@@ -187,7 +197,7 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
   }
   class FakeDate extends Date { constructor(...args) { super(...(args.length ? args : [clock.now])); } static now() { return clock.now; } }
   const source = main.replace(/^import\s[\s\S]*?;\n/gm, '').replace(/if \(import\.meta\.hot\) import\.meta\.hot\.dispose\(\(\) => cleanup\(\)\);/, 'captureCleanup(() => cleanup());');
-  const context = { document, window, location: { search: query }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, RouteDiagnostics, isRouteQA, RouteQAPanel, PerformanceQAPanel, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, createEngine, recipeById, managerSpeed, LocalSaveRepository, SAVE_KEY, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL() {} }, Blob, console, setTimeout: (callback, delay = 0) => { const id = ++nextId; timers.set(id, callback); timerDelays.set(id, delay); return id; }, clearTimeout: id => { timers.delete(id); timerDelays.delete(id); }, requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
+  const context = { document, window, location: { search: query }, HTMLElement: FakeElement, HTMLCanvasElement: FakeElement, HTMLButtonElement: FakeElement, HTMLInputElement: FakeElement, Date: FakeDate, performance: { now: () => clock.performance }, AbortController, ResizeObserver: FakeResizeObserver, CoffeeScene: FakeScene, RenderBudget, FrameInterpolator, RouteDiagnostics, isRouteQA, RouteQAPanel, PerformanceQAPanel, readRenderMode, isRenderMode, RENDER_MODE_KEY, structuredClone, createEngine, recipeById, managerSpeed, LocalSaveRepository, SAVE_KEY, createPortableSave: trackFileTask(portableOverrides.createPortableSave ?? createPortableSave), parsePortableSave: trackFileTask(portableOverrides.parsePortableSave ?? parsePortableSave), overviewOf, portableFilename, MAX_PORTABLE_BYTES, crypto: globalThis.crypto, TextEncoder, File, navigator, URLSearchParams, URL: { createObjectURL: blob => { blobs.push(blob); return `blob:qa-${blobs.length}`; }, revokeObjectURL: url => revokedUrls.push(url) }, Blob, console, setTimeout: (callback, delay = 0) => { const id = ++nextId; timers.set(id, callback); timerDelays.set(id, delay); return id; }, clearTimeout: id => { timers.delete(id); timerDelays.delete(id); }, requestAnimationFrame: callback => { const id = ++nextId; frames.set(id, callback); return id; }, cancelAnimationFrame: id => frames.delete(id), captureCleanup: callback => { hmrCleanup = callback; } };
   runInNewContext(stripTypeScriptTypes(source), context, { timeout: 1500 });
   const debug = window.__coffeeSliceDebug;
   const state = () => structuredClone(debug.readState());
@@ -205,7 +215,31 @@ function fixture({ initial = createInitialState(), raw, savedAtAgoSeconds = 0, s
     }
     assert.fail('offline job failed to reach a terminal state');
   }
-  return { clock, document, window, root, nodes, renderer, observer, frames, timers, memory, storageControl, downloads, blobs, state, flushOffline, async stepOffline() {
+  return { clock, document, window, root, nodes, renderer, observer, frames, timers, memory, storageControl, storageWrites, downloads, blobs, revokedUrls, state, flushOffline,
+    chooseFile(file) {
+      const input = root.querySelector('#file-input'); assert.ok(input, 'actual file picker input exists');
+      input.files = file ? [{ ...file, name: file.name ?? 'test-save.json', size: file.size ?? new TextEncoder().encode(typeof file.text === 'string' ? file.text : '').byteLength, text: trackFileTask(() => typeof file.text === 'function' ? file.text() : file.text) }] : [];
+      input.value = file ? `C:\\fakepath\\${file.name ?? 'test-save.json'}` : '';
+      input.emit('change');
+    },
+    async flushFiles() {
+      // Track the real imported encoder/parser promises rather than replacing
+      // handlers or guessing how many WebCrypto worker turns they will take.
+      for (let pass = 0; pass < 100; pass++) {
+        if (fileTasks.size) await Promise.allSettled([...fileTasks]);
+        await new Promise(resolve => setImmediate(resolve));
+        if (!fileTasks.size) return;
+      }
+      assert.fail('portable file operations failed to settle');
+    },
+    async untilFile(predicate) {
+      for (let pass = 0; pass < 1000; pass++) {
+        if (predicate()) return;
+        await new Promise(resolve => setImmediate(resolve));
+      }
+      assert.fail('portable file handler did not reach the expected state');
+    },
+    async stepOffline() {
     const pending = [...timers].find(([id]) => timerDelays.get(id) === 0);
     assert.ok(pending, 'an actual pending offline macrotask exists');
     const [id, callback] = pending; timers.delete(id); timerDelays.delete(id); callback();
@@ -310,7 +344,7 @@ test('TC-3D-009 REQ-3D-016 only HUD settings remains outside the closed native o
   assert.ok(modalStart >= 0);
   assert.doesNotMatch(openingTags(modal, 'dialog')[0], /\bopen(?:\s|=|>)/);
   const panels = openingTags(modal, 'div').filter(tag => tag.includes('class="operation-panel"'));
-  assert.equal(panels.length, 5);
+  assert.equal(panels.length, 6);
   for (const panel of panels) assert.match(panel, /\bhidden(?:\s|>)/);
   assert.doesNotMatch(outsideModal, /class="operation-panel"|id="counter-panel"|id="settings-panel"/);
   assert.deepEqual(declarations('[hidden]', 'display'), ['none']);
@@ -1835,5 +1869,461 @@ test('TC-3D-020 system suspension during a pending visible job cannot become ver
     assert.equal(f.element('#reload').hidden, false);
     f.click('#save'); f.tick(.1);
     assert.equal(f.memory.getItem(SAVE_KEY), original);
+  } finally { f.dispose(); }
+});
+
+// Portable-save tests drive main.ts's actual DOM handlers. File/Share/Blob APIs
+// are simulated; this is deliberately not Safari, Android, native picker or
+// pixel evidence. The codec, game engine and local repository remain real.
+function deferredFileOperation() {
+  let resolve, reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+async function portableFixture({ seconds = 90, savedAt = 1000, exportedAt = 2000, saveId = 'portable-source', revision = 7, state, ...fields } = {}) {
+  const engine = createEngine(); engine.advance(seconds);
+  const snapshot = state ?? engine.snapshot();
+  return createPortableSave({ gameSchemaVersion: 1, economyVersion: 1, offlinePolicyVersion: 3, savedAt, exportedAt, saveId, revision, overview: overviewOf(snapshot), state: snapshot, ...fields });
+}
+function openFilePanel(f) {
+  if (!f.element('#operation-dialog').open) f.click('#settings');
+  f.click('#save-files');
+  assert.equal(f.element('#files-panel').hidden, false, 'settings opens the actual file-management panel');
+}
+async function reviewPortable(f, file) {
+  openFilePanel(f); f.chooseFile({ text: file.text }); await f.flushFiles();
+  assert.equal(f.element('#file-review').hidden, false, 'verified file has a visible replacement preview');
+}
+function confirmPortable(f) {
+  f.element('#file-other-tabs').checked = true;
+  f.element('#file-other-tabs').emit('change');
+  f.click('#file-confirm');
+}
+function portableWrites(f) { return f.storageWrites.filter(write => write.key === SAVE_KEY); }
+function importBackupWrites(f) { return f.storageWrites.filter(write => write.key.startsWith(`${SAVE_KEY}-import-backup-`)); }
+
+
+test('TC-3D-021 portable file controls expose explicit import review and manual sharing (static contract)', () => {
+  assert.match(modal, /id="save-files"/);
+  const picker = openingTags(modal, 'input').find(tag => /id="file-input"/.test(tag));
+  assert.ok(picker); assert.match(picker, /type="file"/); assert.match(picker, /accept="[^"]*\.json/);
+  const acknowledgement = openingTags(modal, 'input').find(tag => /id="file-other-tabs"/.test(tag));
+  assert.ok(acknowledgement); assert.match(acknowledgement, /type="checkbox"/);
+  for (const id of ['file-review', 'file-current-summary', 'file-incoming-summary', 'file-confirm', 'file-cancel', 'file-prepare', 'file-download', 'file-share', 'file-back', 'backup-live', 'backup-original']) assert.match(modal, new RegExp(`id="${id}"`));
+  assert.match(modal, /手动/); assert.match(modal, /同步/);
+});
+
+test('TC-3D-021 reading and previewing a verified file freezes without modifying pause, money or durable bytes', async () => {
+  const incoming = await portableFixture();
+  const initial = createEngine(); initial.advance(22);
+  const f = fixture({ initial: initial.snapshot(), now: 130000 });
+  try {
+    const before = f.state(), raw = f.memory.getItem(SAVE_KEY);
+    await reviewPortable(f, incoming);
+    assert.deepEqual(f.state(), before, 'read and preview must not install incoming state or mutate paused');
+    assert.equal(f.state().paused, false, 'review uses UI freeze rather than engine.pause');
+    assert.equal(f.memory.getItem(SAVE_KEY), raw);
+    assert.equal(portableWrites(f).length, 0);
+    assert.equal(importBackupWrites(f).length, 0);
+    assert.ok(f.element('#file-current-summary').textContent.length > 0);
+    assert.ok(f.element('#file-incoming-summary').textContent.length > 0);
+    assert.notEqual(f.element('#file-current-summary').textContent, f.element('#file-incoming-summary').textContent);
+    assert.equal(f.element('#file-confirm').disabled, true, 'other-tabs acknowledgement is required');
+    f.click('#file-confirm'); f.tick(12); f.click('#save');
+    assert.deepEqual(f.state(), before, 'RAF/autosave/manual-save cannot advance or persist a reviewed shop');
+    assert.equal(f.memory.getItem(SAVE_KEY), raw);
+    assert.equal(portableWrites(f).length, 0);
+    f.click('#file-cancel');
+    assert.equal(f.element('#file-review').hidden, true);
+    assert.deepEqual(f.state(), before, 'cancel does not replay preview dwell time');
+    f.tick(.1);
+    assert.ok(f.state().elapsed > before.elapsed && f.state().elapsed < before.elapsed + .2, 'normal live time resumes without catch-up for the review interval');
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-021 confirm makes exactly one backup and replacement with a fresh branch and no file-era offline credit', async () => {
+  const incoming = await portableFixture({ savedAt: 1000, exportedAt: 2000, revision: 19 });
+  const initial = createEngine(); initial.advance(22);
+  const f = fixture({ initial: initial.snapshot(), now: 5_000_000 });
+  try {
+    f.tick(.25);
+    const before = f.state(), raw = f.memory.getItem(SAVE_KEY), oldEnvelope = JSON.parse(raw);
+    assert.notDeepEqual(before, oldEnvelope.state, 'fixture has unsaved live progress distinct from the durable bytes');
+    await reviewPortable(f, incoming);
+    confirmPortable(f); f.click('#file-confirm');
+    assert.equal(portableWrites(f).length, 1, 'repeated confirm cannot repeat the replacement');
+    assert.equal(importBackupWrites(f).length, 1);
+    const envelope = JSON.parse(f.memory.getItem(SAVE_KEY));
+    assert.deepEqual(envelope.state, incoming.payload.state);
+    assert.deepEqual(f.state(), incoming.payload.state, 'import does not settle the old file timestamp');
+    assert.equal(envelope.savedAt, f.clock.now);
+    assert.equal(envelope.revision, 1);
+    assert.notEqual(envelope.saveId, incoming.payload.saveId);
+    assert.notEqual(envelope.saveId, oldEnvelope.saveId);
+    assert.ok(envelope.importedFileHashes.includes(incoming.fingerprint));
+    const backup = JSON.parse(f.memory.getItem(envelope.lastImportBackupKey));
+    assert.equal(backup.originalRaw, raw); assert.deepEqual(backup.liveState, before);
+    assert.equal(f.element('#file-review').hidden, true);
+    assert.equal(f.element('#backup-live').hidden, false);
+    f.click('#backup-live'); await f.flushFiles(); f.click('#file-download');
+    const restored = await parsePortableSave(await f.blobs.at(-1).text());
+    assert.equal(restored.ok, true); assert.deepEqual(restored.file.payload.state, before);
+    assert.notEqual(restored.file.payload.saveId, oldEnvelope.saveId, 'unsaved recovery snapshot has its own identity');
+    assert.equal(restored.file.payload.revision, 1);
+    f.click('#file-download');
+    const repeatedRecovery = await parsePortableSave(await f.blobs.at(-1).text());
+    assert.equal(repeatedRecovery.file.payload.saveId, restored.file.payload.saveId, 'repeated download retains prepared recovery identity');
+    f.click('#backup-original');
+    assert.equal(await f.blobs.at(-1).text(), raw, 'original backup preserves the exact durable source bytes');
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-021 cancel, back, close, Escape and native close clear an active review and preserve the current shop', async () => {
+  const incoming = await portableFixture();
+  for (const action of ['cancel', 'back', 'close', 'escape', 'native-close']) {
+    const f = fixture({ now: 130000 });
+    try {
+      const raw = f.memory.getItem(SAVE_KEY), before = f.state();
+      await reviewPortable(f, incoming);
+      f.tick(3);
+      if (action === 'cancel') f.click('#file-cancel');
+      if (action === 'back') f.click('#file-back');
+      if (action === 'close') f.click('#dialog-close');
+      if (action === 'escape') { const event = f.element('#operation-dialog').emit('cancel'); if (!event.prevented) f.element('#operation-dialog').close(); }
+      if (action === 'native-close') f.element('#operation-dialog').close();
+      assert.equal(f.element('#file-review').hidden, true, action);
+      assert.deepEqual(f.state(), before, action);
+      assert.equal(f.memory.getItem(SAVE_KEY), raw, action);
+      f.click('#file-confirm');
+      assert.equal(portableWrites(f).length, 0, `${action} makes the old confirm inert`);
+      f.tick(.1); assert.ok(f.state().elapsed > before.elapsed && f.state().elapsed < before.elapsed + .2, action);
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-021 late file parsing cannot reopen or replace after cancel, back, close, Escape, hide, storage change or disposal', async () => {
+  const incoming = await portableFixture();
+  for (const action of ['cancel', 'back', 'close', 'escape', 'hide', 'storage', 'dispose']) {
+    const parsed = deferredFileOperation(), release = deferredFileOperation();
+    const f = fixture({ now: 130000, portableOverrides: { parsePortableSave: async text => { const result = await parsePortableSave(text); parsed.resolve(); await release.promise; return result; } } });
+    try {
+      const raw = f.memory.getItem(SAVE_KEY), before = f.state();
+      openFilePanel(f); f.chooseFile({ text: incoming.text }); await parsed.promise;
+      if (action === 'cancel') f.click('#file-cancel');
+      if (action === 'back') f.click('#file-back');
+      if (action === 'close') f.click('#dialog-close');
+      if (action === 'escape') { const event = f.element('#operation-dialog').emit('cancel'); if (!event.prevented) f.element('#operation-dialog').close(); }
+      if (action === 'hide') { f.document.hidden = true; f.document.emit('visibilitychange'); }
+      if (action === 'storage') { f.memory.setItem(SAVE_KEY, 'foreign update'); f.window.emit('storage', { key: SAVE_KEY, newValue: 'foreign update' }); }
+      if (action === 'dispose') f.dispose();
+      const bytesAfterAction = f.memory.getItem(SAVE_KEY), writesAfterAction = f.storageWrites.length;
+      release.resolve(); await f.flushFiles();
+      assert.equal(f.element('#file-review').hidden, true, action);
+      assert.equal(f.memory.getItem(SAVE_KEY), bytesAfterAction, `${action}: late parsing cannot write`);
+      assert.equal(f.storageWrites.length, writesAfterAction, action);
+      assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(before), `${action}: late parsing cannot replace the current game`);
+      assert.equal(importBackupWrites(f).length, 0, action);
+      if (!['hide', 'storage', 'dispose'].includes(action)) assert.equal(bytesAfterAction, raw, action);
+    } finally { release.resolve(); await f.flushFiles(); f.dispose(); }
+  }
+});
+
+test('TC-3D-021 newer file selection wins even when an older valid parse resolves last', async () => {
+  const older = await portableFixture({ seconds: 90, saveId: 'older-file' });
+  const newer = await portableFixture({ seconds: 180, saveId: 'newer-file' });
+  const parsed = deferredFileOperation(), release = deferredFileOperation();
+  const f = fixture({ now: 130000, portableOverrides: { parsePortableSave: async text => { const result = await parsePortableSave(text); if (text === older.text) { parsed.resolve(); await release.promise; } return result; } } });
+  try {
+    openFilePanel(f); f.chooseFile({ text: older.text }); await parsed.promise;
+    f.chooseFile({ text: newer.text });
+    await f.untilFile(() => !f.element('#file-review').hidden);
+    const summary = f.element('#file-incoming-summary').textContent;
+    release.resolve(); await f.flushFiles();
+    assert.equal(f.element('#file-incoming-summary').textContent, summary, 'old completion cannot replace the latest preview');
+    confirmPortable(f);
+    assert.deepEqual(f.state(), newer.payload.state);
+    assert.equal(portableWrites(f).length, 1);
+  } finally { release.resolve(); await f.flushFiles(); f.dispose(); }
+});
+
+
+test('TC-3D-021 oversized, malformed, unsupported and read-failing files never become a writable review', async () => {
+  const good = await portableFixture();
+  const future = JSON.parse(good.text); future.formatVersion = 999;
+  const wrongSchema = JSON.parse(good.text), payload = JSON.parse(wrongSchema.payloadText);
+  payload.gameSchemaVersion = 99; wrongSchema.payloadText = JSON.stringify(payload);
+  wrongSchema.integrity.sha256 = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(wrongSchema.payloadText)))].map(n => n.toString(16).padStart(2, '0')).join('');
+  const cases = [
+    { name: 'too-large.json', size: MAX_PORTABLE_BYTES + 1, text() { assert.fail('size guard must reject before calling File.text'); } },
+    { name: 'lying-size.json', size: 1, text: ' '.repeat(MAX_PORTABLE_BYTES + 1) },
+    { name: 'broken.json', text: '{ broken JSON' },
+    { name: 'raw-recovery.json', text: JSON.stringify({ schemaVersion: 1, state: good.payload.state }) },
+    { name: 'future.json', text: JSON.stringify(future) },
+    { name: 'future-game.json', text: JSON.stringify(wrongSchema) },
+    { name: 'unreadable.json', size: 1, text: () => Promise.reject(Error('simulated file read denial')) },
+  ];
+  for (const file of cases) {
+    const f = fixture({ now: 130000 });
+    try {
+      const before = f.state(), raw = f.memory.getItem(SAVE_KEY);
+      openFilePanel(f); f.chooseFile(file); await f.flushFiles();
+      assert.equal(f.element('#file-review').hidden, true, file.name);
+      f.click('#file-confirm');
+      assert.deepEqual(f.state(), before, file.name);
+      assert.equal(f.memory.getItem(SAVE_KEY), raw, file.name);
+      assert.equal(f.storageWrites.length, 0, file.name);
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-021 choosing no file or an invalid replacement discards an older ready review', async () => {
+  const incoming = await portableFixture();
+  for (const replacement of [null, { text: 'not a portable file' }]) {
+    const f = fixture({ now: 130000 });
+    try {
+      const raw = f.memory.getItem(SAVE_KEY), before = f.state();
+      await reviewPortable(f, incoming);
+      f.chooseFile(replacement); await f.flushFiles();
+      assert.equal(f.element('#file-review').hidden, true);
+      confirmPortable(f);
+      assert.equal(f.memory.getItem(SAVE_KEY), raw);
+      assert.deepEqual(f.state(), before);
+      assert.equal(portableWrites(f).length, 0);
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-021 preparing a portable export includes the visible pre-RAF tail and downloads verified unique files', async () => {
+  const initial = createEngine(); initial.advance(22);
+  const f = fixture({ initial: initial.snapshot(), now: 130000 });
+  try {
+    openFilePanel(f);
+    f.clock.now += 375; f.clock.performance += 375;
+    f.click('#file-prepare'); await f.flushFiles();
+    const expected = createEngine(initial.snapshot()); expected.advance(.375);
+    assert.deepEqual(f.state(), expected.snapshot(), 'prepare settles the real foreground tail before taking the export snapshot');
+    assert.deepEqual(JSON.parse(f.memory.getItem(SAVE_KEY)).state, expected.snapshot());
+    assert.equal(f.element('#file-download').disabled, false);
+    f.click('#file-download'); f.click('#file-download');
+    assert.equal(f.downloads.length, 2);
+    const first = await parsePortableSave(await f.blobs[0].text());
+    assert.equal(first.ok, true);
+    assert.deepEqual(first.file.payload.state, expected.snapshot());
+    assert.equal(first.file.payload.savedAt, f.clock.now);
+    assert.equal(first.file.payload.exportedAt, f.clock.now);
+    assert.notEqual(f.downloads[0].download, f.downloads[1].download, 'manual downloads cannot silently reuse a stale filename');
+    assert.match(f.downloads[0].download, /^mellow-bean-.*\.json$/);
+    assert.equal(f.blobs[0].type, 'application/json');
+  } finally { f.dispose(); }
+});
+
+test('TC-3D-021 share uses verified files, falls back when unsupported, and never downloads after user cancellation', async () => {
+  for (const mode of ['supported', 'unsupported', 'missing', 'aborted', 'failed']) {
+    const shares = [], checks = [];
+    const navigator = mode === 'missing' ? {} : {
+      canShare: data => { checks.push(data); return mode !== 'unsupported'; },
+      async share(data) { shares.push(data); if (mode === 'aborted') throw new DOMException('user canceled sharing', 'AbortError'); if (mode === 'failed') throw new Error('share unavailable'); },
+    };
+    const f = fixture({ now: 130000, navigator });
+    try {
+      openFilePanel(f); f.click('#file-prepare'); await f.flushFiles();
+      const raw = f.memory.getItem(SAVE_KEY), before = f.state();
+      f.click('#file-share'); await f.flushFiles();
+      const supported = ['supported', 'aborted', 'failed'].includes(mode);
+      assert.equal(shares.length, supported ? 1 : 0, mode);
+      assert.equal(f.downloads.length, ['unsupported', 'missing'].includes(mode) ? 1 : 0, mode);
+      if (mode === 'failed') { assert.match(f.element('#file-status').textContent, /下载/); f.click('#file-download'); assert.equal(f.downloads.length, 1, 'share failure offers an explicit download retry'); }
+      if (supported) {
+        assert.equal(shares[0].files.length, 1); assert.ok(shares[0].files[0] instanceof File);
+        const shared = await parsePortableSave(await shares[0].files[0].text());
+        assert.equal(shared.ok, true); assert.deepEqual(shared.file.payload.state, before);
+        assert.ok(checks.length > 0, 'canShare is checked before native share');
+      }
+      assert.deepEqual(f.state(), before); assert.equal(f.memory.getItem(SAVE_KEY), raw);
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-021 import backup failure or a silent storage race preserves current state without replacing foreign bytes', async () => {
+  const incoming = await portableFixture();
+  for (const mode of ['backup-failure', 'silent-conflict']) {
+    const f = fixture({ now: 130000 });
+    try {
+      const before = f.state(), raw = f.memory.getItem(SAVE_KEY);
+      await reviewPortable(f, incoming);
+      if (mode === 'backup-failure') f.storageControl.writeUnavailable = true;
+      else f.memory.setItem(SAVE_KEY, 'new foreign bytes without a delivered storage event');
+      confirmPortable(f);
+      assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(before));
+      assert.equal(f.memory.getItem(SAVE_KEY), mode === 'backup-failure' ? raw : 'new foreign bytes without a delivered storage event');
+      assert.equal(portableWrites(f).length, 0);
+      f.storageControl.writeUnavailable = false;
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-021 corrupt and unreadable startup cannot export placeholder portable progress; corrupt original bytes remain recoverable', async () => {
+  const incoming = await portableFixture();
+  for (const mode of ['corrupt', 'unreadable']) {
+    const raw = '{ exact corrupt startup bytes\n';
+    const f = fixture({ now: 130000, ...(mode === 'corrupt' ? { raw } : { readUnavailable: true }) });
+    try {
+      const before = f.state(), durable = f.memory.getItem(SAVE_KEY);
+      openFilePanel(f); f.click('#file-prepare'); await f.flushFiles(); f.click('#file-download');
+      assert.equal(f.downloads.length, 0, mode);
+      assert.deepEqual(f.state(), before); assert.equal(f.memory.getItem(SAVE_KEY), durable);
+      if (mode === 'corrupt') {
+        f.click('#file-back'); f.click('#export'); assert.equal(await f.blobs.at(-1).text(), raw);
+        await reviewPortable(f, incoming); confirmPortable(f);
+        assert.deepEqual(f.state(), incoming.payload.state);
+        f.click('#backup-live'); await f.flushFiles();
+        assert.equal(f.element('#file-download').disabled, true, 'no invented live backup for corrupt startup placeholder');
+        f.click('#backup-original'); assert.equal(await f.blobs.at(-1).text(), raw);
+        assert.equal(JSON.parse(importBackupWrites(f)[0].value).liveState, null);
+      }
+    } finally { f.dispose(); }
+  }
+});
+
+
+test('TC-3D-021 pending File.text reads cannot revive a preview after close, hide, replacement selection or disposal', async () => {
+  const incoming = await portableFixture();
+  for (const action of ['close', 'hide', 'new-file', 'dispose']) {
+    const started = deferredFileOperation(), release = deferredFileOperation();
+    const f = fixture({ now: 130000 });
+    try {
+      openFilePanel(f); f.chooseFile({ size: incoming.text.length, text: () => { started.resolve(); return release.promise; } });
+      await started.promise;
+      if (action === 'close') f.click('#dialog-close');
+      if (action === 'hide') { f.document.hidden = true; f.document.emit('visibilitychange'); }
+      if (action === 'new-file') { f.chooseFile({ text: 'invalid newer choice' }); await f.untilFile(() => /未改变|不是|无法/.test(f.element('#file-status').textContent)); }
+      if (action === 'dispose') f.dispose();
+      const raw = f.memory.getItem(SAVE_KEY), before = f.state(), writes = f.storageWrites.length;
+      release.resolve(incoming.text); await f.flushFiles();
+      assert.equal(f.element('#file-review').hidden, true, action);
+      assert.deepEqual(f.state(), before, action);
+      assert.equal(f.memory.getItem(SAVE_KEY), raw, action);
+      assert.equal(f.storageWrites.length, writes, action);
+      assert.equal(importBackupWrites(f).length, 0, action);
+    } finally { release.resolve(incoming.text); await f.flushFiles(); f.dispose(); }
+  }
+});
+
+test('TC-3D-021 active review is invalidated by storage, visibility and disposal with no review-dwell earnings', async () => {
+  const incoming = await portableFixture();
+  for (const action of ['storage', 'hide', 'dispose']) {
+    const f = fixture({ now: 130000 });
+    try {
+      await reviewPortable(f, incoming);
+      const before = f.state();
+      f.tick(12);
+      if (action === 'storage') { f.memory.setItem(SAVE_KEY, 'new foreign source'); f.window.emit('storage', { key: SAVE_KEY, newValue: 'new foreign source' }); }
+      if (action === 'hide') { f.document.hidden = true; f.document.emit('visibilitychange'); }
+      if (action === 'dispose') f.dispose();
+      assert.equal(f.element('#file-review').hidden, true, action);
+      assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(before), action);
+      assert.equal(importBackupWrites(f).length, 0, action);
+      if (action === 'storage') {
+        f.click('#file-confirm'); assert.equal(f.memory.getItem(SAVE_KEY), 'new foreign source'); assert.equal(f.state().paused, true);
+      } else {
+        const saved = JSON.parse(f.memory.getItem(SAVE_KEY));
+        assert.deepEqual(saved.state, before, `${action}: no review pause bit or dwell progress leaks into the saved state`);
+        assert.equal(saved.savedAt, f.clock.now);
+      }
+      if (action === 'hide') {
+        f.clock.now += 1000; f.clock.performance += 1000;
+        f.document.hidden = false; f.document.emit('visibilitychange'); await f.flushOffline();
+        const expected = createEngine(before); expected.applyOffline(1, f.state().lastOfflineClaimId);
+        assert.deepEqual(f.state(), expected.snapshot(), 'resume credits only the hidden second at80%, never the12-second review');
+      }
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-021 asynchronous export generation is discarded after navigation, hide, storage, another file or disposal', async () => {
+  const incoming = await portableFixture();
+  for (const action of ['back', 'close', 'escape', 'hide', 'storage', 'new-file', 'dispose']) {
+    const started = deferredFileOperation(), release = deferredFileOperation();
+    const f = fixture({ now: 130000, portableOverrides: { createPortableSave: async payload => { const result = await createPortableSave(payload); started.resolve(); await release.promise; return result; } } });
+    try {
+      openFilePanel(f); f.click('#file-prepare'); await started.promise;
+      if (action === 'back') f.click('#file-back');
+      if (action === 'close') f.click('#dialog-close');
+      if (action === 'escape') { const event = f.element('#operation-dialog').emit('cancel'); if (!event.prevented) f.element('#operation-dialog').close(); }
+      if (action === 'hide') { f.document.hidden = true; f.document.emit('visibilitychange'); }
+      if (action === 'storage') { f.memory.setItem(SAVE_KEY, 'new export-time foreign source'); f.window.emit('storage', { key: SAVE_KEY, newValue: 'new export-time foreign source' }); }
+      if (action === 'new-file') { f.chooseFile({ text: incoming.text }); await f.untilFile(() => !f.element('#file-review').hidden); }
+      if (action === 'dispose') f.dispose();
+      const raw = f.memory.getItem(SAVE_KEY), state = f.state(), status = f.element('#file-status').textContent, writes = f.storageWrites.length;
+      release.resolve(); await f.flushFiles();
+      assert.equal(f.element('#file-download').disabled, true, action);
+      assert.equal(f.element('#file-share').disabled, true, action);
+      assert.equal(f.element('#file-export-summary').textContent, '', action);
+      assert.equal(f.element('#file-status').textContent, status, `${action}: stale success does not overwrite the current message`);
+      assert.equal(f.memory.getItem(SAVE_KEY), raw, action);
+      assert.deepEqual(f.state(), state, action);
+      assert.equal(f.storageWrites.length, writes, action);
+      assert.equal(f.downloads.length, 0, action);
+    } finally { release.resolve(); await f.flushFiles(); f.dispose(); }
+  }
+});
+
+test('TC-3D-021 generation captures one saved snapshot while live play continues, and repeated prepare stays single-flight', async () => {
+  const started = deferredFileOperation(), release = deferredFileOperation();
+  let generations = 0;
+  const f = fixture({ now: 130000, portableOverrides: { createPortableSave: async payload => { generations++; const result = await createPortableSave(payload); started.resolve(); await release.promise; return result; } } });
+  try {
+    openFilePanel(f); f.click('#file-prepare'); await started.promise;
+    const preparedState = f.state(), durable = f.memory.getItem(SAVE_KEY);
+    f.click('#file-prepare'); f.click('#file-share'); f.click('#file-download');
+    assert.equal(generations, 1); assert.equal(f.downloads.length, 0);
+    f.tick(.2); assert.ok(f.state().elapsed > preparedState.elapsed, 'hashing an export does not freeze the game');
+    release.resolve(); await f.flushFiles(); f.click('#file-download');
+    const decoded = await parsePortableSave(await f.blobs.at(-1).text());
+    assert.equal(decoded.ok, true); assert.deepEqual(decoded.file.payload.state, preparedState);
+    assert.equal(f.memory.getItem(SAVE_KEY), durable, 'finishing generation cannot write a new anchor');
+    assert.equal(portableWrites(f).length, 1);
+  } finally { release.resolve(); await f.flushFiles(); f.dispose(); }
+});
+
+test('TC-3D-021 failed durable save cannot prepare a portable current-progress file', async () => {
+  for (const mode of ['write', 'read', 'silent-conflict']) {
+    const f = fixture({ now: 130000 });
+    try {
+      openFilePanel(f);
+      f.tick(.1);
+      const before = f.state(), raw = f.memory.getItem(SAVE_KEY);
+      if (mode === 'write') f.storageControl.writeUnavailable = true;
+      if (mode === 'read') f.storageControl.readUnavailable = true;
+      if (mode === 'silent-conflict') f.memory.setItem(SAVE_KEY, 'new durable bytes');
+      f.click('#file-prepare'); await f.flushFiles(); f.click('#file-download');
+      assert.equal(f.downloads.length, 0, mode); assert.equal(f.element('#file-download').disabled, true, mode);
+      assert.match(f.element('#file-status').textContent, /尚未安全保存|恢复/, mode);
+      assert.deepEqual(omitPauseClaims(f.state()), omitPauseClaims(before), mode);
+      assert.equal(f.memory.getItem(SAVE_KEY), mode === 'silent-conflict' ? 'new durable bytes' : raw, mode);
+      assert.equal(portableWrites(f).length, 0, mode);
+      f.storageControl.writeUnavailable = false; f.storageControl.readUnavailable = false;
+    } finally { f.dispose(); }
+  }
+});
+
+test('TC-3D-021 a repeated previously imported file warns before an explicit replacement and earns no extra offline credit', async () => {
+  const incoming = await portableFixture();
+  const f = fixture({ now: 130000 });
+  try {
+    await reviewPortable(f, incoming);
+    assert.equal(f.element('#file-repeat-warning').hidden, true);
+    confirmPortable(f);
+    f.tick(.2); const progressed = f.state();
+    assert.ok(progressed.elapsed > incoming.payload.state.elapsed);
+    f.chooseFile({ text: incoming.text }); await f.flushFiles();
+    assert.equal(f.element('#file-repeat-warning').hidden, false);
+    assert.deepEqual(f.state(), progressed, 'warning does not perform the repeat import');
+    assert.equal(f.element('#file-confirm').disabled, true, 'acknowledgement never carries across imports');
+    confirmPortable(f);
+    assert.deepEqual(f.state(), incoming.payload.state, 'explicit repeated import returns to the file snapshot without rewards');
+    assert.equal(portableWrites(f).length, 2);
+    assert.equal(importBackupWrites(f).length, 2);
+    assert.equal(JSON.parse(f.memory.getItem(SAVE_KEY)).revision, 1);
   } finally { f.dispose(); }
 });

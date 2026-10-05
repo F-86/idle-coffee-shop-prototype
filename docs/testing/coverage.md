@@ -64,3 +64,7 @@ REQ-3D-029 → [TC-3D-019](cases/slice/TC-3D-019.md)、[计划](plans/save-recov
 ## 无时长上限、80%离线经营
 
 REQ-3D-030 → [TC-3D-020](cases/slice/TC-3D-020.md)、[计划](plans/offline-unlimited.md)。精确新旧策略/分段/同核心回放、异步原子领取、取消/代际/CAS/异常和真正main handler；7天/30天云端实测与MacUI验收分别记录。
+
+## 手动文件存档
+
+REQ-3D-031 → [TC-3D-021](cases/slice/TC-3D-021.md)、[PORTABLE-QA-1.0](plans/portable-save-files.md)。协议/完整性/账本、备份与乐观冲突故障、实际main.ts异步与生命周期；Mac/iPhone/Safari原生文件及iCloud到达需独立合成数据验收，不混作自动同步通过。

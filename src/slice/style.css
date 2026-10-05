@@ -507,3 +507,11 @@ details p {
 
 #offline-progress { width: 100%; height: 16px; accent-color: #355e4f; }
 .offline-deposited { font-size: 19px; font-weight: 700; color: #41674f; font-variant-numeric: tabular-nums; }
+
+.file-summary { white-space: pre-line; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; font-variant-numeric: tabular-nums; }
+.file-picker { display: grid; gap: 8px; margin: 18px 0 10px; font-size: 13px; font-weight: 600; }
+.file-picker input { max-width: 100%; min-height: 44px; font: inherit; }
+.file-confirm-label { display: flex; align-items: flex-start; gap: 8px; margin: 16px 0; font-size: 12px; line-height: 1.6; }
+.file-confirm-label input { flex: 0 0 auto; width: 20px; height: 20px; accent-color: #355e4f; }
+#file-review { padding-top: 8px; border-top: 1px solid #d5dccb; }
+#file-back { margin-top: 12px; }

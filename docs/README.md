@@ -33,3 +33,5 @@
 当前离线策略：[无上限80%计划](testing/plans/offline-unlimited.md)、[TC-3D-020](testing/cases/slice/TC-3D-020.md)。整合已验场景和恢复保护，准确分批回放、旧区间原规则一次迁移、末尾原子保存；30分钟研究候选已被用户的新要求替代。
 
 无上限80%后续实机证据：[Mac短区间有限复测](testing/runs/2026-10-05-offline-unlimited/mac-limited-qa.md)。一次42.49秒→33.99秒显示符合80%；不代表长区间、迁移、取消或精确去重已通过，未知旧origin与4180失联原因如实保留。
+
+手动文件存档 v1：[规格](product/specs/portable-save-files.md)、[版本化QA计划](testing/plans/portable-save-files.md)、[TC-3D-021](testing/cases/slice/TC-3D-021.md)。导出已保存快照，导入先预览/备份/确认；新本地身份，不补发文件交换期间收益。不是自动iCloud同步，localStorage跨窗口冲突检查也不是真正原子事务。

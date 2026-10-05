@@ -16,6 +16,7 @@ import { FrameInterpolator } from "./render/FrameInterpolator";
 import { RouteDiagnostics, isRouteQA } from "./qa/RouteDiagnostics";
 import { RouteQAPanel } from "./qa/RouteQAPanel";
 import { PerformanceQAPanel } from "./qa/PerformanceQAPanel";
+import { createPortableSave, parsePortableSave, overviewOf, portableFilename, MAX_PORTABLE_BYTES, type PortableFile } from "./core/portableSave";
 import "./style.css";
 
 const root = document.querySelector<HTMLDivElement>("#slice-root")!;
@@ -35,7 +36,25 @@ root.innerHTML = `
     </div>
     <div id="coffee-panel" class="operation-panel" hidden><div class="coffee-medallion" id="coffee-symbol" aria-hidden="true">☕</div><p id="coffee-detail"></p><p class="detail-note">两款配方已解锁。分配到柜台后，下一杯开始生效。</p><div class="assign-buttons"><button data-assign="counter-a">供给柜台 A</button><button data-assign="counter-b">供给柜台 B</button></div></div>
     <div id="vault-panel" class="operation-panel" hidden><div class="vault-total"><span>已存入金库</span><strong id="vault-total"></strong></div><div class="detail-grid"><span>台面待收<strong id="pending"></strong></span><span>经理运送<strong id="carrying"></strong></span></div><p class="detail-note">钱留在台面，再由经理沿后方通道送回。送到金库才可用于升级。</p><p id="served" class="detail-note"></p><h2 class="manager-heading">收钱经理</h2><div class="detail-grid"><span>收运等级<strong id="manager-rank"></strong></span><span>收运效率<strong id="manager-speed"></strong></span></div><p id="manager-status" class="detail-note"></p><p id="manager-preview"></p><button id="manager-upgrade" class="primary-button"></button></div>
-    <div id="settings-panel" class="operation-panel" hidden><p id="save-status" class="save-status">本地自动保存</p><p class="detail-note">当前只保存到本浏览器，iCloud 尚未配置。</p><div class="settings-grid"><button id="save">保存进度</button><button id="export">导出备份</button><button id="export-current" hidden>导出当前副本</button><button id="reload" hidden>读取最新档</button><button id="new-shop" hidden>备份并开始新店</button></div><p class="settings-label" id="render-mode-label">画面与流畅度</p><div class="render-mode-picker" role="group" aria-labelledby="render-mode-label" aria-describedby="render-mode-note"><button data-render-mode="smooth">清晰流畅<small>跟随屏幕刷新</small></button><button data-render-mode="clear-60">清晰 60 帧<small>同等清晰度</small></button><button data-render-mode="balanced">平衡<small>较低清晰度 · 最高 60 帧</small></button><button data-render-mode="low-power">省电<small>低清晰度 · 最高 30 帧</small></button></div><p class="detail-note" id="render-mode-note"></p><p class="settings-label">逛逛小店</p><div class="jump-grid"><button data-focus="counter-a-recipe">柜台 A</button><button data-focus="counter-b-recipe">柜台 B</button><button data-focus="menu-espresso">咖啡墙</button><button data-focus="vault">金库</button><button data-focus="invite">入口</button></div><details><summary>怎么玩</summary><p>客人会自动进入、排队和取杯，入口也能招呼客人。柜台升级更快更值钱，在金库里升级经理提高收运。点柜台前脸的配方牌换咖啡，墙上菜单能查看配方或分配到柜台。制作中的那一杯不会被追改。</p><p>离线按80%经营速度推进，无时长上限；钱由经理送回金库后可用。此版本没有真实跨设备同步。</p></details></div>
+    <div id="settings-panel" class="operation-panel" hidden><p id="save-status" class="save-status">本地自动保存</p><p class="detail-note">自动保存只在本浏览器；跨设备请使用手动文件存档。</p><div class="settings-grid"><button id="save">保存进度</button><button id="save-files">手动文件存档</button><button id="export">导出备份</button><button id="export-current" hidden>导出当前副本</button><button id="reload" hidden>读取最新档</button><button id="new-shop" hidden>备份并开始新店</button></div><p class="settings-label" id="render-mode-label">画面与流畅度</p><div class="render-mode-picker" role="group" aria-labelledby="render-mode-label" aria-describedby="render-mode-note"><button data-render-mode="smooth">清晰流畅<small>跟随屏幕刷新</small></button><button data-render-mode="clear-60">清晰 60 帧<small>同等清晰度</small></button><button data-render-mode="balanced">平衡<small>较低清晰度 · 最高 60 帧</small></button><button data-render-mode="low-power">省电<small>低清晰度 · 最高 30 帧</small></button></div><p class="detail-note" id="render-mode-note"></p><p class="settings-label">逛逛小店</p><div class="jump-grid"><button data-focus="counter-a-recipe">柜台 A</button><button data-focus="counter-b-recipe">柜台 B</button><button data-focus="menu-espresso">咖啡墙</button><button data-focus="vault">金库</button><button data-focus="invite">入口</button></div><details><summary>怎么玩</summary><p>客人会自动进入、排队和取杯，入口也能招呼客人。柜台升级更快更值钱，在金库里升级经理提高收运。点柜台前脸的配方牌换咖啡，墙上菜单能查看配方或分配到柜台。制作中的那一杯不会被追改。</p><p>离线按80%经营速度推进，无时长上限；钱由经理送回金库后可用。此版本没有真实跨设备同步。</p></details></div>
+    <div id="files-panel" class="operation-panel" hidden>
+      <p class="detail-note">手动下载或分享 JSON 文件，再到另一台设备选择导入。可在系统面板中选择 iCloud Drive；这里无法确认文件是否已到达云端或另一台设备。</p>
+      <div class="settings-grid"><button id="file-prepare">生成新存档文件</button><button id="file-download" disabled>下载新文件</button><button id="file-share" disabled>分享文件</button></div>
+      <p id="file-export-summary" class="file-summary"></p>
+      <label class="file-picker" for="file-input">选择要导入的存档文件（最多 256 KiB）<input id="file-input" type="file" accept="application/json,.json"></label>
+      <p id="file-status" class="detail-note" role="status" aria-live="polite">选择文件只会预览，确认前不会替换当前小店。</p>
+      <div id="file-review" hidden>
+        <h2>对比进度</h2><p class="settings-label">当前小店</p><p id="file-current-summary" class="file-summary"></p><p class="settings-label">文件中的小店</p><p id="file-incoming-summary" class="file-summary"></p>
+        <p id="file-repeat-warning" class="save-status" hidden>此文件近期已导入过。再次导入会把进度退回该快照；不会再次发放文件期间的离线收益。</p>
+        <p class="detail-note">预览期间暂停经营。确认会完整替换为文件进度，并创建新的本地存档身份，不合并金额。导出后到导入期间不计离线收益；此后恢复本地 80% 离线经营。</p>
+        <p class="detail-note">替换前必须先写入并校验本浏览器内的备份（当前进度及原始存档）。备份不会自动删除；空间不足时拒绝导入。请先下载重要副本，浏览器清除数据会移除本地备份。</p>
+        <label class="file-confirm-label"><input id="file-other-tabs" type="checkbox">我已关闭其他游戏标签页和窗口。此浏览器的冲突检查无法保证多窗口同时写入安全。</label>
+        <div class="settings-grid"><button id="file-confirm" disabled>备份并替换当前小店</button><button id="file-cancel">取消导入</button></div>
+      </div>
+      <div id="file-backups" hidden><p class="settings-label">最近一次导入前的本地备份</p><div class="settings-grid"><button id="backup-live">导出导入前进度</button><button id="backup-original">导出导入前原始档</button></div></div>
+      <p class="detail-note">校验码只用于检查文件完整性，不证明来源可信，也不是云同步或防作弊验证。请选择自己保留的文件。</p>
+      <button id="file-back" class="secondary-button">返回设置</button>
+    </div>
     <div id="offline-panel" class="operation-panel" hidden><div id="offline-working"><p id="offline-progress-text" role="status" aria-live="polite">正在计算离线经营进度…</p><progress id="offline-progress" max="1" value="0" aria-label="离线经营结算进度"></progress><p class="detail-note">结算完成并安全保存后才会到账。取消会保留原有进度，稍后可以重试。</p><button id="offline-cancel" class="secondary-button">取消结算</button></div><div id="offline-result" hidden><p id="offline-deposited" class="offline-deposited"></p><p id="offline-duration"></p><p id="offline-generated"></p><p id="offline-pending"></p><p id="offline-legacy" class="detail-note" hidden></p><button id="offline-done" class="primary-button">继续营业</button></div></div>
   </dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -107,7 +126,7 @@ else if (!conflictBlocked && engine.state.paused) engine.togglePause();
 $("#reload").hidden = !saveBlocked;
 $("#new-shop").hidden = !loaded.protectedRaw && loaded.status !== "missing";
 let selected: CounterId = "counter-a";
-let panel: "counter" | "coffee" | "vault" | "settings" | "offline" | null =
+let panel: "counter" | "coffee" | "vault" | "settings" | "files" | "offline" | null =
     null,
   viewedRecipe: RecipeId = "espresso";
 let scene: CoffeeScene | null = null;
@@ -118,10 +137,14 @@ type OfflineRetry = { kind: "load" } | { kind: "hidden"; state: SliceState; hidd
 let offlineJob: { pending: OfflineSettlement; controller: AbortController; started: number; lastObserved: number } | null = null;
 let offlineRetry: OfflineRetry | null = null;
 let resumeOfflineAfterHide = false;
-let offlineReturnPanel: "counter" | "coffee" | "vault" | "settings" | null = null;
+let offlineReturnPanel: "counter" | "coffee" | "vault" | "settings" | "files" | null = null;
 // Only a completed visible computation proves a long unrendered interval was
 // foreground work. Other long clock gaps need explicit recovery, not guessing.
 let verifiedForegroundSeconds = 0;
+let fileGeneration = 0;
+let fileBusy = false;
+let preparedFile: PortableFile | null = null;
+let fileReview: { file: PortableFile; expectedRaw: string | null; currentState: SliceState | null } | null = null;
 const LONG_FOREGROUND_GAP_SECONDS = 60;
 const UNCLASSIFIED_TIME_MESSAGE = "页面长时间未更新，无法确认这段时间的营业状态；已保护当前进度，请先导出当前副本或读取最新存档。";
 function toast(message: string) {
@@ -132,6 +155,7 @@ function toast(message: string) {
   toastTimer = setTimeout(() => $("#toast").classList.remove("visible"), 3500);
 }
 function save(manual = false, saveAt = Date.now()) {
+  if (fileReview) return;
   if (saveBlocked) {
     if (manual)
       toast(
@@ -156,6 +180,7 @@ function save(manual = false, saveAt = Date.now()) {
           ? "小店进度已保存到这个浏览器"
           : result.message || "保存失败，请导出备份",
       );
+    return result;
   } catch {
     $("#save-status").textContent = "保存失败，请导出备份";
     if (manual) toast("浏览器未允许保存，请导出存档备份");
@@ -168,6 +193,7 @@ function setSceneInteractive(enabled: boolean) {
 }
 function closePanel() {
   if (!dialog.open) return;
+  cancelFileReview();
   if (offlineJob) cancelOfflineWork("离线结算已取消，原有进度已保留。请在设置中重试。");
   dialog.close();
   // Native close is queued after open is removed. Navigation immediately after
@@ -201,7 +227,7 @@ function showPanel(
   }
 }
 function sceneAction(action: CoffeeSceneAction) {
-  if (stopped || dialog.open || offlineJob) return;
+  if (stopped || dialog.open || offlineJob || fileReview) return;
   if (action.type === "invite") invite();
   else if (action.type === "counter" || action.type === "recipe")
     showPanel("counter", action.id);
@@ -231,7 +257,7 @@ const performancePanel = routeDiagnostics ? new PerformanceQAPanel(root, () => {
   ].join("\n");
 }) : null;
 function invite() {
-  if (!settleVisibleTail()) return;
+  if (fileReview || !settleVisibleTail()) return;
   if (conflictBlocked) { toast("请先完成存档恢复或离线结算，再继续营业"); return; }
   if (engine.invite()) toast("欢迎光临！客人正走进小店");
   else
@@ -243,7 +269,7 @@ function invite() {
   updateUI();
 }
 function upgrade(id: CounterId) {
-  if (!settleVisibleTail()) return;
+  if (fileReview || !settleVisibleTail()) return;
   if (conflictBlocked) {
     toast("先读取最新存档，再购买升级");
     return;
@@ -261,7 +287,7 @@ function upgrade(id: CounterId) {
   updateUI();
 }
 function changeRecipe(id: CounterId, recipe: RecipeId) {
-  if (!settleVisibleTail()) return;
+  if (fileReview || !settleVisibleTail()) return;
   if (conflictBlocked) {
     toast("先读取最新存档，再切换配方");
     return;
@@ -332,9 +358,11 @@ on(canvas, "keydown", (event) => {
   }
 });
 on($("#dialog-close"), "click", closePanel);
+on(dialog, "cancel", () => cancelFileReview());
 on(dialog, "close", () => {
   // Ignore an older queued close when another scene action has reopened it.
   if (dialog.open) return;
+  cancelFileReview();
   if (offlineJob) cancelOfflineWork("离线结算已取消，原有进度已保留。请在设置中重试。");
   panel = null;
   setSceneInteractive(true);
@@ -360,7 +388,7 @@ on(dialog, "click", (event) => {
 });
 on($("#counter-upgrade"), "click", () => upgrade(selected));
 on($("#manager-upgrade"), "click", () => {
-  if (!settleVisibleTail()) return;
+  if (fileReview || !settleVisibleTail()) return;
   if (conflictBlocked) {
     toast("先读取最新存档，再购买升级");
     return;
@@ -377,6 +405,140 @@ on($("#manager-upgrade"), "click", () => {
   updateUI();
 });
 on($("#save"), "click", () => save(true));
+function fileMessage(message: string) { $("#file-status").textContent = message; }
+function summary(state: SliceState, savedAt?: number): string {
+  const o = overviewOf(state);
+  return `${savedAt === undefined ? "当前未存盘进度" : `时间 ${new Date(savedAt).toLocaleString()}`}\n金库 ${money(o.wallet)} · 营业额 ${money(o.totalEarned)} · 已售 ${o.totalServed} 杯\n柜台 A/B ${o.counterLevels.join(" / ")} 级 · 经理 ${o.managerLevel} 级\n待收 ${money(o.pendingCash)} · 运送 ${money(o.carrying)} · 经营 ${duration(o.elapsed)}`;
+}
+function updateFileControls() {
+  const review = fileReview !== null;
+  $("#file-prepare").toggleAttribute("disabled", fileBusy || review || saveBlocked || !hasUsableState);
+  $("#file-download").toggleAttribute("disabled", !preparedFile || fileBusy || review);
+  $("#file-share").toggleAttribute("disabled", !preparedFile || fileBusy || review);
+  $("#file-input").toggleAttribute("disabled", !!offlineJob);
+  $("#file-confirm").toggleAttribute("disabled", !review || fileBusy || !$<HTMLInputElement>("#file-other-tabs").checked);
+  $("#file-review").hidden = !review;
+  $("#file-backups").hidden = !repository.inspect().importBackupKey;
+  $("#backup-live").toggleAttribute("disabled", fileBusy || review);
+  $("#backup-original").toggleAttribute("disabled", fileBusy || review);
+}
+function cancelFileReview() {
+  const reviewing = !!fileReview;
+  fileGeneration++; fileBusy = false; fileReview = null;
+  $("#file-review").hidden = true;
+  $<HTMLInputElement>("#file-other-tabs").checked = false;
+  if (reviewing) {
+    // Preview is an explicitly paused interval, not online/offline earnings.
+    renderBudget.reset(performance.now());
+    presentation.reset(engine.state);
+    verifiedForegroundSeconds = 0;
+  }
+  updateFileControls();
+}
+function downloadText(text: string, filename: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+  const link = document.createElement("a");
+  link.href = url; link.download = filename; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function downloadPrepared() {
+  if (!preparedFile || fileBusy || fileReview) return;
+  try { downloadText(preparedFile.text, portableFilename(preparedFile)); fileMessage("已发起新文件下载，请在系统文件位置确认保存；尚未验证 iCloud 到达。"); }
+  catch { fileMessage("无法发起下载，请检查浏览器下载权限。"); }
+}
+on($("#save-files"), "click", () => { if (!offlineJob) { showPanel("files"); updateFileControls(); } });
+on($("#file-back"), "click", () => { cancelFileReview(); showPanel("settings"); });
+on($("#file-cancel"), "click", () => { cancelFileReview(); fileMessage("已取消导入，当前小店和原始存档保持不变。"); });
+on($("#file-other-tabs"), "change", updateFileControls);
+on($("#file-input"), "change", () => {
+  const input = $<HTMLInputElement>("#file-input");
+  const file = input.files?.[0]; input.value = "";
+  cancelFileReview();
+  if (!file || stopped || document.hidden || offlineJob) return;
+  if (file.size > MAX_PORTABLE_BYTES) { fileMessage("文件超过 256 KiB，未读取其内容。"); return; }
+  const generation = fileGeneration;
+  fileBusy = true; updateFileControls(); fileMessage("正在读取并校验文件，只会预览…");
+  void (async () => {
+    try {
+      const parsed = await parsePortableSave(await file.text());
+      if (generation !== fileGeneration || stopped || document.hidden || panel !== "files" || !dialog.open) return;
+      fileBusy = false;
+      if (!parsed.ok) { fileMessage(parsed.message); updateFileControls(); return; }
+      if (!settleVisibleTail()) { fileMessage("当前进度需要先恢复，请导出备份或读取最新档。"); return; }
+      fileReview = { file: parsed.file, expectedRaw: repository.inspect().rawText, currentState: hasUsableState ? engine.snapshot() : null };
+      const durable = repository.durableSnapshot();
+      $("#file-current-summary").textContent = fileReview.currentState ? `${summary(fileReview.currentState)}\n最近本地保存 ${durable ? new Date(durable.savedAt).toLocaleString() : "无"}\n${durable?.saveId ?? "尚无身份"} · r${durable?.revision ?? 0}` : "当前原始存档无法读取。确认前将按原始字节备份；不会把占位新店当作当前进度。";
+      const incoming = parsed.file.payload;
+      $("#file-incoming-summary").textContent = `${summary(incoming.state, incoming.savedAt)}\n导出 ${new Date(incoming.exportedAt).toLocaleString()}\n${incoming.saveId} · r${incoming.revision}\nSHA-256 ${parsed.file.fingerprint}`;
+      $("#file-repeat-warning").hidden = !durable?.importedFileHashes?.includes(parsed.file.fingerprint);
+      fileMessage("校验通过。请核对两份进度；确认前不会替换存档。");
+      updateFileControls();
+    } catch { if (generation === fileGeneration && !stopped) { fileBusy = false; fileMessage("无法读取文件，当前小店未改变。"); updateFileControls(); } }
+  })();
+});
+on($("#file-confirm"), "click", () => {
+  const review = fileReview;
+  if (!review || fileBusy || !$<HTMLInputElement>("#file-other-tabs").checked || stopped || document.hidden) return;
+  fileBusy = true; updateFileControls();
+  const result = repository.importSnapshot(review.file.payload.state, { expectedRaw: review.expectedRaw, currentState: review.currentState, fingerprint: review.file.fingerprint, otherTabsClosed: true }, Date.now());
+  if (!result.ok || !result.state) {
+    fileBusy = false;
+    if (result.status === "conflict" || result.uncertain) { cancelFileReview(); blockConflict(result.message); }
+    fileMessage(result.message); updateFileControls(); return;
+  }
+  cancelFileReview();
+  // The repository commit is verified before replacing the live engine. Start
+  // the new local branch at confirmation, with zero file-era offline reward.
+  acceptLoaded({ state: result.state, status: "loaded", message: result.message, protectedRaw: false, settledAt: result.settledAt }, performance.now(), "save reload");
+  preparedFile = null;
+  $("#file-export-summary").textContent = "";
+  fileMessage("已备份并导入。新本地身份已建立；文件导出到本次导入的间隔不计收益。");
+  updateFileControls();
+});
+on($("#file-prepare"), "click", () => {
+  if (fileBusy || fileReview || saveBlocked || !hasUsableState || stopped || document.hidden) return;
+  const written = save();
+  const durable = repository.durableSnapshot();
+  // A failed save must not export an older revision as the current progress.
+  if (!written?.ok || saveBlocked || !durable || JSON.stringify(durable.state) !== JSON.stringify(engine.snapshot()) || !durable.saveId || !durable.revision) { fileMessage("当前进度尚未安全保存。请重试保存，或返回设置导出当前恢复副本。"); return; }
+  const generation = ++fileGeneration;
+  fileBusy = true; preparedFile = null; updateFileControls();
+  void createPortableSave({ gameSchemaVersion: 1, economyVersion: 1, offlinePolicyVersion: 3, saveId: durable.saveId, revision: durable.revision, savedAt: durable.savedAt, exportedAt: Date.now(), overview: overviewOf(durable.state), state: durable.state }).then(file => {
+    if (generation !== fileGeneration || stopped || document.hidden || panel !== "files" || !dialog.open) return;
+    preparedFile = file; fileBusy = false;
+    $("#file-export-summary").textContent = `${summary(file.payload.state, file.payload.savedAt)}\n${file.payload.saveId} · r${file.payload.revision}`;
+    fileMessage("存档文件已准备好。下载或分享后，请自行确认保存位置；生成后的小店新进度不会自动写入此文件。"); updateFileControls();
+  }).catch(error => { if (generation === fileGeneration && !stopped) { fileBusy = false; fileMessage(error instanceof Error ? error.message : "无法生成存档文件。"); updateFileControls(); } });
+});
+on($("#file-download"), "click", downloadPrepared);
+on($("#file-share"), "click", () => {
+  if (!preparedFile || fileBusy || fileReview) return;
+  try {
+    const file = new File([preparedFile.text], portableFilename(preparedFile), { type: "application/json" });
+    if (!navigator.canShare?.({ files: [file] }) || !navigator.share) { downloadPrepared(); return; }
+    // Called directly from this button gesture; no prior asynchronous work.
+    const generation = fileGeneration;
+    void navigator.share({ files: [file], title: "Mellow Bean 手动存档" }).then(() => { if (generation === fileGeneration && !stopped) fileMessage("系统分享流程已结束，请自行确认保存位置与跨设备到达。"); }).catch(error => { if (generation === fileGeneration && !stopped) fileMessage(error?.name === "AbortError" ? "已取消分享，没有另行下载文件。" : "分享未完成，请使用下载新文件按钮。"); });
+  } catch { downloadPrepared(); }
+});
+on($("#backup-original"), "click", () => {
+  const backup = repository.readImportBackup();
+  if (!backup || backup.originalRaw === null) { fileMessage("没有可读取的导入前原始档。"); return; }
+  try { downloadText(backup.originalRaw, `mellow-bean-before-import-original-${crypto.randomUUID()}.json`); fileMessage("已发起原始档下载，内容保持原始字节；此恢复档不一定可直接导入。"); }
+  catch { fileMessage("备份下载失败，本地备份仍保留。"); }
+});
+on($("#backup-live"), "click", () => {
+  const backup = repository.readImportBackup();
+  if (!backup?.liveState || fileBusy || fileReview) { fileMessage("没有可读取的导入前有效进度；请导出原始档。"); return; }
+  const generation = ++fileGeneration;
+  fileBusy = true; updateFileControls();
+  void createPortableSave({ gameSchemaVersion: 1, economyVersion: 1, offlinePolicyVersion: 3, saveId: crypto.randomUUID(), revision: 1, savedAt: backup.createdAt, exportedAt: Date.now(), overview: overviewOf(backup.liveState), state: backup.liveState }).then(file => {
+    if (generation !== fileGeneration || stopped || document.hidden || panel !== "files") return;
+    preparedFile = file; fileBusy = false;
+    $("#file-export-summary").textContent = `导入前进度\n${summary(file.payload.state, file.payload.savedAt)}`;
+    fileMessage("导入前进度文件已准备好，请下载或分享。恢复时选择该文件并再次核对确认。"); updateFileControls();
+  }).catch(() => { if (generation === fileGeneration && !stopped) { fileBusy = false; fileMessage("无法读取有效的导入前进度，原始备份仍保留。"); updateFileControls(); } });
+});
 function updateBackupControls() {
   const sourceProtected = repository.inspect().protectedRaw;
   $("#export").textContent = sourceProtected ? "导出原始档" : "导出备份";
@@ -415,6 +577,7 @@ function exportBackup(original: boolean) {
 on($("#export"), "click", () => exportBackup(repository.inspect().protectedRaw));
 on($("#export-current"), "click", () => exportBackup(false));
 function blockConflict(message: string) {
+  cancelFileReview();
   cancelOfflineWork();
   saveBlocked = true;
   conflictBlocked = true;
@@ -601,10 +764,12 @@ function retryOffline() {
 on($("#offline-cancel"), "click", closePanel);
 on($("#offline-done"), "click", closePanel);
 on($("#reload"), "click", () => {
+  cancelFileReview();
   if (!window.confirm("读取最新存档或重试结算会放弃本窗口未保存的后续修改。可以先导出当前副本。继续吗？")) return;
   retryOffline();
 });
 on($("#new-shop"), "click", () => {
+  cancelFileReview();
   if (
     !window.confirm(
       "会放弃本窗口进度；若存在旧存档，会先保留完整本地备份，再开始新店。建议先导出备份。继续吗？",
@@ -736,6 +901,10 @@ function updateUI() {
     $("#dialog-eyebrow").textContent = "WELCOME BACK";
     $("#dialog-title").textContent = offlineJob ? "正在结算离线经营" : "离线经营记录";
     $("#dialog-description").textContent = offlineJob ? "原有进度已保留，完成后一次到账" : "只有经理送回金库的现金可以使用";
+  } else if (panel === "files") {
+    $("#dialog-eyebrow").textContent = "MANUAL SAVE FILE";
+    $("#dialog-title").textContent = "手动文件存档";
+    $("#dialog-description").textContent = "预览、备份、明确确认后才替换";
   } else if (panel === "settings") {
     $("#dialog-eyebrow").textContent = "MELLOW BEAN";
     $("#dialog-title").textContent = "小店设置";
@@ -750,7 +919,7 @@ function tick(now: number) {
   if (elapsed === null) return;
   const dt = elapsed;
   if (!allowVisibleTime(dt)) return;
-  const view = presentation.advance(engine, Math.max(0, dt));
+  const view = presentation.advance(engine, fileReview ? 0 : Math.max(0, dt));
   scene?.update(view, dt);
   if (performancePanel?.active) performancePanel.update(now, !!scene && !qaContextLost, document.hasFocus());
   if (routeDiagnostics && routePanel?.active) {
@@ -790,7 +959,7 @@ function resumeVisible() {
   frame = requestAnimationFrame(tick);
 }
 function allowVisibleTime(seconds: number): boolean {
-  if (saveBlocked || offlineJob) return true;
+  if (saveBlocked || offlineJob || fileReview) return true;
   if (Math.max(0, seconds - verifiedForegroundSeconds) > LONG_FOREGROUND_GAP_SECONDS + 1e-6) {
     blockConflict(UNCLASSIFIED_TIME_MESSAGE);
     return false;
@@ -799,13 +968,14 @@ function allowVisibleTime(seconds: number): boolean {
   return true;
 }
 function settleVisibleTail(): boolean {
-  if (hiddenAt !== null || saveBlocked || offlineJob) return true;
+  if (hiddenAt !== null || saveBlocked || offlineJob || fileReview) return true;
   const seconds = renderBudget.flush(performance.now());
   if (!allowVisibleTime(seconds)) return false;
   engine.advance(seconds);
   return true;
 }
 function suspendVisible() {
+  cancelFileReview();
   cancelAnimationFrame(frame);
   if (offlineJob) {
     resumeOfflineAfterHide = true;
@@ -847,6 +1017,7 @@ if (visualViewport)
   });
 function cleanup(persist = true) {
   if (stopped) return;
+  cancelFileReview();
   cancelOfflineWork();
   if (persist) { settleVisibleTail(); save(false, hiddenAt ?? Date.now()); }
   stopped = true;

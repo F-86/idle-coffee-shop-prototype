@@ -7,10 +7,12 @@ export const OFFLINE_POLICY_VERSION = 3;
 export const OFFLINE_SLICE_BUDGET_MS = 8;
 export const OFFLINE_STEP_BATCH = 32;
 export interface StorageLike { getItem(key: string): string | null; setItem(key: string, value: string): void; removeItem(key: string): void }
-export type SaveStatus = 'new' | 'missing' | 'loaded' | 'saved' | 'corrupt' | 'future' | 'unavailable' | 'conflict' | 'invalid-state' | 'offline-save-failed' | 'settling';
+export type SaveStatus = 'new' | 'missing' | 'loaded' | 'saved' | 'corrupt' | 'future' | 'unavailable' | 'conflict' | 'invalid-state' | 'offline-save-failed' | 'settling' | 'import-uncertain';
 export interface LoadResult { state: SliceState; status: SaveStatus; message: string; offline?: OfflineResult; protectedRaw: boolean; pending?: OfflineSettlement; settledAt?: number }
 export interface SaveResult { ok: boolean; status: SaveStatus; message: string; recordChangeTag?: string; backupKey?: string }
-interface Envelope { schemaVersion: 1; /** Missing/1 keeps legacy reload treatment until its next atomic settlement. */ offlinePolicyVersion?: OfflinePolicyVersion; savedAt: number; recordChangeTag: string; state: SliceState }
+export interface Envelope { schemaVersion: 1; saveId?: string; revision?: number; importedFileHashes?: string[]; lastImportBackupKey?: string; /** Missing/1 keeps legacy reload treatment until its next atomic settlement. */ offlinePolicyVersion?: OfflinePolicyVersion; savedAt: number; recordChangeTag: string; state: SliceState }
+export interface ImportBackup { format: 'mellow-bean-import-backup'; version: 1; createdAt: number; originalRaw: string | null; liveState: SliceState | null; liveSaveId: string; liveRevision: number; }
+export interface ImportResult extends SaveResult { state?: SliceState; settledAt?: number; uncertain?: boolean }
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const object = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const number = (value: unknown, min = 0, max = 1e12): value is number => typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
@@ -123,9 +125,12 @@ function decode(raw: string): { ok: true; envelope: Envelope } | { ok: false; st
   try { value = JSON.parse(raw); } catch { return { ok: false, status: 'corrupt', message: '存档无法读取，原始内容已保留。请先备份或明确重置。' }; }
   if (object(value) && (number(value.offlinePolicyVersion, OFFLINE_POLICY_VERSION + 1) || number(value.schemaVersion, 2) || object(value.state) && (number(value.state.schemaVersion, 2) || number(value.state.economyVersion, 2) || number(value.state.managerRouteVersion, MANAGER_ROUTE_VERSION + 1) || number(value.state.customerRouteVersion, CUSTOMER_ROUTE_VERSION + 1)))) return { ok: false, status: 'future', message: '这是较新版本的存档，当前版本不会覆盖它。请使用兼容的新版本。' };
   if (!object(value) || value.schemaVersion !== 1 || value.offlinePolicyVersion !== undefined && value.offlinePolicyVersion !== 1 && value.offlinePolicyVersion !== 2 && value.offlinePolicyVersion !== OFFLINE_POLICY_VERSION || !number(value.savedAt, 0, 8.64e15) || typeof value.recordChangeTag !== 'string' || !value.recordChangeTag || value.recordChangeTag.length > 256) return { ok: false, status: 'corrupt', message: '存档格式或结算时间无效，原始内容已保留。' };
+  if ((value.saveId !== undefined || value.revision !== undefined) && (typeof value.saveId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(value.saveId) || !integer(value.revision, 1, Number.MAX_SAFE_INTEGER - 1))) return { ok: false, status: 'corrupt', message: '存档身份或修订号无效，原始内容已保留。' };
+  if (value.importedFileHashes !== undefined && (!Array.isArray(value.importedFileHashes) || value.importedFileHashes.length > 32 || value.importedFileHashes.some(h => typeof h !== 'string' || !/^[a-f0-9]{64}$/.test(h)))) return { ok: false, status: 'corrupt', message: '导入记录无效，原始内容已保留。' };
+  if (value.lastImportBackupKey !== undefined && (typeof value.lastImportBackupKey !== 'string' || !value.lastImportBackupKey.startsWith(`${SAVE_KEY}-import-backup-`) || value.lastImportBackupKey.length > 200)) return { ok: false, status: 'corrupt', message: '导入前备份标识无效，原始内容已保留。' };
   const checked = validateState(value.state);
   if (!checked.ok) return { ok: false, status: 'corrupt', message: `${checked.message} 原始内容已保留。` };
-  return { ok: true, envelope: { schemaVersion: 1, offlinePolicyVersion: value.offlinePolicyVersion as OfflinePolicyVersion | undefined, savedAt: value.savedAt, recordChangeTag: value.recordChangeTag, state: checked.state } };
+  return { ok: true, envelope: { schemaVersion: 1, offlinePolicyVersion: value.offlinePolicyVersion as OfflinePolicyVersion | undefined, savedAt: value.savedAt, recordChangeTag: value.recordChangeTag, saveId: value.saveId as string | undefined, revision: value.revision as number | undefined, importedFileHashes: value.importedFileHashes as string[] | undefined, lastImportBackupKey: value.lastImportBackupKey as string | undefined, state: checked.state } };
 }
 
 export function createMemoryStorage(): StorageLike {
@@ -149,6 +154,8 @@ export class LocalSaveRepository {
   // A failed load must not lend its old CAS base to a replacement/fallback state.
   private recoveryRequired: { status: SaveStatus; message: string } | null = null;
   private generation = 0;
+  private retainedImportBackupKey: string | null = null;
+  private importNeedsReload = false;
   private active: PreparedOffline | null = null;
   private retrySource: { state: string; hiddenAt: number; raw: string | null } | null = null;
   constructor(storage?: StorageLike | null) {
@@ -174,8 +181,10 @@ export class LocalSaveRepository {
       }
       if (current !== this.baseRaw) return { ok: false, status: 'conflict', message: '另一个窗口已更新存档。当前进度尚未保存，请重新读取后继续。' };
       const previous = this.baseRaw === null ? null : decode(this.baseRaw);
+      const prior = previous?.ok ? previous.envelope : undefined;
+      if ((prior?.revision ?? 0) >= Number.MAX_SAFE_INTEGER - 1) return { ok: false, status: 'invalid-state', message: '存档修订号已达安全上限，请导出恢复副本。' };
       const recordChangeTag = tag();
-      const envelope: Envelope = { schemaVersion: 1, offlinePolicyVersion: OFFLINE_POLICY_VERSION, savedAt: Math.max(now, previous?.ok ? previous.envelope.savedAt : 0), recordChangeTag, state: checked.state };
+      const envelope: Envelope = { saveId: prior?.saveId ?? tag(), revision: (prior?.revision ?? 0) + 1, importedFileHashes: prior?.importedFileHashes, lastImportBackupKey: prior?.lastImportBackupKey, schemaVersion: 1, offlinePolicyVersion: OFFLINE_POLICY_VERSION, savedAt: Math.max(now, previous?.ok ? previous.envelope.savedAt : 0), recordChangeTag, state: checked.state };
       const raw = JSON.stringify(envelope);
       this.storage.setItem(SAVE_KEY, raw); this.baseRaw = raw;
       return { ok: true, status: 'saved', message: '本地存档已保存。', recordChangeTag };
@@ -186,7 +195,7 @@ export class LocalSaveRepository {
     if (!this.storage || !number(now, 0, 8.64e15)) return this.failedLoad('unavailable', '本地存储不可用，已暂停保存；请重试读取。');
     let raw: string | null;
     try { raw = this.storage.getItem(SAVE_KEY); } catch { return this.failedLoad('unavailable', '浏览器拒绝读取存档，当前进度已保留；请重试读取。'); }
-    this.baseRaw = raw; this.initialized = true; this.protectedRaw = false; this.lastMessage = '';
+    this.baseRaw = raw; this.initialized = true; this.protectedRaw = false; this.lastMessage = ''; this.importNeedsReload = false;
     this.recoveryRequired = null;
     if (raw === null) {
       if (!allowNew) return this.failedLoad('missing', '未找到最新存档，当前进度已保留；请重试读取，或明确开始新店。');
@@ -285,7 +294,68 @@ export class LocalSaveRepository {
     return this.settleInterval(state, Math.max(0, (now - start) / 1000), now, OFFLINE_POLICY_VERSION, deferOffline, hiddenAt);
   }
   save(state: SliceState, now = Date.now()): SaveResult { return this.write(state, now); }
-  inspect(): { rawText: string | null; protectedRaw: boolean; message: string } { return { rawText: this.baseRaw, protectedRaw: this.protectedRaw, message: this.lastMessage }; }
+  inspect(): { rawText: string | null; protectedRaw: boolean; message: string; importBackupKey?: string } { return { rawText: this.baseRaw, protectedRaw: this.protectedRaw, message: this.lastMessage, importBackupKey: this.retainedImportBackupKey ?? this.durableSnapshot()?.lastImportBackupKey }; }
+  /** Detached, validated durable snapshot. Reading this never settles time or writes. */
+  durableSnapshot(): Envelope | null {
+    if (this.baseRaw === null) return null;
+    const parsed = decode(this.baseRaw);
+    return parsed.ok ? clone(parsed.envelope) : null;
+  }
+  readImportBackup(): ImportBackup | null {
+    const key = this.retainedImportBackupKey ?? this.durableSnapshot()?.lastImportBackupKey;
+    if (!key || !this.storage) return null;
+    try {
+      const text = this.storage.getItem(key);
+      if (!text) return null;
+      const value: unknown = JSON.parse(text);
+      if (!object(value) || value.format !== 'mellow-bean-import-backup' || value.version !== 1 || !number(value.createdAt, 0, 8.64e15) || !(value.originalRaw === null || typeof value.originalRaw === 'string') || typeof value.liveSaveId !== 'string' || !integer(value.liveRevision, 1, Number.MAX_SAFE_INTEGER - 1) || !(value.liveState === null || validateState(value.liveState).ok)) return null;
+      return value as unknown as ImportBackup;
+    } catch { return null; }
+  }
+  /** Best-effort localStorage compare, NOT an atomic cross-tab transaction. */
+  importSnapshot(incoming: SliceState, options: { expectedRaw: string | null; currentState: SliceState | null; fingerprint: string; otherTabsClosed: boolean }, now = Date.now()): ImportResult {
+    const fail = (status: SaveStatus, message: string, backupKey?: string): ImportResult => ({ ok: false, status, message, backupKey });
+    if (!options.otherTabsClosed) return fail('conflict', '请先关闭其他游戏标签页，并勾选确认。');
+    if (this.active) return fail('settling', '请先完成或取消离线结算。');
+    if (this.importNeedsReload) return fail('import-uncertain', '上次替换结果尚不确定，请先成功重新读取，再预览导入。');
+    if (!this.storage || !this.initialized) return fail('unavailable', '本地存储尚未安全读取，无法导入。');
+    if (this.baseRaw !== options.expectedRaw) return fail('conflict', '预览后本地存档已变化，请重新预览。');
+    const candidate = validateState(incoming);
+    const live = options.currentState === null ? null : validateState(options.currentState);
+    if (!candidate.ok || live && !live.ok || !number(now, 0, 8.64e15) || !/^[a-f0-9]{64}$/.test(options.fingerprint)) return fail('invalid-state', '导入或备份状态无效，当前存档未改变。');
+    const previous = this.baseRaw === null ? null : decode(this.baseRaw);
+    const prior = previous?.ok ? previous.envelope : undefined;
+    const anchor = Math.max(now, prior?.savedAt ?? 0);
+    const backupKey = `${SAVE_KEY}-import-backup-${tag()}`;
+    const backup: ImportBackup = { format: 'mellow-bean-import-backup', version: 1, createdAt: now, originalRaw: this.baseRaw, liveState: live?.ok ? live.state : null, liveSaveId: prior?.saveId ?? tag(), liveRevision: prior?.revision ?? 1 };
+    const backupRaw = JSON.stringify(backup);
+    const state = candidate.state;
+    // Imported state is a branch replacement. No file-era offline settlement.
+    const envelope: Envelope = { schemaVersion: 1, offlinePolicyVersion: OFFLINE_POLICY_VERSION, savedAt: anchor, recordChangeTag: tag(), saveId: tag(), revision: 1, importedFileHashes: [...new Set([...(prior?.importedFileHashes ?? []), options.fingerprint])].slice(-32), lastImportBackupKey: backupKey, state };
+    const raw = JSON.stringify(envelope);
+    let replacementAttempted = false;
+    try {
+      if (this.storage.getItem(SAVE_KEY) !== this.baseRaw) return fail('conflict', '另一个窗口已更新存档，请重新读取后预览。');
+      this.storage.setItem(backupKey, backupRaw);
+      if (this.storage.getItem(backupKey) !== backupRaw) return fail('unavailable', '导入前备份未能验证，未替换当前小店。', backupKey);
+      this.retainedImportBackupKey = backupKey;
+      if (this.storage.getItem(SAVE_KEY) !== this.baseRaw) return fail('conflict', '备份期间存档已变化，已保留备份并取消替换。', backupKey);
+      replacementAttempted = true;
+      this.storage.setItem(SAVE_KEY, raw);
+      if (this.storage.getItem(SAVE_KEY) !== raw) throw Error('replacement readback mismatch');
+      this.baseRaw = raw; this.protectedRaw = false; this.lastMessage = ''; this.recoveryRequired = null; this.retrySource = null; this.active = null; this.generation++;
+      return { ok: true, status: 'saved', message: '文件进度已替换到此浏览器；导入前副本已保留。', state: clone(state), recordChangeTag: envelope.recordChangeTag, backupKey, settledAt: anchor };
+    } catch {
+      if (replacementAttempted) {
+        // Do not roll back: another window might own the newest bytes.
+        const message = '替换结果尚无法验证，已暂停营业；导入前备份已保留，请重新读取确认。';
+        this.importNeedsReload = true;
+        this.recoveryRequired = { status: 'import-uncertain', message };
+        return { ...fail('import-uncertain', message, backupKey), uncertain: true };
+      }
+      return fail('unavailable', '无法写入或验证导入前备份，未替换当前小店。请检查浏览器存储空间。', backupKey);
+    }
+  }
   reset(options: { confirmProtected?: boolean } = {}): SaveResult {
     if (this.active) return { ok: false, status: 'settling', message: '请先取消离线结算，再确认开始新店。' };
     if (!this.storage) return { ok: false, status: 'unavailable', message: '本地存储不可用。' };
@@ -296,7 +366,7 @@ export class LocalSaveRepository {
       if ((this.recoveryRequired || this.protectedRaw || decoded && !decoded.ok) && !options.confirmProtected) return { ok: false, status: decoded && !decoded.ok ? decoded.status : this.recoveryRequired?.status ?? this.protectedStatus, message: '原始存档已保护，请先导出，并确认新开一家店。' };
       const backupKey = raw === null ? undefined : `${SAVE_KEY}-backup-${tag()}`;
       if (backupKey) this.storage.setItem(backupKey, raw!);
-      this.storage.removeItem(SAVE_KEY); this.baseRaw = null; this.initialized = true; this.protectedRaw = false; this.lastMessage = ''; this.recoveryRequired = null; this.retrySource = null;
+      this.storage.removeItem(SAVE_KEY); this.baseRaw = null; this.initialized = true; this.protectedRaw = false; this.lastMessage = ''; this.recoveryRequired = null; this.retrySource = null; this.importNeedsReload = false;
       return { ok: true, status: 'new', message: backupKey ? '已备份原始字节，新版本本地存档已重置。' : '新版本本地存档已重置。', backupKey };
     }
     catch { return { ok: false, status: 'unavailable', message: '浏览器拒绝重置存档。' }; }
