@@ -11,7 +11,7 @@ const selected=process.argv.slice(2);for(const name of selected)if(!scenarioName
 const scenarios=selected.length?selected:scenarioNames,output=resolve(root,'qa-tools/evidence');await mkdir(output,{recursive:true});
 const qa=await startQaServer();let browser;const report={sourceCommit:'94c1ba2515e0f34fe64baa98cd932e4a28589849',mode:'synthetic-local-browser',results:[],errors:[]};
 try{
- browser=await chromium.launch({headless:true,...(process.env.COFFEE_CHROMIUM?{executablePath:process.env.COFFEE_CHROMIUM}:{})});
+ browser=await chromium.launch({headless:true,chromiumSandbox:true,...(process.env.COFFEE_CHROMIUM?{executablePath:process.env.COFFEE_CHROMIUM}:{})});
  for(const scenario of scenarios)for(const viewport of [{width:1440,height:900},{width:390,height:844}]){
   const seed=await fetch(qa.origin+'/__qa/seed?scenario='+scenario).then(r=>r.json()),context=await browser.newContext({viewport,deviceScaleFactor:1,serviceWorkers:'block'});
   try{

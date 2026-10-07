@@ -27,7 +27,7 @@ Use the environment's supported browser workflow and its normal Chromium. If Pla
 npm install --no-save --package-lock=false playwright
 ```
 
-If the environment supplies a system Chromium, set `COFFEE_CHROMIUM` to that verified executable path. The runner adds no renderer/security flags and does not use an existing user profile:
+If the environment supplies a system Chromium, set `COFFEE_CHROMIUM` to that verified executable path. The runner explicitly enables `chromiumSandbox: true`, adds no renderer/security-disabling flags and does not use an existing user profile. If sandboxed launch is blocked, report that blocker without removing the sandbox or adding a fallback:
 
 ```sh
 node qa-tools/browser.mjs
@@ -48,7 +48,7 @@ These are live simulations after startup. Route-wait poses can change before a s
 
 For an interactive local browser session, run `node qa-tools/server.mjs` and use the exact printed origin through the environment's supported forwarding/browser tools. A fresh page without a seeded scenario creates a synthetic new shop. `/__qa/health` lists available scenarios; `/__qa/seed?scenario=NAME` returns only synthetic initial storage entries for a fresh test context. The runner demonstrates initializing those entries before navigation. `/__qa/requests` records methods/paths only. Stop the server when finished.
 
-The preserved `qa/sites/browser-smoke.mjs` provides the prior two-context manual-sync smoke flow against the same synthetic Worker design after building. Its successful execution is separate from inspecting the latest expansion, chair, counter and timing screenshots.
+The preserved `qa/sites/browser-smoke.mjs` is reference-only in this export. It predates the explicit sandbox option and stays byte-identical for source provenance; do not use it as a browser entry point. Use `qa-tools/browser.mjs` for this QA run.
 
 ## Provenance and boundaries
 
