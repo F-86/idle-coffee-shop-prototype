@@ -1,0 +1,34 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1791241079111,
+      "tag": "0000_glorious_morgan_stark",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1791242075447,
+      "tag": "0001_wild_skullbuster",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791242578924,
+      "tag": "0002_huge_oracle",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1791243897273,
+      "tag": "0003_workable_rafael_vega",
+      "breakpoints": true
+    }
+  ]
+}

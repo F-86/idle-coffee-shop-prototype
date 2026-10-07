@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Mellow Bean coffee cup</title>
+  <rect width="64" height="64" rx="14" fill="#f8edda"/>
+  <path d="M25 18c-5-5 5-5 0-10M36 18c-5-5 5-5 0-10" fill="none" stroke="#79513b" stroke-width="3" stroke-linecap="round"/>
+  <path d="M45 27h3a8 8 0 0 1 0 16h-5" fill="none" stroke="#1e524a" stroke-width="5"/>
+  <path d="M15 26h31v10a15.5 15.5 0 0 1-31 0Z" fill="#1e524a"/>
+  <ellipse cx="30.5" cy="26" rx="15.5" ry="5" fill="#c38a59"/>
+  <ellipse cx="30.5" cy="26" rx="11.5" ry="2.5" fill="#4b2f23"/>
+  <path d="M15 53h33" fill="none" stroke="#bc8b61" stroke-width="4" stroke-linecap="round"/>
+</svg>

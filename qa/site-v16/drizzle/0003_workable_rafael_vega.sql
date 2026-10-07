@@ -1,0 +1,1 @@
+ALTER TABLE `coffee_saves` ADD `counter_rule_cutover` integer DEFAULT 0 NOT NULL;

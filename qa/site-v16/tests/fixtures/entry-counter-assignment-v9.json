@@ -1,0 +1,177 @@
+{
+  "schemaVersion": 1,
+  "economyVersion": 9,
+  "ingredients": {
+    "beans": 120,
+    "milk": 80
+  },
+  "layout": {
+    "version": 3,
+    "active": true,
+    "expanded": false,
+    "furniture": [
+      {
+        "id": "counter-a",
+        "kind": "counter",
+        "counterId": "counter-a",
+        "x": 0,
+        "z": 0,
+        "rotation": 0,
+        "stored": false
+      },
+      {
+        "id": "counter-b",
+        "kind": "counter",
+        "counterId": "counter-b",
+        "x": 5,
+        "z": 0,
+        "rotation": 0,
+        "stored": false
+      }
+    ],
+    "coffeeSigns": [
+      {
+        "id": "menu-espresso",
+        "recipe": "espresso",
+        "x": 0,
+        "stored": true
+      },
+      {
+        "id": "menu-latte",
+        "recipe": "latte",
+        "x": 5,
+        "stored": true
+      }
+    ]
+  },
+  "coffeeLevels": {
+    "espresso": 1,
+    "latte": 1
+  },
+  "managerRouteVersion": 2,
+  "customerRouteVersion": 4,
+  "elapsed": 34.8,
+  "wallet": 1970,
+  "totalEarned": 770,
+  "totalServed": 5,
+  "spend": 0,
+  "nextCustomerId": 7,
+  "arrivalTimer": 0,
+  "inviteCooldown": 0,
+  "paused": false,
+  "stepCarry": 0,
+  "eventSequence": 16,
+  "offlineClaimIds": [],
+  "counters": [
+    {
+      "id": "counter-a",
+      "x": 0,
+      "level": 1,
+      "recipe": "espresso",
+      "pendingCash": 0,
+      "brewed": 3,
+      "brew": null
+    },
+    {
+      "id": "counter-b",
+      "x": 5,
+      "level": 1,
+      "recipe": "latte",
+      "pendingCash": 0,
+      "brewed": 2,
+      "brew": null
+    }
+  ],
+  "customers": [
+    {
+      "id": 4,
+      "x": 5,
+      "z": 2,
+      "phase": "leaving",
+      "counterId": "counter-b",
+      "timer": 0,
+      "hasCup": true,
+      "skin": 3
+    },
+    {
+      "id": 5,
+      "x": 3.25,
+      "z": 2,
+      "phase": "leaving",
+      "counterId": "counter-a",
+      "timer": 0,
+      "hasCup": true,
+      "skin": 4,
+      "nav": [
+        {
+          "x": 4,
+          "z": 2
+        },
+        {
+          "x": 4,
+          "z": 3
+        },
+        {
+          "x": 5,
+          "z": 3
+        },
+        {
+          "x": 6,
+          "z": 3
+        },
+        {
+          "x": 7,
+          "z": 3
+        },
+        {
+          "x": 8,
+          "z": 3
+        },
+        {
+          "x": 9,
+          "z": 3
+        },
+        {
+          "x": 10,
+          "z": 3
+        },
+        {
+          "x": 10,
+          "z": 4
+        },
+        {
+          "x": 10,
+          "z": 5
+        },
+        {
+          "x": 10,
+          "z": 6
+        },
+        {
+          "x": 11,
+          "z": 6
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "x": -8,
+      "z": 5,
+      "phase": "entering",
+      "counterId": "counter-b",
+      "timer": 0,
+      "hasCup": false,
+      "skin": 5
+    }
+  ],
+  "manager": {
+    "x": 8.8,
+    "z": -1.7,
+    "carrying": 0,
+    "phase": "moving",
+    "target": 2,
+    "timer": 0,
+    "level": 1
+  },
+  "lastOfflineClaimId": null
+}

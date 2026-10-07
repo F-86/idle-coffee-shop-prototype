@@ -1,0 +1,10 @@
+import {build} from 'esbuild';
+import {mkdir,cp,readFile} from 'node:fs/promises';
+await mkdir('dist/server',{recursive:true});
+await mkdir('dist/.openai',{recursive:true});
+await build({entryPoints:['worker/index.ts'],outfile:'dist/server/index.js',bundle:true,format:'esm',platform:'browser',target:'es2022'});
+await cp('.openai/hosting.json','dist/.openai/hosting.json');
+await cp('drizzle','dist/.openai/drizzle',{recursive:true});
+const {default:worker}=await import('../dist/server/index.js?check='+Date.now());
+if(typeof worker.fetch!=='function')throw Error('Worker fetch missing');
+console.log('Worker ESM and D1 migration artifact verified');

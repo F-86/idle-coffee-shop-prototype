@@ -1,0 +1,10 @@
+import type { SliceState, FurniturePlacement } from './types';
+export const WAREHOUSE_MAX_LEVEL=5;
+export const SEAT_MAX_LEVEL=10;
+export const warehouseLevel=(state:Pick<SliceState,'warehouseLevel'>)=>state.warehouseLevel??1;
+export const seatLevel=(item:Pick<FurniturePlacement,'level'>)=>item.level??1;
+export const warehouseUpgradeCost=(level:number)=>1200*level;
+export const seatUpgradeCost=(level:number)=>400*level;
+export const seatTip=(level:number)=>10*level;
+export const warehouseInvestment=(level:number)=>600*level*(level-1);
+export const seatInvestment=(level:number)=>200*level*(level-1);
